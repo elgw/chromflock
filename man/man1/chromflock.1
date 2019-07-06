@@ -1,0 +1,37 @@
+.\" man page template. See intro.l for more stuff to use
+.TH CHROMFLOCK 1
+.SH NAME
+chromflock -- Initialize a script for running chromflock in the current directory.
+.SH DESCRIPTION
+Chromflock is used as the first step in generating an ensemble of structures. The purpose is to initiate a configuration file with default settings in the current directory.
+.PP 
+.SH EXAMPLE
+
+.SS Basic usage:
+.PP
+Replace nvim with something else if it isn't your favourite editor.
+.RS
+.nf
+.B $ mkdir 10000structures
+.B $ cd 10000structures
+.B $ # create chromflock_gen
+.B $ chromflock
+.B $ # edit settings and point to correct A-file and possible G-file.
+.B $ nvim chromflock_gen
+.B # Generate a (linear) batch script with everything to be run
+.B $ ./chromflock_gen
+.B # Run everything:
+.B $ ./chromflock_run
+.fi
+.RE
+.PP
+.SS TIPS
+.PP
+.RS
+Use screen or some other program to run chromflock in the background. 
+This allows you to log out from a (remote) computer while chromflock is still running.
+.PP
+chromflock_run outputs some progress information to status.txt while running.
+.RE
+.SH SEE ALSO
+mflock, aflock
