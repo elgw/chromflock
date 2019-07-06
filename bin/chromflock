@@ -1,0 +1,22 @@
+#!/bin/bash
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+echo "This will create 'chromflock_gen' in the current directory"
+echo "which can be used to create a script, chromflock_run"
+echo "for the current job"
+
+read -p "Are you sure? Then press 'y' or 'Y" -n 1 -r
+echo    # (optional) move to a new line
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+  cp "${DIR}/../util/chromflock_gen" .
+  echo "Edit 'chromflock_gen' and run it"
+  echo "then run 'chromflock_run'"
+fi
