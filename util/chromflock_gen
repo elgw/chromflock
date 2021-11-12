@@ -1,0 +1,159 @@
+#!/bin/bash
+set -e
+
+# This is the complete workflow for chromflock
+# 
+# Along the run, the overall progress can be read from status.txt
+# The progress from gnu parallel can be found in parallel.log
+#
+# Consider refreshing the directory if there are old structures
+# rm -rf cf*
+#
+# If this script does not finish, see how far it went by starting it with
+# $ bash -x chromflock_gen
+
+##
+## SETTINGS
+##
+
+## Input
+# The file with input probabilities, given as 64 bit doubles
+aFile="../A.double"
+# File specifying chromosome Labels use 1 for chr1, ...
+lFile="../L.uint8"
+# The file with radial values, given as 64 bit doubles. Use `nan` or `inf` for missing values.
+# NOTE: not used unless kRad is set below.
+rFile="../G.double"
+# OPTIONAL: specify the proportion of structures that should be assigned each radial constraint
+# i.e., the probability in the same sense as the A matrix. If this is set each structure will
+# have an own R-file -- generated and updated by aflock in the same way as the W matrices.
+# prFile="../prFile.double"
+# NOT supported for diploid experiments!
+prFile=""
+
+# Number of parallel jobs
+nCores=4
+# Number of structures to generate
+nStruct=128
+
+## GEOMETRY
+# Volume quotient, i.e. volume of all beads/volume of nuclei
+# Note that the bead radius can be set with -R
+# Alber uses vq=0.2
+vq=0.2
+
+# For ellipsoid, set the axes lengths below
+# Note that 1=ea>=eb>=ec>0
+ea=
+eb=
+ec=
+
+# Set to 1 if diploid leave empty otherwise
+diploid=
+
+## CONTACTS
+# Theta boundaries, from high to low
+thetas=(1 .2 .1 .05 .02 .01 0.001)
+
+# Molecular Dynamics configuration
+dconfFile="mflock.lua"
+
+## OPTIMIZATION
+nReassign=3
+
+outScript=chromflock_run
+touch $outScript
+chmod +x $outScript
+echo "" > $outScript
+
+## 
+## RUN -- no need to edit below this line
+##
+
+# geostring goes into both aflock and mflock
+if [[ ! -z "$ea" ]]
+then
+  geostring="--ea $ea --eb $eb --ec $ec"
+else
+  geostring=
+fi
+
+# adiplo
+if [[ ! -z "$diploid" ]]
+then
+  adiplo="--diploid"
+else
+  adiplo=
+fi
+
+# For mflock
+moptstring="--cmmz $geostring --dconf $dconfFile"
+
+prArg=""
+if [ -z "$rFile" ]; then
+  if [ -z "$prFile" ]
+  then
+    echo "rFile is set but not prFile. Same radial constraints for all structures."
+    mflock_arguments="-r $rFile $moptstring -L $lFile"
+  else
+    # -r is set by aflock and put into mflock_jobs
+    echo "rFile and prFile is set. Individual radial constraints for each structure"
+    mflock_arguments="$moptstring -L $lFile"
+    prArg="--rpos $rFile --prpos $prFile"
+  fi
+else
+  mflock_arguments="$moptstring -L $lFile"
+fi
+
+# One folder per structure will be created
+# and initialize with W from contacts
+# from A where theta == 1
+# A list of jobs to run will be written to `mflock_jobs`
+echo echo ""Initialization started" > status.txt" >> $outScript
+echo "hostname >> status.txt" >> $outScript
+echo "aflock --version >> status.txt" >> $outScript
+echo "date >> status.txt" >> $outScript
+
+echo "aflock $adiplo $geostring -A $aFile -n $nStruct -I -Q $vq $prArg -P \""${mflock_arguments}\""" >> $outScript
+
+echo "date >> status.txt" >> $outScript
+echo "echo "Initialization done" >> status.txt" >> $outScript
+echo "echo "Running for theta==1"" >> $outScript
+# Run first batch of jobs in parallel
+echo "parallel --jobs $nCores --joblog parallel.log < mflock_jobs" >> $outScript
+
+nsteps=${#thetas[*]}
+
+if (( $nsteps > 1 )); then
+
+let "nsteps = $nsteps-1"
+
+# Then, for each theta value, run again (write as a loop)
+
+for idx in `seq 1 $nsteps`
+do
+  thHigh=${thetas[$idx-1]}
+  thLow=${thetas[$idx]}
+
+  for iter in `seq 1 $nReassign`
+  do
+
+    echo "date >> status.txt" >> $outScript
+    echo "echo "Assigning contacts where theta in [$thLow ,$thHigh ["" >> $outScript
+    echo "aflock $adiplo $geostring -A $aFile $prArg -n $nStruct -Q $vq -h $thHigh -l $thLow -U" >> $outScript
+
+    echo "date >> status.txt" >> $outScript
+    echo "echo "Running for theta in [$thLow, $thHigh [" >> status.txt" >> $outScript
+    echo "parallel --jobs $nCores --joblog parallel.log < mflock_jobs" >> $outScript
+
+    echo "echo "ok" >> status.txt" >> $outScript
+  done
+done
+fi
+
+echo "date >> status.txt" >> $outScript
+echo "echo "Finalizing ..." >> status.txt" >> $outScript
+echo "aflock $adiplo $geostring -F -A $aFile $prArg -n $nStruct -Q $vq" >> $outScript
+echo "date >> status.txt" >> $outScript
+echo "echo "Done!" >> status.txt" >> $outScript
+echo "Now run $outScript"
