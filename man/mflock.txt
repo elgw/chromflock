@@ -1,0 +1,134 @@
+MFLOCK(1)				   chromflock documentation				    MFLOCK(1)
+
+NAME
+       mflock — the molecular dynamics optimizer in chromflock.
+
+SYNOPSIS
+       mflock [-w –wFile wFile] [-L –lFile lFile] [-x –xFile xfile] [-n –maxiter X] [-t –maxtime X] [-s –seed
+       seed] [-r –rFile rfile] [-V –kVol kVol] [-I –kInt kInt] [-S –kDom kDom] [-G –kRad kRad]	[-Q  –vq  vq]
+       [-R  –radius  r0]  [-v –verbose level] [-o –oFolder ofolder] [-z –cmmz] [–ea -a –eb -b –eb -c] [–dconf
+       file]
+
+DESCRIPTION
+       mflock uses molecular dynamics to find a 3D structure based on a contact indication matrix W.   For  a
+       complete description on how it is implemented, please see the documentation under `doc/' in the source
+       directory.  In short: Verlet integration is used to update the positions of the beads which are	under
+       influence of a set of forces:
+
+       A.  Volume exclusion (beads should not overlap), controlled by kVol
+
+       B.  Domain containment, that keeps the beads in the unit sphere/ellipsoid, controlled by kDom
+
+       C.  Interaction forces that keeps beads with indicated contacts to be close to each others, controlled
+       by kInt
+
+       D.  Possibly also a radial preference per bead, controlled by kRad By design all beads  have  to	 have
+       the same size and the geometry is either a sphere or an ellipsoid where the axes 1==a>=b>=c>0.
+
+OPTIONS
+       -w file, --wFile file
+	      Specifies	 the contact indicator matrix to be used where 1=contact, and 0=non contact.  A force
+	      of kInt will be placed between beads that are in contact.
+
+       -L file, --lFile file
+	      Specify a file with labels (chromosome) for the beads.
+
+       -x file, --xFile file
+	      Specify a file with coordinates for the beads.
+
+       -s x, --seed x
+	      Set a seed for the random number generator.  If not time(NULL)*getpid() will be used.
+
+       -r file, --rFile file
+	      Specify a file with radial information to be used with kRad
+
+       -n n, --maxiter n
+	      Set the number of iterations to be used.
+
+       -t t, --maxtime t
+	      Limit the simulations in time
+
+       -V k, --kVol k
+	      Set the volume exclusion force
+
+       -I k, --kInt k
+	      Set the interaction force.
+
+       -S k, --kDom k
+	      Set the force used to keep the beads in the domain.
+
+       -G k, --kRad k
+	      Set the force for the radial guidance of the beads.
+
+       -Q vq, --vq vq
+	      Set the volume quotient domain/beads.  Can not be combined with -R.
+
+       -R r0, --radius r0
+	      Set the bead radius.
+
+       --ea a, and --eb b, and --eb c
+	      If these three arguments are set, an ellipsoid geometry is used instead of  a  spherical.	  The
+	      parameters  control  the	radius	of the major axes, 1=a>=b>=c>0, and the ellipsoid is given by
+	      x^2/a^2+y^2/b^2+z^2/c^2=1
+
+       -v level, --verbose level
+	      Set verbosity level
+
+       -o folder, --oFolder folder
+	      specify output folder
+
+       -z, --cmmz
+	      Write compressed chimera files.
+
+       -c, --compress
+	      Use chromosome compression.
+
+       -a, --live
+	      Pops up a renderer that shows the beads during the simulation.  Requires that  mflock  is	 com‐
+	      piled with SDL2.
+
+       -h, --help
+	      Show a brief help message.
+
+       --dconf file
+	      Set the name of the Lua script to control the forces and iterations of the simulation.  This is
+	      recommended over specifying at command line.
+
+   wFile
+       The wFile contains W, a [NxN] size symmetric matrix stored linearly and encoded as `uint8'.
+
+   xFile
+       The xFile contains 3D coordinates X that the molecular dynamics will start from.	 If not passed, beads
+       will  be	 placed	 randomly within the domain.  Note that the parser is primitive and might fail if the
+       xFile is edited without care.  It reads comma separated values and does not accept headers,  comments,
+       etc.
+
+oFolder
+       An output folder called `cf_%05d/' will be created if no oFolder is specified.
+
+EXAMPLES
+       See the script /util/chromflock_run.
+
+   Basic usage:
+       The bare minimum arguments needed are:
+
+	      $ mflock --wFile ../W.uint8 --lFile ../L.uint8
+
+SEE ALSO
+       chromflock, aflock
+
+WEB PAGE
+       <https://github.com/elgw/chromflock/>
+
+REPORTING BUGS
+       Please report bugs at <https://github.com/elgw/chromflock/issues/>
+
+COPYRIGHT
+       Copyright © 2022 Erik Wernersson.  License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licens‐
+       es/gpl.html>.  This is free software: you are free to change and redistribute it.  There is NO WARRAN‐
+       TY, to the extent permitted by law.
+
+AUTHORS
+       Erik Wernersson.
+
+Version 0.3.2					     2023					    MFLOCK(1)

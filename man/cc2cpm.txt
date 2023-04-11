@@ -1,0 +1,74 @@
+CHROMFLOCK (1) cc2cpm()							   CHROMFLOCK (1) cc2cpm()
+
+NAME
+       cc2cpm  Can  be used to convert a Hi-C matrix into a contact probability matrix (CPM) suit‐
+       able for chromflock.
+
+       In this context a HiC-matrix is Hi-C data mapped and binned to a	 genome	 and  saved  as	 a
+       dense matrix in 64-bit floating point format (double).
+
+       Further	downstream  the CPM matrix can be read by aflock.  The elements of the CPM are in‐
+       terpreted so that if
+	      CPM~ij~ = p is p. I.e.  if p==0, i and j should never be in contact  in  any  struc‐
+	      ture.   On  the other size if p==1 i and j should be in contact in all structures in
+	      the population.
+
+   Method:
+       • An (optional) matrix balancing is applied to give equal number of contacts per bead/bin.
+
+       • The matrix is scaled to reach the specific maximum number of contacts per bead	 that  was
+	 specified with –nCont.
+
+       • The first off-diagonal is set to 1 for all bins within a chromosome.
+
+       • Chromosome Y is removed unless –y is specified.
+
+       Please  note that there are other, possibly better ways to convert Hi-C matrices to contact
+       probability matrices.
+
+REQUIRED ARGUMENTS
+       --hFile file.double
+	      The Hi-C matrix, encoded as raw double.
+
+       --lFile file.uint8
+	      An array with chromosome labels encoded as uint_8.
+
+       --nCont n
+	      Set the number of contacts per bead/bin.
+
+       --nStruct n
+	      The number structures that will be generated.  cc2cpm needs to know  this	 since	it
+	      affects  which contacts will be used or not.  For example a contact with probability
+	      0.01 will be enabled only with 100 or more structures.
+
+       --aOut file.double
+	      Specify the output file name.
+
+OPTIONAL ARGUMENTS
+       --mode_eq
+	      Enable balancing (KR normalization).  This will force each bead  to  have	 the  same
+	      number of contacts.
+
+       --y    Keep chrY encoded by 24.	Without this argument chromosome Y will be removed.
+
+       --usage, --help
+	      Show a brief summary of available arguments.
+
+WEB PAGE
+       [http://github.com/elgw/chromflock_dev/]
+
+REPORTING BUGS
+       Please report bugs at [http://github.com/elgw/chromflock_dev/issues/]
+
+COPYRIGHT
+       Copyright   ©   2022  Erik  Wernersson.	 License  GPLv3+:  GNU	GPL  version  3	 or  later
+       <https://gnu.org/licenses/gpl.html>.  This is free software: you are free to change and re‐
+       distribute it.  There is NO WARRANTY, to the extent permitted by law.
+
+SEE ALSO
+       mflock, aflock
+
+AUTHORS
+       Erik Wernersson.
+
+					       2022			   CHROMFLOCK (1) cc2cpm()

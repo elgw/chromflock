@@ -7,63 +7,73 @@
 #define MODE_FINAL 2
 #define MODE_UPDATE_BLOCKED 3
 #define MODE_EXPERIMENTAL 4
-
+#include "ellipsoid.h"
 
 // Meta data etc, flock configuration
 typedef struct {
-  char * afname;
-  double * A;
+    int mode; // What to do
 
-  size_t nBeads; // Number of beads per structure
+    char * afname; // File with contact probability matrix
+    double * A; // Contact probability matrix
 
-  size_t nStruct; // Number of structures
+    size_t nBeads; // Number of beads per structure
+    size_t nStruct; // Number of structures
 
-  double th_low;
-  double th_high;
-  int mode;
-  // Size of write queue for each structure
-  size_t QS; 
-  
-  double vq;
-  double r0; // bead radius
-  double dContact; // contact threshold
+    // Use contact within this range from A
+    double th_low;
+    double th_high;
 
-  char * mflock_arguments;
+    // Size of write queue for each structure
+    size_t QS;
 
-  int experimental;
-  int get_quality;
+    // Geometry
+    double vq; // volume quotient
+    double r0; // bead radius
+    double ea;
+    double eb;
+    double ec;
+    elli * E;
+    double dContact; // contact threshold
 
-  char * rfname;
-  char * prfname;
+    char * mflock_arguments; // Will be written to mflock-jobs
 
-  /* For DamID
-   * R = 1; probR = DamID score;
-   * For GPSeq:
-   * R = GPSeq radius, probR = 1;, simpler is to use the same R.double for all structures;
-   */
+    // Flags
+    int experimental;
+    int get_quality;
+    int diploid;
 
-  double * R;
-  double * probR;
-  size_t nThreads;
+    char * rfname;
+    char * prfname;
 
+    /* For DamID
+     * R = 1; probR = DamID score;
+     * For GPSeq:
+     * R = GPSeq radius, probR = 1;, simpler is to use the same R.double for all structures;
+     */
+
+    double * R;
+    double * probR;
+    size_t nThreads;
+    int verbose;
 } fconf;
 
 
 // For each individual chromatine structure
 typedef struct {
-  // All points are loaded 
-  float * X; // 3xN
+    // All points are loaded
+    float * X; // 3xN
 
-  uint32_t * Q; // Queued contacts to write, 2xQS
-  size_t nQ; // Number of pairs in the queue
+    uint32_t * Q; // Queued contacts to write, 2xQS
+    size_t nQ; // Number of pairs in the queue
 
-  // File names
-  char * wfName; // Contact indicator matrix
-  char * xfName; // Coordinates
-  char * rfName;
+    // File names
+    char * wfName; // Contact indicator matrix
+    char * xfName; // Coordinates
+    char * rfName;
 
- // size_t N;
- uint8_t * W;
+    // size_t N;
+    uint8_t * W;
+
 
 } chrom;
 

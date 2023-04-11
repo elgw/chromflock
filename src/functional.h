@@ -2,15 +2,18 @@
 #define _functional_h_
 
 #include <stdint.h>
+#include "ellipsoid.h"
 
 typedef struct conf{
   double r0;
   double dInteraction; // Wanted interaction distance
   double kVol;
-  double kSph;
+  double kDom;
   double kInt;
   double kRad; // For radial constraints, using R
   size_t nIPairs; // Number of wanted interactions
+  elli * E;
+  elli * Es; // smaller ellipse defining "safe region"
 } conf;
 
 double err(
@@ -56,7 +59,7 @@ void grad2(
     conf * C
     );
 
-// hashed
+// hashed only one that works with elliptical geometry
 void grad3(
     double * restrict X, 
     const size_t nX, 
@@ -66,6 +69,20 @@ void grad3(
     const conf * restrict C
     );
 
+// Experimental
+void grad4(
+    double * restrict X, 
+    const size_t nX, 
+    double * restrict R, 
+    uint32_t * restrict I, // List of interactions pairs
+    double * restrict G,
+    const conf * restrict C
+    );
+
+// For testing only, not really public
+double errRepulsion(double * restrict D, 
+    const size_t N, 
+    const double d);
 
 #endif
 

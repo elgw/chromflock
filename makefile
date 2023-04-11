@@ -1,50 +1,117 @@
+##
+# Purpose:
+#    For building chromflock.
+#
+# NOTES:
+# - Please use the makedeb-ubuntu_2204.sh or similar scripts to
+#   create a deb file for installation.
+#
+# WARNING:
+#   Do not use --finite-math-only (or --ffast-math or -Ofast) since
+#   both aflock and mflock uses isfinite().
 
-# Up use a more recent version of gcc than the one provided by Ubuntu, see
-# http://tuxamito.com/wiki/index.php/Installing_newer_GCC_versions_in_Ubuntu
-#cc = gcc
-cc = gcc
-#cc = clang
+CC = gcc -std=gnu99
+CFLAGS=-Wall -Wextra
+
+DEBUG?=0
+
+ifeq ( DEBUG, 1 )
+CFLAGS += $(CFLAGS) \
+-g3 \
+-DNOMATLAB
+else
+CFLAGS += -O3 \
+-DNDEBUG \
+-fno-signed-zeros \
+-fno-trapping-math \
+-fno-math-errno
+LDFLAGS += -flto
+endif
+
+
+
+#
+# Inject some information in the binaries
+#
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+	MANPATH=/usr/local/share/man/man1
+endif
 
 CC_VERSION = "$(shell cc --version | head -n 1)"
 GIT_VERSION = "$(shell git log --pretty=format:'%aD:%H' -n 1)"
 
-f1 = -DCC_VERSION=\"$(CC_VERSION)\"
-f2 = $(f1) -DGIT_VERSION=\"$(GIT_VERSION)\"
-
-cflags_dbg = $(f2) -DNOMATLAB -g -Wall
-
-#cflags = -O3 -flto -march=native -Wall -DNOMATLAB -DGSL_RANGE_CHECK_OFF -DNDEBUG -std=gnu99
-cflags = $(f2) -O3 -flto -march=native -Wall -DNDEBUG -std=gnu99 -fno-signed-zeros -fno-trapping-math -fno-math-errno -Wextra
-# WARNING: Do not use --finite-math-only (or --ffast-math or -Ofast) since
-# both aflock and mflock uses isfinite().
-
-ldflags = -lm `pkg-config zlib --libs` -Wall -lpthread
-
-cflagssdl = $(cflags) `pkg-config sdl2 --cflags` 
-ldflagssdl = $(ldflags) `pkg-config sdl2 --libs` -lpthread
+CFLAGS += -DCC_VERSION=\"$(CC_VERSION)\"
+CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 
 
-all: mflock aflock gencm string2any
+#
+# Standard libraries
+#
 
-mflock: 
-	$(cc) $(cflags) src/mflock.c src/functional.c src/cmmwrite.c src/wio.c -o bin/mflock $(ldflags) 
+LDFLAGS = -lm  -lpthread  -ldl
 
-mflocksdl: 
-	$(cc) $(cflagssdl) src/mflock.c src/functional.c src/cmmwrite.c src/hsvrgb.c src/wio.c -DSDL $(ldflagssdl) -o bin/mflock 
+# Library: Z
+CFLAGS+=`pkg-config zlib --cflags`
+LDFLAGS+=`pkg-config zlib --libs`
 
-mflock_dbg: 
-	$(cc) $(cflags_dbg) src/mflock.c src/functional.c src/cmmwrite.c src/wio.c -o bin/mflock $(ldflags) 
+# Library: LUA
+CFLAGS+=-Isrc/lua-5.3.5/src
+LDFLAGS+=-Lsrc/lua-5.3.5/src -llua
 
-gencm:
-	$(cc) $(cflags) src/gen_cm.c -o bin/gen_cm $(ldflags)
+# Library: Cairo
+CFLAGS+=`pkg-config cairo --cflags`
+LDFLAGS+=`pkg-config cairo --libs`
 
-aflock:
-	$(cc) $(cflags) src/aflock.c src/wio.c -o bin/aflock $(ldflags)
+# Library: SDL2
+SDL?=1
+ifeq ( SDL, 1 )
 
-aflock_dbg:
-	$(cc) $(cflags_dbg) src/aflock.c src/wio.c -o bin/aflock $(ldflags)
+CFLAGS += `pkg-config sdl2 --cflags`
+CFLAGS += -DSDL
+LDFLAGS += `pkg-config sdl2 --libs`
 
-string2any:
-	$(cc) $(cflags) src/string2any.c -o bin/string2any $(ldflags)
+endif
 
- 
+all: bin/chromflock \
+     bin/aflock \
+     bin/mflock \
+
+chromflock_files=src/chromflock.c \
+src/cc2cpm.c \
+src/string2any.c \
+src/any2string.c \
+src/oscp.c \
+src/sprite2cmap.c \
+obj/chromflock_init.o \
+obj/balance.o
+
+
+bin/chromflock: $(chromflock_files)
+	$(CC) $(CFLAGS) $(chromflock_files) -o bin/chromflock
+
+bin/cmmfilter:
+	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` -o bin/cmmfilter
+
+mflock_files = src/mflock.c \
+src/functional.c \
+src/cmmwrite.c \
+src/wio.c \
+src/hsvrgb.c \
+obj/ellipsoid.o \
+
+
+bin/mflock: $(mflock_files) makefile
+	$(CC) $(CFLAGS) $(mflock_files) -o bin/mflock $(LDFLAGS)
+
+bin/aflock: obj/ellipsoid.o
+	$(CC) $(CFLAGS) src/aflock.c src/wio.c src/oscp.c obj/ellipsoid.o -o bin/aflock $(LDFLAGS)
+
+obj/chromflock_init.o: src/chromflock_init.c
+	$(CC) -c $(CFLAGS) src/chromflock_init.c -o obj/chromflock_init.o
+
+obj/ellipsoid.o: src/ellipsoid.c
+	$(CC) -c $(CFLAGS) src/ellipsoid.c -o obj/ellipsoid.o
+
+obj/balance.o: src/balance.c
+	$(CC) -c $(CFLAGS) src/balance.c -o obj/balance.o

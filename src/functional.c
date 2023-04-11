@@ -10,11 +10,20 @@
 #endif
 
 #include "functional.h"
+#include "ellipsoid.h"
+
 #define INLINED inline __attribute__((always_inline))
 
-// Consider compiling with -ffinite-math-only
 
-INLINED static double norm3(double * restrict X)
+INLINED void vec3_minus(const double * A, const double * B, double * C)
+{ // C = A-B
+  for(int kk = 0; kk<3; kk++)
+  {
+    C[kk] = A[kk] - B[kk];
+  }
+}
+
+INLINED static double norm3(const double * restrict X)
 {
   double n = 0;
   for(size_t kk = 0; kk<3; kk++)
@@ -22,7 +31,16 @@ INLINED static double norm3(double * restrict X)
   return sqrt(n);
 }
 
-INLINED static double norm32(double * restrict X)
+INLINED void vec3_normalize(double * restrict X)
+{
+  double n = 0;
+  for(size_t kk = 0; kk<3; kk++)
+    n+=pow(X[kk], 2);
+  X[0] /= n; X[1] /= n; X[2] /= n;
+}
+
+
+INLINED static double norm32(const double * restrict X)
 {
   double n = 0;
   for(size_t kk = 0; kk<3; kk++)
@@ -30,13 +48,13 @@ INLINED static double norm32(double * restrict X)
   return n;
 }
 
-INLINED static double eudist3sq(double * A, double * B)
+INLINED static double eudist3sq(const double * A, const double * B)
 {
   /* SQUARED Euclidean distance between two 3D-vectors */
   return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
 }
 
-INLINED static double eudist3(double * A, double * B)
+INLINED static double eudist3(const double * A, const double * B)
 {
   /* Euclidean distance between two 3D-vectors */
   return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
@@ -59,18 +77,22 @@ INLINED size_t hash_coord(const int nDiv, const double X)
 INLINED size_t hash(const size_t nDiv, double * restrict X)
 {
 
-  size_t h = hash_coord(nDiv, X[0]) + 
-    nDiv*hash_coord(nDiv, X[1]) + 
+  size_t h = hash_coord(nDiv, X[0]) +
+    nDiv*hash_coord(nDiv, X[1]) +
     nDiv*nDiv*hash_coord(nDiv, X[2]);
 
   return h;
 }
 
 
-static double errRepulsion(double * restrict D, 
-    const size_t N, 
+double errRepulsion(double * restrict D,
+    const size_t N,
     const double d)
 {
+
+  // D: coordinates of the dots [d0_x, d0_y, d0_z, d1_x, d1_y, ... dN-1_z]
+  // N: Number of dots
+  // d: capture distance between bead centers
 
   // NOTE: Will crash if D contains nan or inf values.
 
@@ -87,8 +109,20 @@ static double errRepulsion(double * restrict D,
   // Mostly copied from volHASH/src/volhash3.c
   double d2 = pow(d,2);
 
-  // 1. Figure out how many elements per bucket
-  int nDiv = 9;
+  // 1. Counting -- Figure out how many elements per bucket
+  int nDiv = 9; // Will create nDiv^3 buckets over [-1,1]^3
+
+  if(N>10000)
+  {
+    nDiv = 15;
+  }
+
+  // i.e. bucket side length is 2/nDiv which can be related to d.
+  // You can figure out optimal nDiv vs d and N by
+  // running functinal_optimal_nDiv (while changing nDiv here)
+  // For 3300 points: 9 or 10
+  // For 33000 points: 15 about 30% faster than using 9
+
   size_t nH = pow(nDiv, 3);
   uint32_t * S = malloc(nH*sizeof(uint32_t));
 
@@ -123,7 +157,7 @@ static double errRepulsion(double * restrict D,
     }
   }
 
-  // Dots sorted according to their bucket
+  /* Dots sorted according to their bucket and put into E */
   double * E = malloc(3*N*sizeof(double));
 
   /* Move data into new structure */
@@ -136,21 +170,20 @@ static double errRepulsion(double * restrict D,
     for(int idx = 0; idx<3; idx++)
     {
       assert(writepos<N*3);
-      E[writepos++] = D[3*kk+idx];      
+      E[writepos++] = D[3*kk+idx];
     }
   }
 
-  /* 
+  /*
    * now we can hash(X) a point X,
    * using B to see where the bucket is
-   * in E 
+   * in E
    * */
 
   // Get some job done!
   double err = 0;
-  for(size_t kk = 0; kk<N; kk++) 
-    /* Looping over E in order to avoid self-matches 
-     * and duplicates */
+  for(size_t kk = 0; kk<N; kk++)
+    /* Find buckets that might contains neighbours */
   {
     double deps = d;
     size_t ha_min = hash_coord(nDiv, E[3*kk]-deps);
@@ -162,22 +195,24 @@ static double errRepulsion(double * restrict D,
     size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
     size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-    for(size_t aa = ha_min; aa <= ha_max; aa++)    
-      for(size_t bb = hb_min; bb <= hb_max; bb++)    
+    for(size_t aa = ha_min; aa <= ha_max; aa++)
+      for(size_t bb = hb_min; bb <= hb_max; bb++)
         for(size_t cc = hc_min; cc <= hc_max; cc++)
         {
 
-          size_t hash = 
-            aa + 
-            bb*nDiv + 
+          // hash or index of the bucket to compare against
+          size_t hash =
+            aa +
+            bb*nDiv +
             cc*pow(nDiv,2);
 
           //          printf("%d, %d, %d, hash: %zu / %zu\n", aa, bb, cc, hash, nH); fflush(stdout);
 
+          // Compare against all elements in a specific bucket.
           for(size_t pp = B[hash]; pp<B[hash+1]; pp++)
           {
             if(pp>kk) {
-              double dist2 = eudist3sq(E+3*pp, E+3*kk);
+              double dist2 = eudist3sq(E+3*pp, E+3*kk); //  squared distance
               if(dist2<d2)
               {
                 err += pow(sqrt(dist2) - d, 2);
@@ -196,10 +231,10 @@ static double errRepulsion(double * restrict D,
 }
 
 
-static double gradRepulsion(double * restrict D, 
-    double * restrict G, 
-    const size_t N, 
-    const double d, 
+static double gradRepulsion(double * restrict D,
+    double * restrict G,
+    const size_t N,
+    const double d,
     const double kVol)
 {
 
@@ -217,6 +252,10 @@ static double gradRepulsion(double * restrict D,
 
   // 1. Figure out how many elements per bucket
   int nDiv = 9;
+  if(N>10000)
+  {
+    nDiv = 15;
+  }
   size_t nH = pow(nDiv, 3);
   uint32_t * S = malloc(nH*sizeof(uint32_t));
 
@@ -264,20 +303,20 @@ static double gradRepulsion(double * restrict D,
     for(int idx = 0; idx<3; idx++)
     {
       assert(writepos<N*3);
-      E[writepos++] = D[3*kk+idx];      
+      E[writepos++] = D[3*kk+idx];
     }
   }
 
-  /* 
+  /*
    * now we can hash(X) a point X,
    * using B to see where the bucket is
-   * in E 
+   * in E
    * */
 
   // Get some job done!
   double err = 0;
-  for(size_t kk = 0; kk<N; kk++) 
-    /* Looping over E in order to avoid self-matches 
+  for(size_t kk = 0; kk<N; kk++)
+    /* Looping over E in order to avoid self-matches
      * and duplicates */
   {
     double deps = d;
@@ -288,14 +327,14 @@ static double gradRepulsion(double * restrict D,
     size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
     size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-    for(size_t aa = ha_min; aa <= ha_max; aa++)    
-      for(size_t bb = hb_min; bb <= hb_max; bb++)    
+    for(size_t aa = ha_min; aa <= ha_max; aa++)
+      for(size_t bb = hb_min; bb <= hb_max; bb++)
         for(size_t cc = hc_min; cc <= hc_max; cc++)
         {
 
-          size_t hash = 
-            aa + 
-            bb*nDiv + 
+          size_t hash =
+            aa +
+            bb*nDiv +
             cc*pow(nDiv,2);
           for(size_t pp = B[hash]; pp<B[hash+1]; pp++)
           {
@@ -309,10 +348,18 @@ static double gradRepulsion(double * restrict D,
                 size_t LL = P[pp];
 
                 double di = sqrt(dist2);
+
+                double did = (di - d)/di;
+
+                if( !isfinite(did))
+                {
+                  did = 0;
+                }
+
                 for(int idx = 0; idx<3; idx++)
                 {
-                  G[3*KK+idx] += kVol*2*(E[3*kk+idx] - E[3*pp+idx])/di*(di - d);
-                  G[3*LL+idx] -= kVol*2*(E[3*kk+idx] - E[3*pp+idx])/di*(di - d);
+                  G[3*KK+idx] += kVol*2*(E[3*kk+idx] - E[3*pp+idx])*did;
+                  G[3*LL+idx] -= kVol*2*(E[3*kk+idx] - E[3*pp+idx])*did;
                 }
 
               }
@@ -331,43 +378,87 @@ static double gradRepulsion(double * restrict D,
   return err;
 }
 
-double err3(double * restrict X, const size_t nX, double * restrict R, uint32_t * restrict P, const conf * restrict C )
-{
-  /* Alternative version with a list of pairs in contact instead of A */
 
-  // Wanted radii
+double err3(double * restrict X,
+            const size_t nX,
+            double * restrict R,
+            uint32_t * restrict P,
+            const conf * restrict C )
+{
+  /* Compared to err2 this is an alternative version with a list of pairs in contact instead of A */
+
+  double XT[3]; // Temporary storage
+  XT[0] = 0; XT[1] = 0; XT[2] = 0;
+
+  /* -- Wanted radii -- */
   double errRad = 0;
-  if( (R != NULL) & (C->kRad > 0))
+  if(C->E == NULL) // spherical domain
   {
-    for(size_t kk = 0; kk<nX; kk++)
+    if( (R != NULL) & (C->kRad > 0))
     {
-      if(isfinite(R[kk]) == 1)
-      { // TODO: create list of all finite first, no need to have a branch here
-        const double r = norm3(X+kk*3);
-        errRad += pow(r-R[kk], 2);
+      for(size_t kk = 0; kk<nX; kk++)
+      {
+        if(isfinite(R[kk]) == 1) // TODO: create list of points to use to avoid if-branching
+        {
+          const double r = norm3(X+kk*3);
+          errRad += pow(r-R[kk], 2);
+        }
+      }
+    }
+  }
+  if(C->E != NULL) // elliptical domain
+  {
+    if( (R != NULL) & (C->kRad > 0))
+    {
+      for(size_t kk = 0; kk<nX; kk++)
+      {
+        if(isfinite(R[kk]) == 1)
+        {
+          const double r = sqrt(elli_getScale2(C->E, X+3*kk));
+          errRad += pow(r-R[kk], 2);
+        }
       }
     }
   }
 
-  // Keep inside sphere
+  /* -- Keep inside domain -- */
   double errSph = 0;
-  double ds = (1-C->r0);
-  double ds2 = pow(ds, 2);
-  for(size_t kk = 0 ; kk<nX; kk++)
-  {
-    const double r2 = norm32(X+kk*3); // norm^2
-    // TODO: use min/max here to avoid branch?
-    if( r2 > ds2)
+
+  if(C->E == NULL)
+  { // Inside sphere
+    double ds = (1-C->r0);
+    double ds2 = pow(ds, 2);
+    for(size_t kk = 0 ; kk<nX; kk++)
     {
-      double r = sqrt(r2);
-      errSph += pow(r - ds, 2);
+      const double r2 = norm32(X+kk*3); // norm^2
+      if( r2 > ds2)
+      {
+        double r = sqrt(r2);
+        errSph += pow(r - ds, 2);
+      }
+    }
+  }
+  if(C->E != NULL) // Inside ellipsoid
+  {
+    for(size_t kk = 0 ; kk<nX; kk++)
+    {
+      const double d = elli_getScale2(C->Es, X+3*kk);
+      if( d >= 1)
+      {
+        double r = elli_gdistL(C->E, X+3*kk, XT);
+        if(r + C->r0 > 0)
+        {
+          errSph += pow(r+C->r0, 2);
+        }
+      }
     }
   }
 
-  // Wanted contacts/interactions
+
+  /* Wanted contacts/interactions */
   double errInt = 0;
   for(size_t pp = 0; pp < C->nIPairs; pp++)
-  { 
+  {
     size_t kk = P[pp*2];
     size_t ll = P[pp*2+1];
     {
@@ -385,7 +476,7 @@ double err3(double * restrict X, const size_t nX, double * restrict R, uint32_t 
 
   errVol = errRepulsion(X, nX, 2*C->r0);
 
-  return C->kInt*errInt + C->kVol*errVol + C->kSph*errSph + C->kRad*errRad;
+  return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
 double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
@@ -422,7 +513,7 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
   // Wanted contacts/interactions
   double errInt = 0;
   for(size_t pp = 0; pp < C->nIPairs; pp++)
-  { 
+  {
     size_t kk = P[pp*2];
     size_t ll = P[pp*2+1];
     {
@@ -437,9 +528,9 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
   // Repulsion
   double errVol = 0;
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
-    {            
+    {
       if(fabs(X[3*kk] - X[3*ll]) < 2*C->r0) // This line doubles the speed!
       {
         double d = eudist3(X+3*kk, X+3*ll);
@@ -451,7 +542,7 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
     }
   }
 
-  return C->kInt*errInt + C->kVol*errVol + C->kSph*errSph + C->kRad*errRad;
+  return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
 
@@ -487,7 +578,7 @@ double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
   // Wanted contacts/interactions
   double errInt = 0;
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
     {
       if(A[kk + nX*ll] == 1)
@@ -504,9 +595,9 @@ double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
   // Repulsion
   double errVol = 0;
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
-    {            
+    {
       double d = eudist3(X+3*kk, X+3*ll);
       if( d < 2*C->r0)
       {
@@ -515,7 +606,7 @@ double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
     }
   }
 
-  return C->kInt*errInt + C->kVol*errVol + C->kSph*errSph + C->kRad*errRad;
+  return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
 void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
@@ -552,14 +643,14 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
       double re = 2 / r * (r-(1-C->r0));
       for(int idx = 0; idx<3; idx++)
       {
-        G[3*kk+idx] += C->kSph*X[kk*3+idx]*re;
+        G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
       }
     }
   }
 
   // Wanted interactions
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
     {
       if(A[kk + nX*ll] == 1)
@@ -579,7 +670,7 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
 
   // Repulsion
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
     {
       double d = eudist3(X+3*kk, X+3*ll);
@@ -633,14 +724,14 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C
       double re = 2 / r * (r-(1-C->r0));
       for(int idx = 0; idx<3; idx++)
       {
-        G[3*kk+idx] += C->kSph*X[kk*3+idx]*re;
+        G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
       }
     }
   }
 
   // Wanted interactions
   for(size_t pp = 0; pp < C->nIPairs; pp++)
-  { 
+  {
     size_t kk = I[pp*2];
     size_t ll = I[pp*2+1];
 
@@ -657,7 +748,7 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C
 
   // Repulsion
   for(size_t kk = 0; kk < nX; kk++)
-  { 
+  {
     for(size_t ll = kk+1; ll < nX; ll++)
     {
       double d = eudist3(X+3*kk, X+3*ll);
@@ -675,18 +766,24 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C
   return;
 }
 
-void grad3(double * restrict X, 
-    const size_t nX, 
-    double * restrict R, 
-    uint32_t * restrict I, 
-    double * restrict G, 
+void grad3(double * restrict X,
+    const size_t nX,
+    double * restrict R,
+    uint32_t * restrict I,
+    double * restrict G,
     const conf * restrict C)
 {
+
+  double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
+
   // Reset G
   for(size_t kk = 0; kk<nX*3; kk++)
     G[kk] = 0;
 
-  // Radial positioning
+
+  /* Radial positioning */
+  if(C->E == NULL) // Spherical domain
+  {
   if(C->kRad > 0)
   {
     for(size_t kk = 0; kk<nX; kk++)
@@ -704,39 +801,95 @@ void grad3(double * restrict X,
       }
     }
   }
-
-  // Keep inside sphere
-  for(size_t kk = 0; kk<nX; kk++)
+  }
+  if(C->E != NULL) // Ellipsoidal domain
   {
-    double r = norm3(X+kk*3);
-    if(r > 1-C->r0)
+  if(C->kRad > 0)
+  {
+    double EF[3];
+    EF[0] = 1.0/pow(C->E->a, 2);
+    EF[1] = 1.0/pow(C->E->b, 2);
+    EF[2] = 1.0/pow(C->E->c, 2);
+
+    for(size_t kk = 0; kk<nX; kk++)
     {
-      double re = 2 / r * (r-(1-C->r0));
-      for(int idx = 0; idx<3; idx++)
+      if(isfinite(R[kk]) == 1)
       {
-        G[3*kk+idx] += C->kSph*X[kk*3+idx]*re;
+        double r = sqrt(elli_getScale2(C->E, X+kk*3));
+        double re = 0;
+        // if(r > 0)
+        re = 2*(r-R[kk])/r;
+        for(int idx = 0; idx<3; idx++)
+        {
+          G[3*kk+idx] += C->kRad*X[kk*3+idx]*re*EF[idx];
+        }
+      }
+    }
+  }
+  }
+
+  /* --- Keep inside domain --- */
+
+  if(C->E == NULL) // Spherical domain
+  {
+    for(size_t kk = 0; kk<nX; kk++)
+    {
+      double r = norm3(X+kk*3);
+      if(r > 1-C->r0)
+      {
+        double re = 2 / r * (r-(1-C->r0));
+        for(int idx = 0; idx<3; idx++)
+        {
+          G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
+        }
       }
     }
   }
 
+  if(C->E != NULL) // Ellipsoidal domain
+  {
+    for(size_t kk = 0; kk<nX; kk++)
+    {
+      const double d = elli_getScale2(C->Es, X+3*kk);
+      if( d >= 1)
+      {
+        double n[3];
+       double r = elli_gdistL(C->E, X+3*kk, XT);
+
+        //elli_normal(C->E, XT, n);
+        vec3_normalize(n);
+
+         if(r + C->r0 > 0)
+          {
+        double re = 2 / r * (r+C->r0);
+        for(int idx = 0; idx<3; idx++)
+        {
+          G[3*kk+idx] += C->kDom*(X[kk*3+idx]-XT[idx])*re;
+
+        }
+      }
+    }
+  }
+  }
+
   // Wanted interactions
   for(size_t pp = 0; pp < C->nIPairs; pp++)
-  { 
+  {
     size_t kk = I[pp*2];
     size_t ll = I[pp*2+1];
 
     double d = eudist3(X+3*kk, X+3*ll);
     assert(kk != ll);
 #ifndef NDEBUG
-if( !(d>0) )
-{
-  printf("Strange distance between interacting points!\n");
-  printf("@%p : %f %f %f\n", X+3*kk, X[3*kk], X[3*kk+1], X[3*kk+2]);
-  printf("@%p : %f %f %f\n", X+3*ll, X[3*ll], X[3*ll+1], X[3*ll+2]);
-  exit(1);
-}
+    if( !(d>0) )
+    {
+      printf("Strange distance between interacting points!\n");
+      printf("@%p : %f %f %f\n", X+3*kk, X[3*kk], X[3*kk+1], X[3*kk+2]);
+      printf("@%p : %f %f %f\n", X+3*ll, X[3*ll], X[3*ll+1], X[3*ll+2]);
+      exit(1);
+    }
 #endif
-    if(d > C->dInteraction)
+    if(d > C->dInteraction && d > 1e-6)
     {
       for(int idx = 0; idx<3; idx++)
       {
@@ -752,11 +905,12 @@ if( !(d>0) )
   return;
 }
 
-void grad4(double * restrict X, 
-    const size_t nX, 
-    double * restrict R, 
-    uint32_t * restrict I, 
-    double * restrict G, 
+
+void grad4(double * restrict X,
+    const size_t nX,
+    double * restrict R,
+    uint32_t * restrict I,
+    double * restrict G,
     const conf * restrict C)
 {
   // Reset G
@@ -772,14 +926,14 @@ void grad4(double * restrict X,
       {
 
 
-      double r = norm3(X+kk*3);
-      double re = 0;
-      // if(r > 0)
-      re = 2*1/r*(r-R[kk]);
-      for(int idx = 0; idx<3; idx++)
-      {
-        G[3*kk+idx] += C->kRad*X[kk*3+idx]*re;
-      }
+        double r = norm3(X+kk*3);
+        double re = 0;
+        // if(r > 0)
+        re = 2*1/r*(r-R[kk]);
+        for(int idx = 0; idx<3; idx++)
+        {
+          G[3*kk+idx] += C->kRad*X[kk*3+idx]*re;
+        }
       }
     }
   }
@@ -794,7 +948,7 @@ void grad4(double * restrict X,
       double re = 2 / r * (r-(1-C->r0));
       for(int idx = 0; idx<3; idx++)
       {
-        G[3*kk+idx] += C->kSph*X[kk*3+idx]*re;
+        G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
       }
     }
   }
@@ -804,7 +958,7 @@ void grad4(double * restrict X,
   const double dInteraction2 = pow(dInteraction, 2);
 
   for(size_t pp = 0; pp < C->nIPairs; pp++)
-  { 
+  {
     size_t kk = I[pp*2];
     size_t ll = I[pp*2+1];
 

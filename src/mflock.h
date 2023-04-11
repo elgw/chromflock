@@ -2,6 +2,8 @@
 #define __mflock_h__
 
 #include <stdint.h>
+#include "ellipsoid.h"
+#include "cf_version.h"
 
 typedef struct {
   uint8_t * W; // Matrix with contact indications
@@ -10,22 +12,25 @@ typedef struct {
   size_t N; // number of points
 
   uint8_t * L; // chr labels per bead
+  double * R; // wanted radii together with kRad
 
+  // Geometry
+  // Sphere if E isn't set.
+  double r0; // bead radius
+  double volq;
+  elli * E; // Ellipse
+
+  // Forces
   double kVol; // Volume exclusion/repulsion of beads
-  double kSph; // Spherical confinement
+  double kDom; // Spherical confinement
   double kInt; // Interaction of pairs
   double kRad; // Radial force (GPSeq)
-  double r0; // bead radius (sphere radius is 1)
 
-  double * R; // wanted radii together with kRad
 
   // Initialization
   size_t rseed;
 
   // For the optimizer
-  double errstop;
-  double gradstop;
-  double linestop;
   size_t maxiter;
   size_t maxtime;
 
@@ -41,6 +46,8 @@ typedef struct {
   char * xfname; // Initial X
   char * lfname; // Chromosome labels
 
+  int newx;
+
   // Output file names
   char * xoutfname;
   char * ofoldername; // Outfolder
@@ -51,18 +58,24 @@ typedef struct {
 
   // general
   int verbose;
-  int dynamic;
-  int compress; // compress chromosomes by attracting them to their COMs
+  double compress; // compress chromosomes by attracting them to their COMs
   int liveView;
+
+  // If lua is used to set the parameters as a function of the current iteration
+  int luaDynamics;
+  char * luaDynamicsFile;
 
 } optparam;
 
 void param_show(optparam * p, FILE * f);
 
 optparam * param_copy(optparam * p);
-void param_summary(optparam * p, double * X, FILE * f);
+void param_summary(optparam * p, double * X);
 void param_readW(optparam * p);
 int param_readR(optparam * p);
+double * init_X(optparam * p);
+int param_readX(optparam * p, double * X);
+
 
 /* Upscale the points in X2 by a factor of 2 +/- 1 point */
 void param_free(optparam * p);
@@ -70,13 +83,7 @@ void param_free(optparam * p);
 
 /* For logging */
 
-// Whenever p->verbose > 0
-void logwarn(optparam * p, const char *fmt, ...);
-
-// Whenever p->verbose > 1
-void loginfo(optparam * p, const char *fmt, ...);
-
-// Whenever p->verbose > 2
-void logdebug(optparam * p, const char *fmt, ...);
+// General logging function
+void logwrite(optparam * p, int level, const char * fmt, ...);
 
 #endif

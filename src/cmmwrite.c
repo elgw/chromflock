@@ -70,13 +70,17 @@ int cmmwritez(char * fname, double * D, size_t nD, double radius, uint32_t * P, 
 
     if(L != NULL)
     {
-      if(L[kk] < 25)
-      {
         uint8_t chr = L[kk];
+        chr = chr % 32; // use 33, 34, ... for the second copy
+        // Avoid reading unallocated memory
+        if(chr>26)
+        {
+          printf("Warning: Does not know how to color label %u\n", L[kk]);
+          chr = 26;
+        }
         r = (double) cmap[3*chr]/255.0;
         g = (double) cmap[3*chr+1]/255.0;
         b = (double) cmap[3*chr+2]/255.0;
-      }
     }
 
     sprintf(line, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n", 
@@ -148,13 +152,17 @@ int cmmwrite(char * fname, double * D, size_t nD, double radius, uint32_t * P, s
 
     if(L != NULL)
     {
-      if(L[kk] < 25)
-      {
         uint8_t chr = L[kk];
+        chr = chr % 32; // use 33, 34, ... for the second copy
+        // Avoid reading unallocated memory
+        if(chr>26)
+        {
+          printf("Warning: Does not know how to color label %u\n", L[kk]);
+          chr = 26;
+        }
         r = (double) cmap[3*chr]/255.0;
         g = (double) cmap[3*chr+1]/255.0;
         b = (double) cmap[3*chr+2]/255.0;
-      }
     }
 
 

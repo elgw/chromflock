@@ -8,8 +8,11 @@ void usage(char * binName)
 {
   fprintf(stdout, "Generates a contact probability matrix, A, for testing\n");
   fprintf(stdout, "Usage:\n");
-  fprintf(stdout, "%s file.dat N M\n", binName);
-  fprintf(stdout, "Where N is the number of beads and M the number of contacts\n");
+  fprintf(stdout, "%s name N M\n", binName);
+  fprintf(stdout, " name: output name, A_name.double and L_name.uint8 will be created.\n");
+  fprintf(stdout, " N:  the number of beads.\n");
+  fprintf(stdout, " M:  the number of contacts\n");
+
   return;
 }
 
@@ -22,12 +25,19 @@ int main(int argc, char ** argv)
     exit(-1);
   }
 
+  char * name = argv[1];
+  char * aFile = malloc(1024*sizeof(char));
+  char * lFile = malloc(1024*sizeof(char));
 
-  FILE * fout = fopen(argv[1], "w");
+  sprintf(aFile, "A_%s.double", name);
+  sprintf(lFile, "L_%s.uint8", name);
+
+  FILE * aOut = fopen(aFile, "w");
+  FILE * lOut = fopen(lFile, "w");
   
-  if(fout == NULL)
+  if(aOut == NULL)
   {
-    fprintf(stderr, "Could not open %s for writing\n", argv[1]);
+    fprintf(stderr, "Could not open %s for writing\n", aFile);
     exit(-1);
   }
 
@@ -106,10 +116,19 @@ int main(int argc, char ** argv)
 
   fprintf(stdout, "%zu zeros, %zu ones\n", zeros, ones);
 
-  size_t nwritten = fwrite(A, sizeof(double), N*N, fout);
-  fprintf(stdout, "Wrote %zu bytes / %zu elements\n", nwritten*sizeof(double), N*N);
+  size_t nwritten = fwrite(A, sizeof(double), N*N, aOut);
+  fprintf(stdout, "Wrote %zu bytes / %zu elements to %s\n", nwritten*sizeof(double), N*N, aFile);
+  fclose(aOut);
 
-  fclose(fout);
+  uint8_t * L = malloc(N*sizeof(uint8_t));
+  for(size_t kk = 0; kk<N; kk++)
+  {
+    L[kk] = 1;
+  }
+  
+  nwritten = fwrite(L, sizeof(uint8_t), N, lOut);
+  fprintf(stdout, "Wrote %zu bytes / %zu elements to %s\n", nwritten*sizeof(uint8_t), N, lFile);
+  fclose(lOut);
 }
 
 

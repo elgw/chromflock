@@ -1,44 +1,42 @@
 # CHROMFLOCK
 
-![example structure](cf_000038.png)
+![example structure](doc/cf_000038.png)
 
+## Introduction
 
-## Usage:
-Compile, if gcc, pkg-config and zlib are installed, compilation is as simple as:
+**chromflock** is a software package to deconvolve bulk Hi-C data into
+putative single-cell structures. The overall scheme is borrowed from
+[PGS](https://www.github.com/alberlab/PGS) although it is not a direct
+fork.
 
-```
-make all
-```
+Chromflock will:
+ - Work with haploid as well as diploid structures.
+ - Can integrate GPSeq data for radial preferences.
+ - Supports spherical as well as an ellipsoidal domain for the beads.
 
-To make the binaries and then man pages is visible, use:
+The documentation is not complete at the moment and it is suggested
+that anyone interested in chromflock start by reading [Kalhor et al,
+2012](https://doi.org/10.1038/nbt.2057), especially the supplementary
+materials since much of the terminology used here can be traced back
+to that paper.
 
-```
-here=$(pwd)
-export PATH=$PATH:$here/bin/
-export MANPATH=$MANPATH:$here/man/
-```
-possibly add that to your `.bashrc` or whatever is used on your system.
+Installation instructions can be found in [INSTALL.md](INSTALL.md) and
+some example usage in [USAGE.md](USAGE.md).
 
-To get started, read the man page for `chromflock`, i.e.:
+In addition to csv files, chromflock will use chimera marker files
+(.cmm) to write out structures for viewing. These can be opened by
+[UCFS chimera](https://www.cgl.ucsf.edu/chimera/) and also by
+[nua](https://www.github.com/elgw/nua/).
 
-```
-man chromflock
-```
+## References
 
-in general the sequence of command needed to start an experiment are:
-```
-chromflock
-vim chromflock_gen
-./chromflock_run
-```
+chromflock was used in
+ - [Girelli et al. 2020](https://www.nature.com/articles/s41587-020-0519-y).
 
-If `chromflock_run` was aborted for some reason, inspect `status.txt` to see the last thing that was finished and continue from any line, L, by
-```
-bash < (sed -n 'L,$p' chromflock_run)
-```
+The ideas behind it can be found in the following papers:
+ - [Kalhor et al, 2012](https://doi.org/10.1038/nbt.2057)
+ - [Tjong et al, 2016](http://dx.doi.org/10.1073/pnas.1512577113)
+ - [Hua et al, 2018](http://dx.doi.org/10.1038/nprot.2018.008) [github](https://www.github.com/alberlab/PGS)
 
-# References
-For the RNG and Normal distribution:
- -  [A modified ziggurat algorithm for generating exponentially and normally distributed pseudorandom numbers](http://www.tandfonline.com/doi/abs/10.1080/00949655.2015.1060234).
-
-
+For random numbers chromflock uses
+ -  [McFarland, 2014](http://www.tandfonline.com/doi/abs/10.1080/00949655.2015.1060234) [code](https://github.com/cd-mcfarland/fast_prng).
