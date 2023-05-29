@@ -31,14 +31,12 @@ int isfile(const char * filename)
 
 /* Convert
    /home/user/dir/chromflock/bin/chromflock to
-   /home/user/dir/chromflock/util/chromflock_gen
-   Returns "/chromflock_gen" if that isn't possible
+   /home/user/dir/chromflock/
+   Returns "/" if that isn't possible
 */
-char * get_src_dir_chromflock_gen(void)
+char * get_src_dir(void)
 {
-    char * filename = malloc(2048);
     char * myloc = mylocation();
-    sprintf(filename, "%s", "/chromflock_gen");
 
     /* If at least three '/' then replace the second last with '\0'' */
     int nslash = 0;
@@ -64,53 +62,59 @@ char * get_src_dir_chromflock_gen(void)
                 }
             }
         }
-
-        sprintf(filename, "%s/util/chromflock_gen", myloc);
     }
-    free(myloc);
-    return filename;
+    return myloc;
 }
 
-int chromflock_init(void)
+typedef struct {
+    char * filename;
+    char * relpath;
+    mode_t mode;
+} cf_file;
+
+
+/* Copy the file, specified by name to this folder.
+ * If chromflock is run from the source dir in relpath, prefer files in the
+ * repository. Else look in the default install dir. */
+int place_here(cf_file * file)
 {
-    /* find the chromflock_gen script
-     *  and copy it to the current folder
-     */
 
+    char * outname = file->filename;
 
-    char * outname = strdup("chromflock_gen");
-    char * filename = NULL;
-
+    // Check if file already exist
     if(isfile(outname))
     {
         fprintf(stderr,
-                "A file called '%s' already exists in this folder "
+                "ERROR: A file called '%s' already exists in this folder "
                 "please remove it before using this command\n",
                 outname);
+        return EXIT_FAILURE;
         goto fail;
     }
 
-    filename = get_src_dir_chromflock_gen();
+    // Copy from source directory
+    char * srcdir = get_src_dir();
+    char * filename = malloc( strlen(srcdir)
+                              +strlen(file->relpath)
+                              +strlen(file->filename)+16 );
+    sprintf(filename, "%s%s%s", srcdir, file->relpath, file->filename);
+    free(srcdir);
     if(isfile(filename))
     {
         goto copy_file;
-    } else {
-        printf("%s does not exist\n", filename);
     }
 
-    free(filename);
-    filename = strdup("/usr/local/share/chromflock/chromflock_gen");
+    sprintf(filename, "/usr/local/share/chromflock/%s", file->filename);
+
     if(isfile(filename))
     {
         goto copy_file;
-    } else {
-        printf("%s does not exist\n", filename);
     }
 
     fprintf(stderr,
-            "Unable to find the file chromflock_gen! This indicates that the "
+            "ERROR: Unable to find the file %s! This indicates that the "
             "installation is incomplete. Please make sure that chromflock is "
-            "properly installed.\n");
+            "properly installed.\n", file->filename);
     goto fail;
 
 copy_file:
@@ -119,26 +123,64 @@ copy_file:
     if(oscp(filename, outname) <= 0)
     {
         fprintf(stderr,
-                "Failed to copy %s to %s. Please check that you have read "
+                "ERROR: Failed to copy %s to %s. Please check that you have read "
                 "permission for the former and that you have write "
                 "permissions in the current folder\n",
                 filename, outname);
         goto fail;
     }
 
-    printf("Created the file '%s' in this folder.\n"
-           "Please edit it for your needs.\n"
-           "When done, run:\n"
-           "  chmod +x %s\n"
-           "  ./%s\n",
-           outname, outname, outname);
+    if(chmod(outname, file->mode))
+    {
+        printf("Failed to change mode for %s\n", file->filename);
+    }
 
     free(filename);
-    free(outname);
+
     return EXIT_SUCCESS;
 
 fail:
     free(filename);
     free(outname);
     return EXIT_FAILURE;
+}
+
+
+int chromflock_init(void)
+{
+
+    /* Copy the following files to the current directory
+     * */
+
+    cf_file files[] = {
+        {"chromflock_gen", "/util/", S_IRUSR | S_IWUSR | S_IXUSR },
+        {"mflock.lua", "/src/", S_IRUSR | S_IWUSR},
+        {NULL, NULL, 0}
+    };
+
+    int ok = 1;
+    cf_file * file = &files[0];
+    while( file->filename != NULL )
+    {
+        if(place_here(file))
+        {
+            ok = 0;
+        }
+        file++;
+    }
+
+    if(ok)
+    {
+        printf("Created chromflock_gen and mflock.lua in this folder.\n"
+               "Edit them according to your needs.\n"
+               "When done, run:\n"
+               "  ./chromflock_gen\n");
+
+    } else {
+        printf("Failed to initialize this directory for chromflock. "
+               "Please see previous error messages\n");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

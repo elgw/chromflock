@@ -2,6 +2,8 @@
 
 ## 0.3.4
 - Cleaned up the makefile
+- `mflock.lua` is now created by `chromflock init`, forgot that in the
+  previous version.
 
 ## 0.3.3
 - New behaviour, instead of `chromflock`, do `chromflock init`.
