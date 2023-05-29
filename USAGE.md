@@ -18,9 +18,12 @@ cd 128
 # Convert Hi-C/TCC data to a contact probability matrix and remove chrY if included
 # Assuming that you already have some Hi-C data in binary format.
 cc2cpm --hFile ../H.double --lFile ../L.uint8 --nStruct 8
-chromflock
+chromflock init
 # Edit settings
 vim chromflock_gen
+# Possibly also the dynamics settings
+vim mflock.lua
+# Then run
 ./chromflock_run
 ```
 
