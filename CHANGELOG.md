@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.3.6
+- Added the `--mean` option to `chromflock hic2cpm`.
+
 ## 0.3.5
 - Fixed issues that `hic2cpm` sometimes didn't find a scaling value.
 
