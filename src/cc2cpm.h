@@ -16,9 +16,6 @@
 #include "balance.h"
 #include "cf_version.h"
 
-#define MODE_DEFAULT 0
-#define MODE_EQ 1
-
 /* Command line interface */
 int cc2cpm(int argc, char ** argv);
 

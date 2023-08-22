@@ -1,5 +1,12 @@
 #include "cc2cpm.h"
 
+// TODO typedef and enum
+#define MODE_DEFAULT 0
+#define MODE_EQ 1
+
+
+typedef double (*statfun) (double * , size_t );
+
 typedef struct{
     char * hFile;
     char * lFile;
@@ -10,6 +17,7 @@ typedef struct{
     int mode;
     int keepY;
     int verbose;
+    int use_median;
 } pargs;
 
 static pargs * pargs_new();
@@ -20,6 +28,9 @@ static void toLogFile(FILE * f, int argc, char ** argv); // Write useful stuff t
 static int argparsing(pargs * p, int argc, char ** argv);
 
 static void help(char *);
+static double double_vector_max(double * V, size_t N);
+static double double_vector_mean(double * V, size_t N);
+
 
 
 /* Remove a specific chrosmosome from H and L
@@ -59,9 +70,11 @@ static double vmax(double * V, size_t N);
 static double getContacts(const double * V, size_t N, double scaling, double nStruct);
 
 /* Use binary search to figure out how to scale the Hi-C matrix to the
- * desired number of max contacts per bead */
-static double getScalingFull_max(const double * H, const size_t N,
-                                 double nStruct, double nContWanted);
+ * desired number of max contacts per bead
+ * f determines how the scaling is evaluated, i.e., by the max contacts
+ * per bead or mean ... */
+static double getScaling(const double * H, const size_t N,
+                         double nStruct, double nContWanted, statfun f);
 
 
 /* Connect linearly consecutive beads (i.e., that are in the same chromosome) */
@@ -89,12 +102,13 @@ static double vmax(double * V, size_t N);
 static void clearWeak(double * H, size_t N);
 
 /* Scale H to have at most nCont contacts per bead */
-static int scale(double * H, uint8_t * L, size_t N, size_t nStruct, double nCont);
+static int scale(double * H, uint8_t * L, size_t N,
+                 size_t nStruct, double nCont, statfun stat);
 
 
 static pargs * pargs_new()
 {
-    pargs * args = malloc(sizeof(pargs));
+    pargs * args = calloc(1, sizeof(pargs));
     /* HiC data, encodes as double */
     args->hFile = NULL;
     /* Labels, encoded as uint8 */
@@ -111,6 +125,7 @@ static pargs * pargs_new()
     /* Remove chrY from the output matrix? */
     args->keepY = 0;
     args->verbose = 1;
+    args->use_median = 0;
     return args;
 }
 
@@ -122,6 +137,7 @@ static int argparsing(pargs * p, int argc, char ** argv)
         {"nCont",   required_argument, NULL, 'c'},
         {"mode_eq", no_argument,       NULL, 'e'},
         {"help",    no_argument,       NULL, 'h'},
+        {"mean",    no_argument,       NULL, 'm'},
         {"hFile",   required_argument, NULL, 'H'},
         {"lFile",   required_argument, NULL, 'L'},
         {"nStruct", required_argument, NULL, 's'},
@@ -131,7 +147,7 @@ static int argparsing(pargs * p, int argc, char ** argv)
     };
 
     int ch;
-    while( ( ch = getopt_long(argc, argv, "A:c:ehH:L:s:vy", longopts, NULL)) != -1)
+    while( ( ch = getopt_long(argc, argv, "A:c:ehH:L:ms:vy", longopts, NULL)) != -1)
     {
         switch (ch)
         {
@@ -143,6 +159,9 @@ static int argparsing(pargs * p, int argc, char ** argv)
             break;
         case 'e':
             p->mode = MODE_EQ;
+            break;
+        case 'm':
+            p->use_median = 1;
             break;
         case 'y':
             p->keepY = 1;
@@ -199,13 +218,24 @@ static int argparsing(pargs * p, int argc, char ** argv)
     char * modeStr = malloc(100*sizeof(char));
     sprintf(modeStr, "%s", "");
 
+
     if(p->mode == MODE_EQ)
     {
-        sprintf(modeStr, "%s", "_EQ");
+        if(p->use_median)
+        {
+            sprintf(modeStr, "%s", "_EQ_MEAN");
+        } else {
+            sprintf(modeStr, "%s", "_EQ_MAX");
+        }
     }
     if(p->mode == MODE_DEFAULT)
     {
-        sprintf(modeStr, "%s", "_MAX");
+        if(p->use_median)
+        {
+            sprintf(modeStr, "%s", "_MEAN");
+        } else {
+            sprintf(modeStr, "%s", "_MAX");
+        }
     }
 
     if(p->aOutFile == NULL)
@@ -306,32 +336,62 @@ static double getContacts(const double * V, size_t N, double scaling, double nSt
     return v/nStruct;
 }
 
-static double max_contacts(const double * H, const size_t N, double scaling, double nStruct)
+static double double_vector_max(double * V, size_t N)
+{
+    double max = V[0];
+    for(size_t kk = 0; kk<N; kk++)
+    {
+        V[kk] > max ? max = V[kk] : 0;
+    }
+    return max;
+}
+
+
+static double double_vector_mean(double * V, size_t N)
+{
+    double sum = 0;
+    for(size_t kk = 0; kk<N; kk++)
+    {
+        sum += V[kk];
+    }
+    return sum / (double) N;
+}
+
+static double nContacts(const double * H, const size_t N, double scaling, double nStruct, statfun f)
 {
     double * nCont = malloc(N*sizeof(double));
     for(size_t kk = 0; kk<N; kk++)
     {
         nCont[kk] = getContacts(H+kk*N, N, scaling, nStruct);
     }
-
-    double nContMax = 0;
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        nCont[kk] > nContMax ? nContMax = nCont[kk] : 0;
-    }
+    double v = f(nCont, N);
     free(nCont);
-    return nContMax;
+    return v;
 }
 
-static double getScalingFull_max(const double * H, const size_t N,
-                                 double nStruct, double nContWanted)
+static double getScaling(const double * H, const size_t N,
+                         double nStruct, double nContWanted,
+                         statfun stat)
 {
     double args[3] = {0, 50, 100};
     double vals[3];
-    for(int kk = 0; kk<3; kk++)
+
+    vals[0] = nContacts(H, N, args[0], nStruct, stat);
+    vals[2] = nContacts(H, N, args[2], nStruct, stat);
+
+    while(vals[2] < nContWanted)
     {
-        vals[kk] = max_contacts(H, N, args[kk], nStruct);
+        args[2] *=2;
+        vals[2] = nContacts(H, N, args[2], nStruct, stat);
     }
+    args[1] = 0.5*(args[0] + args[2]);
+    vals[1] = nContacts(H, N, args[1], nStruct, stat);
+#if 0
+    printf("Starting point:\n");
+    printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
+    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
+#endif
+
     while( fabs(vals[1] - nContWanted) > 1e-3 )
     {
         if(vals[1] > nContWanted)
@@ -343,12 +403,12 @@ static double getScalingFull_max(const double * H, const size_t N,
             args[0] = args[1];
         }
         args[1] = 0.5*(args[0]+args[2]);
-        vals[1] = max_contacts(H, N, args[1], nStruct);
+        vals[1] = nContacts(H, N, args[1], nStruct, stat);
     }
-//    printf("Final contacts per bead: %f (wanted %f) for scaling=%f\n", vals[1], nContWanted, args[1]);
-//   printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
-//    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
-
+    //    printf("Final contacts per bead: %f (wanted %f) for scaling=%f\n", vals[1], nContWanted, args[1]);
+    //   printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
+    //    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
+    printf("Found the scaling factor: %f\n", args[1]);
     return args[1];
 }
 
@@ -415,7 +475,7 @@ static uint8_t * readl(const char * fileName, size_t * N)
 
 }
 
-static double * readh(const char * fileName, size_t * N)
+static double * readh(const char * fileName, size_t * _N)
 {
     fprintf(stdout, " >> Loading  %s  \n", fileName);
 
@@ -452,12 +512,12 @@ static double * readh(const char * fileName, size_t * N)
         exit(EXIT_FAILURE);
     }
 
-    N[0] = fsize/sizeof(double);
+    size_t N = fsize/sizeof(double);
     fclose(hfile);
 
     // Convert nan (and, any inf present?) to 0
     int onlyNormal = 1;
-    for(size_t kk = 0; kk<N[0]; kk++)
+    for(size_t kk = 0; kk<N; kk++)
     {
         if(isnormal(A[kk]) != 1)
         {
@@ -470,6 +530,17 @@ static double * readh(const char * fileName, size_t * N)
         printf("Warning: Non-finite values encountered. "
                "Those were converted to 0\n");
     }
+
+    size_t SN = sqrt(N);
+    if(SN*SN != N)
+    {
+        fprintf(stderr, "%s does not seem to be a square matrix\n", fileName);
+        fprintf(stderr, "it has %zu elements\n", N);
+        exit(EXIT_FAILURE);
+    }
+
+    _N[0] = SN;
+
     return A;
 
 }
@@ -507,6 +578,8 @@ static void help(char * myname)
            "to generate later on\n");
     printf(" --nCont n\n\t max number of contacts per bead (for the specific "
            "number of structures)\n");
+    printf(" --mean\n\t"
+           "scale the matrix so that the mean number of contacts per bead is nCont\n");
     printf(" --aOut <file>\n\t name of output contact probability matrix\n");
     printf(" --mode_eq\n\t Give equal number of contacts for each bead by "
            "balancing without the -1, 0, 1 diagonals. The balancing does not "
@@ -663,7 +736,11 @@ static void pargs_show(FILE * f, pargs * p)
     fprintf(f, " Hi-C matrix:\n\t %s\n", p->hFile);
     fprintf(f, " Chromosome labels:\n\t %s\n", p->lFile);
     fprintf(f, " Number of structures: %zu\n", p->nStruct);
-    fprintf(f, " Wanted max contacts per bead: %f\n", p->nCont);
+    if(p->use_median) {
+        fprintf(f, " Wanted MEAN contacts per bead: %f\n", p->nCont);
+    } else {
+        fprintf(f, " Wanted MAX contacts per bead: %f\n", p->nCont);
+    }
     fprintf(f, " OUT: Contact probability matrix:\n\t %s\n", p->aOutFile);
     fprintf(f, " OUT: Chromosome label vector:\n\t %s\n", p->lOutFile);
     fprintf(f, " MODE: ");
@@ -796,12 +873,12 @@ static double * removeChr(double* H0, uint8_t * L, size_t * N, uint8_t chr)
     return H;
 }
 
-static int scale(double * H, uint8_t * L, size_t N, size_t nStruct, double nCont)
+static int scale(double * H, uint8_t * L, size_t N, size_t nStruct, double nCont, statfun stat)
 {
     /* Remove connection between consecutive beads those values can't be scaled */
     set_connectivity(H, L, N, 0.0);
 
-    double scale = getScalingFull_max(H, N, nStruct, nCont-2.0);
+    double scale = getScaling(H, N, nStruct, nCont-2.0, stat);
     for(size_t kk = 0; kk<N*N; kk++)
     {
         H[kk] *= scale;
@@ -815,7 +892,6 @@ static int scale(double * H, uint8_t * L, size_t N, size_t nStruct, double nCont
 
 int cc2cpm(int argc, char ** argv)
 {
-
     pargs * args = pargs_new();
     if( argparsing(args, argc, argv) )
     {
@@ -823,19 +899,19 @@ int cc2cpm(int argc, char ** argv)
         exit(EXIT_FAILURE);
     }
 
-    char * hFile = args->hFile;
-    char * lFile = args->lFile;
-
-    size_t N = 0, N2 = 0, nL = 0;
-
-    double nCont = args->nCont;
-    size_t nStruct = args->nStruct;
+    /* Set number of contacts to mean or max over the beads? */
+    statfun stat = double_vector_max;
+    if(args->use_median)
+    {
+        stat = double_vector_mean;
+    }
 
     pargs_show(stdout, args);
     printf("Press <Enter> to continue\n");
     getchar();
 
-    uint8_t * L = readl(lFile, &nL);
+    size_t nL = 0;
+    uint8_t * L = readl(args->lFile, &nL);
     uint8_t lmin = 255; uint8_t lmax = 0;
     for(size_t kk = 0; kk<nL; kk++)
     {
@@ -846,14 +922,9 @@ int cc2cpm(int argc, char ** argv)
     }
     printf("    L has %zu elements, min: %u, max %u\n", nL, lmin, lmax);
 
-    double * H = readh(hFile, &N2);
-    N = sqrt(N2);
-    if(N*N != N2)
-    {
-        fprintf(stderr, "%s does not seem to be a square matrix\n", hFile);
-        fprintf(stderr, "it has %zu elements\n", N2);
-        exit(EXIT_FAILURE);
-    }
+    size_t N = 0;
+    double * H = readh(args->hFile, &N);
+    printf("    H has %zu elements, [%zu x %zu]\n", N*N, N, N);
 
     if(N != nL)
     {
@@ -862,12 +933,9 @@ int cc2cpm(int argc, char ** argv)
         exit(EXIT_FAILURE);
     }
 
-    printf("    H has %zu elements, [%zu x %zu]\n", N2, N, N);
-
-
     size_t nmax = 0;
     double cmax = -1e99;
-    double cmean = mostContacts(H, NULL, N, nStruct, &cmax, &nmax);
+    double cmean = mostContacts(H, NULL, N, args->nStruct, &cmax, &nmax);
 
     printf(" >> Before any processing:\n");
     printf("    Most contacts for bead/bin %zu : %f\n", nmax, cmax);
@@ -883,34 +951,29 @@ int cc2cpm(int argc, char ** argv)
         {
             printf("    There was no ChrY to remove!\n");
         }
-        N2 = N*N;
     }
 
     printf(" >> Removing contacts for beads where N(i,i) != max(N(i,:))\n");
     clearWeak(H, N);
 
+    printf("    Setting diag(H) = 0\n");
+    clearDiagonal(H, N, 0);
 
     if(args->mode == MODE_DEFAULT)
     {
-        printf("    Setting diag(H) = 0\n");
-        clearDiagonal(H, N, 0);
-
         printf(" >> Finding scaling factor\n");
-        scale(H, L, N, nStruct, nCont);
+        scale(H, L, N, args->nStruct, args->nCont, stat);
     }
 
     if(args->mode == MODE_EQ)
     {
-        printf("    EQUAL-MODE preparations\n");
-        clearDiagonal(H, N, 1);
-
         printf(" >> Balancing H\n");
         double berror = balance(H, N);
         printf("    Largest error: %f\n", berror);
         //  writeA(H, N2, "H_balanced.double");
 
         printf(" >> Finding scaling factor\n");
-        scale(H, L, N, nStruct, nCont);
+        scale(H, L, N, args->nStruct, args->nCont, stat);
     }
 
     printf(" >> Writing ...\n");
