@@ -1,15 +1,15 @@
 #include "cc2cpm.h"
 
 typedef struct{
-  char * hFile;
-  char * lFile;
-  double nCont;
-  size_t nStruct;
-  char * aOutFile;
-  char * lOutFile;
-  int mode;
-  int keepY;
-  int verbose;
+    char * hFile;
+    char * lFile;
+    double nCont;
+    size_t nStruct;
+    char * aOutFile;
+    char * lOutFile;
+    int mode;
+    int keepY;
+    int verbose;
 } pargs;
 
 static pargs * pargs_new();
@@ -32,11 +32,17 @@ static void help(char *);
  * */
 static double * removeChr(double* H0, uint8_t * L, size_t * N, uint8_t chr);
 
-/* Read and write as uint8_t and double */
-static void writeL(uint8_t * L, size_t N, char * lFile); // Write label vector
-static void writeA(double * H, size_t N2, char * aFile); // Write contact probability matrix
-static uint8_t * readl(char * fileName, size_t * N); // Read label vector
-static double * readh(char * fileName, size_t * N); // Read Hi-C data
+/* Write label vector */
+static void
+writeL(const uint8_t * L, size_t N, const char * lFile);
+
+/*  Write contact probability matrix
+ * Warning: This alters H
+ */
+static void writeA(double * H, size_t N2, const char * aFile);
+
+static uint8_t * readl(const char * fileName, size_t * N); // Read label vector
+static double * readh(const char * fileName, size_t * N); // Read Hi-C data
 
 /* Get the sum of all rows (stride=1) */
 //static void rsums0(double * R, // Output, vector of size N
@@ -50,11 +56,13 @@ static double vmax(double * V, size_t N);
 
 /* Count the average number of contacts for a bead (defined by a vector/column, V)
  */
-static double getContacts(double * V, size_t N, double scaling, double nStruct);
+static double getContacts(const double * V, size_t N, double scaling, double nStruct);
 
-/* Use binary search to figure out how to scale a column to the desired number of
- * contacts*/
-static double getScaling(double * V, size_t N, double nCont, double nStruct, double maxScaling);
+/* Use binary search to figure out how to scale the Hi-C matrix to the
+ * desired number of max contacts per bead */
+static double getScalingFull_max(const double * H, const size_t N,
+                                 double nStruct, double nContWanted);
+
 
 /* Connect linearly consecutive beads (i.e., that are in the same chromosome) */
 static void set_connectivity(double * H, uint8_t * L, size_t N, double value);
@@ -219,26 +227,27 @@ static double min_double(double a, double b)
     return b;
 }
 
-#if 0
-static double max_double(double a, double b)
-{
-    if(a>b)
-    {
-        return a;
-    }
-    return b;
-}
-#endif
-
-static void writeL(uint8_t * L, size_t N, char * lFile)
+static void writeL(const uint8_t * L, size_t N, const char * lFile)
 {
     FILE * f = fopen(lFile, "wb");
-    fwrite(L, sizeof(uint8_t), N, f);
+    if(f == NULL)
+    {
+        fprintf(stderr, "Unable to open %s for writing\n", lFile);
+        exit(EXIT_FAILURE);
+    }
+    size_t nwritten = fwrite(L, sizeof(uint8_t), N, f);
     fclose(f);
+    if(nwritten != N)
+    {
+        fprintf(stderr, "Could not write %s to disk\n", lFile);
+        fprintf(stderr, "Tried to write %zu, but could only write %zu\n",
+                N, nwritten);
+        exit(EXIT_FAILURE);
+    }
     return;
 }
 
-static void writeA(double * H, size_t N2, char * aFile)
+static void writeA(double * H, size_t N2, const char * aFile)
 {
 
     for(size_t kk = 0; kk<N2; kk++)
@@ -247,7 +256,19 @@ static void writeA(double * H, size_t N2, char * aFile)
     }
 
     FILE * f = fopen(aFile, "wb");
-    fwrite(H, sizeof(double), N2, f);
+    if(f == NULL)
+    {
+        fprintf(stderr, "Unable to open %s for writing\n", aFile);
+        exit(EXIT_FAILURE);
+    }
+    size_t nwritten = fwrite(H, sizeof(double), N2, f);
+    if(nwritten != N2)
+    {
+        fprintf(stderr, "Could not write %s to disk\n", aFile);
+        fprintf(stderr, "Tried to write %zu, but could only write %zu\n",
+                N2, nwritten);
+        exit(EXIT_FAILURE);
+    }
     fclose(f);
     return;
 }
@@ -270,12 +291,13 @@ static void rsums(double * R, double * A, size_t N)
 }
 #endif
 
-static double getContacts(double * V, size_t N, double scaling, double nStruct)
-{
-    // Get number of contacts for a bead (average for the nStruct)
-    // specified by a row from the HiC-matrix, V, with N elements
-    // More specific, scaling*V is used
+/* Get number of contacts for a bead (average for the nStruct)
+ * specified by a row from the HiC-matrix, V, with N elements
+ * More specific, scaling*V is used
+ */
 
+static double getContacts(const double * V, size_t N, double scaling, double nStruct)
+{
     double v = 0;
     for(size_t kk = 0; kk<N; kk++)
     {
@@ -284,48 +306,52 @@ static double getContacts(double * V, size_t N, double scaling, double nStruct)
     return v/nStruct;
 }
 
-static double getScaling(double * V, size_t N, double nCont, double nStruct, double maxScaling)
-/* Using binary search to find the optimal scaling factor */
+static double max_contacts(const double * H, const size_t N, double scaling, double nStruct)
 {
-    double args[3] = {1e-9, 50, 100};
-    args[2] = maxScaling;
-    args[1] = (args[0]+args[2])/2.0;
-    double vals[3];
+    double * nCont = malloc(N*sizeof(double));
+    for(size_t kk = 0; kk<N; kk++)
+    {
+        nCont[kk] = getContacts(H+kk*N, N, scaling, nStruct);
+    }
 
+    double nContMax = 0;
+    for(size_t kk = 0; kk<N; kk++)
+    {
+        nCont[kk] > nContMax ? nContMax = nCont[kk] : 0;
+    }
+    free(nCont);
+    return nContMax;
+}
+
+static double getScalingFull_max(const double * H, const size_t N,
+                                 double nStruct, double nContWanted)
+{
+    double args[3] = {0, 50, 100};
+    double vals[3];
     for(int kk = 0; kk<3; kk++)
     {
-        vals[kk] = getContacts(V, N, args[kk], nStruct);
-        //    printf("vals[%d] = %f\n", kk, vals[kk]);
+        vals[kk] = max_contacts(H, N, args[kk], nStruct);
     }
-
-    assert(vals[0]-nCont < 0);
-    assert(vals[2]-nCont > 0);
-
-    // While search interval is large enough
-    while((args[2] - args[0]) > 1e-11)
+    while( fabs(vals[1] - nContWanted) > 1e-3 )
     {
-        if((vals[1]-nCont) < 0)
+        if(vals[1] > nContWanted)
         {
-            args[0] = args[1];
-            vals[0] = vals[1];
-        } else {
-            args[2] = args[1];
             vals[2] = vals[1];
+            args[2] = args[1];
+        } else {
+            vals[0] = vals[1];
+            args[0] = args[1];
         }
-
-        args[1] = (args[0] + args[2])/2.0;
-        vals[1] = getContacts(V, N, args[1], nStruct);
-
-        if(0){
-            for(int kk = 0; kk<3; kk++)
-            {
-                printf("args[%d] = %f vals[%d] = %f\n", kk, args[kk], kk, vals[kk]);
-            }
-            printf("\n");
-        }
+        args[1] = 0.5*(args[0]+args[2]);
+        vals[1] = max_contacts(H, N, args[1], nStruct);
     }
+//    printf("Final contacts per bead: %f (wanted %f) for scaling=%f\n", vals[1], nContWanted, args[1]);
+//   printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
+//    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
+
     return args[1];
 }
+
 
 static void set_connectivity(double * H, uint8_t * L, size_t N, double value)
 /* Set the matrix elements connecting consecutive beads in H to 0
@@ -346,7 +372,7 @@ static void set_connectivity(double * H, uint8_t * L, size_t N, double value)
 }
 
 
-static uint8_t * readl(char * fileName, size_t * N)
+static uint8_t * readl(const char * fileName, size_t * N)
 {
     fprintf(stdout, " >> Loading  %s  \n", fileName);
 
@@ -354,8 +380,8 @@ static uint8_t * readl(char * fileName, size_t * N)
 
     if(hfile == NULL)
     {
-        fprintf(stderr, "    ! Failed to open file\n");
-        exit(-1);
+        fprintf(stderr, "    ! Failed to open %s\n", fileName);
+        exit(EXIT_FAILURE);
     }
 
     struct stat st;
@@ -363,7 +389,7 @@ static uint8_t * readl(char * fileName, size_t * N)
     if(status != 0)
     {
         fprintf(stderr, "    ! Failed to get file size of %s\n", fileName);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     size_t fsize = st.st_size;
@@ -389,7 +415,7 @@ static uint8_t * readl(char * fileName, size_t * N)
 
 }
 
-static double * readh(char * fileName, size_t * N)
+static double * readh(const char * fileName, size_t * N)
 {
     fprintf(stdout, " >> Loading  %s  \n", fileName);
 
@@ -398,7 +424,7 @@ static double * readh(char * fileName, size_t * N)
     if(hfile == NULL)
     {
         fprintf(stderr, "    ! Failed to open file\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     struct stat st;
@@ -406,7 +432,7 @@ static double * readh(char * fileName, size_t * N)
     if(status != 0)
     {
         fprintf(stderr, "    ! Failed to get file size of %s\n", fileName);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     size_t fsize = st.st_size;
@@ -415,7 +441,7 @@ static double * readh(char * fileName, size_t * N)
     if(A == NULL)
     {
         fprintf(stderr, "    ! Failed to allocate memory for A\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     size_t nRead = fread(A, sizeof(double), fsize/sizeof(double), hfile);
@@ -423,7 +449,7 @@ static double * readh(char * fileName, size_t * N)
     if(nRead*sizeof(double) != fsize)
     {
         fprintf(stderr, "    ! nRead = %zu, fsize = %zu\n", nRead, fsize);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     N[0] = fsize/sizeof(double);
@@ -441,7 +467,8 @@ static double * readh(char * fileName, size_t * N)
     }
     if(onlyNormal == 0)
     {
-        printf("Warning: Non-finite values encountered. Those were converted to 0\n");
+        printf("Warning: Non-finite values encountered. "
+               "Those were converted to 0\n");
     }
     return A;
 
@@ -494,9 +521,10 @@ static void help(char * myname)
 
 static double mostContacts(double * H, uint8_t * L, size_t N, size_t nStruct, double * cmax, size_t * nmax)
 {
-    /* Count number of contacts per bead
-     * if L is supplied the connection between adjacent beads is assumed to be set to 0
-     * and counts are increased based on L */
+    /* Count number of contacts per bead if L is supplied the
+     * connection between adjacent beads is assumed to be set to 0 and
+     * counts are increased based on L */
+
     cmax[0] = 0;
     nmax[0] = 0;
     double ctot = 0;
@@ -770,60 +798,13 @@ static double * removeChr(double* H0, uint8_t * L, size_t * N, uint8_t chr)
 
 static int scale(double * H, uint8_t * L, size_t N, size_t nStruct, double nCont)
 {
-    size_t iter = 0;
-    size_t iter_max = 100;
-
-    double cmax = 0;
-    size_t nmax = 0;
-
     /* Remove connection between consecutive beads those values can't be scaled */
     set_connectivity(H, L, N, 0.0);
 
-    /* Find the bead with most contacts */
-    mostContacts(H, L, N, nStruct, &cmax, &nmax);
-    printf("    Using bead %zu with %f contacts/%f for initial attempt\n",
-           nmax, cmax, nCont);
-
-    double max_scale = 1000;
-    do
+    double scale = getScalingFull_max(H, N, nStruct, nCont-2.0);
+    for(size_t kk = 0; kk<N*N; kk++)
     {
-        // Get optimal scaling factor based on a specific bead
-        // it would be better to do it on all at the same time but it
-        // is of course faster to do it on a single one
-        //
-        double scale = getScaling(H+N*nmax, N, nCont - getNbrs(L, N, nmax), nStruct, max_scale);
-        max_scale = 1+1e-4; //
-        printf("    Scaling factor: %f\n", scale);
-
-
-        // Use the found scaling factor
-        for(size_t kk = 0; kk<N*N; kk++)
-        {
-            H[kk] *= scale;
-        }
-        //   double nGot = getContacts(H+N*nmax, N, 1, nStruct);
-        //   double nBrs = getNbrs(L, N, nmax);
-        //    printf(" ---> nGot = %f+%f, N = %zu\n", nGot, nBrs, N);
-
-
-        // And see if it works out fine
-        // For low number of structures the rounding procedure sometimes
-        // cause the initial guess to be wrong
-        // No guarantee that it will converge
-        printf("     >> Validating\n");
-
-        double ctot = mostContacts(H, L, N, nStruct, &cmax, &nmax);
-
-        printf("        Found most contacts for bead %zu: %f\n", nmax, cmax);
-        printf("        Average: %f contacts per bead\n", ctot);
-        iter++;
-    } while( fabs(cmax - nCont) > 0.01 &&
-             iter < iter_max );
-
-    if(iter == iter_max)
-    {
-        printf("Max number of iterations reached\n");
-        exit(1);
+        H[kk] *= scale;
     }
 
     // Put connectivity back
@@ -836,15 +817,16 @@ int cc2cpm(int argc, char ** argv)
 {
 
     pargs * args = pargs_new();
-    if( argparsing(args, argc, argv))
+    if( argparsing(args, argc, argv) )
     {
         help(argv[0]);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     char * hFile = args->hFile;
     char * lFile = args->lFile;
-    size_t N = 0, N2 = 0, M = 0;
+
+    size_t N = 0, N2 = 0, nL = 0;
 
     double nCont = args->nCont;
     size_t nStruct = args->nStruct;
@@ -853,29 +835,42 @@ int cc2cpm(int argc, char ** argv)
     printf("Press <Enter> to continue\n");
     getchar();
 
-    uint8_t * L = readl(lFile, &M);
+    uint8_t * L = readl(lFile, &nL);
     uint8_t lmin = 255; uint8_t lmax = 0;
-    for(size_t kk = 0; kk<M; kk++)
+    for(size_t kk = 0; kk<nL; kk++)
     {
         if(lmin > L[kk])
             lmin = L[kk];
         if(lmax < L[kk])
             lmax = L[kk];
     }
-    printf("    L has %zu elements, min: %u, max %u\n", M, lmin, lmax);
+    printf("    L has %zu elements, min: %u, max %u\n", nL, lmin, lmax);
 
     double * H = readh(hFile, &N2);
     N = sqrt(N2);
-    assert(N*N == N2);
-    assert(N==M);
+    if(N*N != N2)
+    {
+        fprintf(stderr, "%s does not seem to be a square matrix\n", hFile);
+        fprintf(stderr, "it has %zu elements\n", N2);
+        exit(EXIT_FAILURE);
+    }
+
+    if(N != nL)
+    {
+        fprintf(stderr, "The number of elements in the Labels file does not match the Hi-C matrix size\n");
+        fprintf(stderr, "%zu vs %zu\n", nL, N);
+        exit(EXIT_FAILURE);
+    }
+
     printf("    H has %zu elements, [%zu x %zu]\n", N2, N, N);
 
 
     size_t nmax = 0;
     double cmax = -1e99;
     double cmean = mostContacts(H, NULL, N, nStruct, &cmax, &nmax);
+
     printf(" >> Before any processing:\n");
-    printf("    Most contacts for bead %zu : %f\n", nmax, cmax);
+    printf("    Most contacts for bead/bin %zu : %f\n", nmax, cmax);
     printf("    Mean number of contacts: %f\n", cmean);
     checkH(H, N);
 
@@ -891,7 +886,7 @@ int cc2cpm(int argc, char ** argv)
         N2 = N*N;
     }
 
-    printf(" >> Removing beads where N(i,i) < max(N(i,:))\n");
+    printf(" >> Removing contacts for beads where N(i,i) != max(N(i,:))\n");
     clearWeak(H, N);
 
 

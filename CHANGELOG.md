@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.3.5
+- Fixed issues that `hic2cpm` sometimes didn't find a scaling value.
+
 ## 0.3.4
 - Cleaned up the makefile
 - `mflock.lua` is now created by `chromflock init`, forgot that in the

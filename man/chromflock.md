@@ -53,6 +53,11 @@ genome and saved as a dense matrix in 64-bit floating point format
 counts and hence the range of the values does not matter to
 **hic2cpm**.
 
+The number of contacts per bead is calculated taking the number of
+structure into account, i.e. by summing round(H_{ij}*nStruct) over i
+and the dividing by nStruct.
+
+
 Further downstream the CPM matrix can be read by **aflock**. The
 elements of the CPM are interpreted so that if `CPM_{ij}=p`, the
 probability that bin `i` and `j` are in contact is `p`. I.e. if

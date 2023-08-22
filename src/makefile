@@ -1,12 +1,16 @@
 CC=gcc
 
 CFLAGS = -std=gnu99 -flto -O3 -march=native -mtune=native -Wall -DNOMATLAB -DMAIN
+CFLAGS+=-DCC_VERSION='"..."'
+CFLAGS+=-DGIT_VERSION='"..."'
+
 CFLAGSdbg = -g3 -Wall -DNOMATLAB -DMAIN
 CFLAGScmm = $(CFLAGS) `pkg-config cairo --CFLAGS --libs`
 
 CFLAGS_lv = -std=gnu99 -march=native -Wall -g `pkg-config sdl2 --CFLAGS`
 ldflags_lv = -lm -lpthread `pkg-config sdl2 --libs` -Wall -lpthread
 
+LDFLAGS=-lm
 
 all: functional_ut cmmwrite liveview hsvrgb ellipsoid hic2a functional_optimal_nDiv wio_ut
 
@@ -37,3 +41,7 @@ hsvrgb:
 mtwist:
 	$(CC) $(CFLAGS) -c mtwist.c
 	$(CC) $(CFLAGS) mtwist_ut.c mtwist.o -o mtwist
+
+FILES=cc2cpm.c cc2cpm_cli.c balance.c
+cc2cpm_cli: $(FILES)
+	$(CC) $(CFLAGS) $(FILES) $(LDFLAGS) -o cc2cpm_cli
