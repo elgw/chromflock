@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.3.7
+- Fixed infinite loop when finding scaling factor in hic2cpm (again!).
+- Fixed the **--aOut** argument which was ignored (hic2cpm).
+
 ## 0.3.6
 - Added the `--mean` option to `chromflock hic2cpm`.
 

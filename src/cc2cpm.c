@@ -151,6 +151,9 @@ static int argparsing(pargs * p, int argc, char ** argv)
     {
         switch (ch)
         {
+        case 'A':
+            p->aOutFile = strdup(optarg);
+            break;
         case 'c':
             p->nCont = atof(optarg);
             break;
@@ -244,6 +247,9 @@ static int argparsing(pargs * p, int argc, char ** argv)
         sprintf(p->aOutFile, "%f_%zu%s%s.A.double", p->nCont, p->nStruct, modeStr, ystr);
         p->lOutFile = malloc(1024*sizeof(char));
         sprintf(p->lOutFile, "%f_%zu%s%s.L.uint8", p->nCont, p->nStruct, modeStr, ystr);
+    } else {
+        p->lOutFile = malloc(1024*sizeof(char));
+        sprintf(p->lOutFile, "%s.L.uint8", p->aOutFile);
     }
     return ret;
 }
@@ -381,9 +387,10 @@ static double getScaling(const double * H, const size_t N,
 
     while(vals[2] < nContWanted)
     {
-        args[2] *=2;
+        args[2] *= 2.0;
         vals[2] = nContacts(H, N, args[2], nStruct, stat);
     }
+
     args[1] = 0.5*(args[0] + args[2]);
     vals[1] = nContacts(H, N, args[1], nStruct, stat);
 #if 0
@@ -392,7 +399,9 @@ static double getScaling(const double * H, const size_t N,
     printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
 #endif
 
-    while( fabs(vals[1] - nContWanted) > 1e-3 )
+    size_t iter = 1;
+    while( (fabs(vals[1] - nContWanted) > 1e-3)
+           && (args[2]-args[0] > 1e-6))
     {
         if(vals[1] > nContWanted)
         {
@@ -404,11 +413,20 @@ static double getScaling(const double * H, const size_t N,
         }
         args[1] = 0.5*(args[0]+args[2]);
         vals[1] = nContacts(H, N, args[1], nStruct, stat);
+#if 0
+        printf("iter: %zu\n", iter);
+        printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
+        printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
+        printf("\n");
+#endif
+        iter++;
     }
-    //    printf("Final contacts per bead: %f (wanted %f) for scaling=%f\n", vals[1], nContWanted, args[1]);
-    //   printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
-    //    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
-    printf("Found the scaling factor: %f\n", args[1]);
+#if 0
+    printf("Final contacts per bead: %f (wanted %f) for scaling=%f\n", vals[1], nContWanted, args[1]);
+    printf("args = [%f, %f, %f]\n", args[0], args[1], args[2]);
+    printf("vals = [%f, %f,  %f]\n", vals[0], vals[1], vals[2]);
+#endif
+    printf("Found the scaling factor: %f in %zu iterations\n", args[1], iter);
     return args[1];
 }
 
