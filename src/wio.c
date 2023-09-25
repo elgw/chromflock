@@ -137,7 +137,7 @@ void * wio_read_z(char * fileName, size_t * nel)
 
     nel[0] = size;
 
-    uint8_t * w = malloc(nel[0]*sizeof(uint8_t));
+    uint8_t * w = calloc(nel[0], sizeof(uint8_t));
     if (w == NULL) {
         fprintf(stderr, "Fatal: failed to allocate %zu bytes.\n", nel[0]);
         abort();
@@ -163,10 +163,11 @@ void * wio_read_u(char * fileName, size_t * nel)
     //printf("File size = %zu\n", size);
     rewind(fd);
 
-    uint8_t * w = malloc(size*sizeof(uint8_t));
+    uint8_t * w = calloc(size, sizeof(uint8_t));
 
     if (w == NULL) {
         fprintf(stderr, "Fatal: failed to allocate %zu bytes.\n", size);
+        fflush(stderr);
         abort();
     }
     size_t read_byte = fread(w, 1, size, fd);
