@@ -2,7 +2,7 @@
    gcc xmltest.c $(xml2-config --cflags) $(xml2-config --libs)
 
    Filter to select a specific chromosome from a cmm file. Possibly doing something else as well.
-   It is probably a much better idea to regenerate a new cmm-file directly from coordinates and 
+   It is probably a much better idea to regenerate a new cmm-file directly from coordinates and
    extra data.
 
 */
@@ -42,16 +42,16 @@ main(int argc, char **argv)
 
   for (node = first_child; node; node = node->next) {
     //        fprintf(stdout, "\t Child is <%s> (%i)\n", node->name, node->type);
-    int remove = 0; 
+    int remove = 0;
 
     if(node->type == 1) // Link
     {
       nMarkers++;
-      xmlChar * x = xmlGetProp(node, "radius");
+      // xmlChar * x = xmlGetProp(node, (const unsigned char *) "radius");
       //        printf("radius=%s\n", (char *) x);
-      xmlChar * xid = xmlGetProp(node, "id");
-      xmlChar * xid1 = xmlGetProp(node, "id1");
-      xmlChar * xid2 = xmlGetProp(node, "id2");
+      xmlChar * xid = xmlGetProp(node, (const unsigned char *) "id");
+      xmlChar * xid1 = xmlGetProp(node, (const unsigned char *) "id1");
+      xmlChar * xid2 = xmlGetProp(node, (const unsigned char *) "id2");
 
       if(xid != NULL) // A marker has an 'id'
       {
@@ -69,7 +69,7 @@ main(int argc, char **argv)
           nFreeMarkers++;
         }
       }
-    
+
       if(xid1 != NULL) // A link has 'id1' and 'id2'
       {
         nLinks++;
@@ -83,7 +83,7 @@ main(int argc, char **argv)
         {
           remove = 1;
         }
-      }    
+      }
 
       nodeNumber++;
     }

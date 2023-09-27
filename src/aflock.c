@@ -10,8 +10,10 @@
  * - Uses infinite math so DON'T compile with -ffitnite-math-only
  *
  */
+#define _GNU_SOURCE
 
 #include <assert.h>
+#include <errno.h>
 #include <getopt.h>
 #include <math.h>
 #include <pthread.h>
@@ -29,7 +31,91 @@
 #include "oscp.h"
 #include "wio.h"
 
-size_t allocated = 0;
+
+#ifdef __linux__
+#include <dlfcn.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+#include <sys/types.h>
+#endif
+
+
+void limit_mem(size_t max_bytes)
+{
+#ifdef __linux__
+    if(max_bytes==0)
+    {
+        struct sysinfo info;
+        if(sysinfo(&info))
+        {
+            fprintf(stderr, "sysinfo returned errno: %d\n", errno);
+            errno = 0;
+        }
+        max_bytes = info.mem_unit*info.freeram;
+    }
+    struct rlimit limit;
+
+    /* The limits are not really limits... */
+    getrlimit(RLIMIT_DATA, &limit);
+    limit.rlim_cur = max_bytes;
+    setrlimit(RLIMIT_DATA, &limit);
+    return;
+#else
+    return;
+#endif
+}
+
+#ifdef __linux__
+static void* (*real_malloc)(size_t) = NULL;
+static void* (*real_calloc)(size_t, size_t) = NULL;
+
+static void mtrace_init(void)
+{
+    real_malloc = dlsym(RTLD_NEXT, "malloc");
+    if (NULL == real_malloc) {
+        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
+    }
+    real_calloc = dlsym(RTLD_NEXT, "calloc");
+    if (NULL == real_calloc) {
+        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
+    }
+    return;
+}
+
+void * malloc(size_t size)
+{
+    if(real_malloc==NULL) {
+        mtrace_init();
+    }
+    void * p = real_malloc(size);
+    if(p == 0)
+    {
+        fprintf(stderr, "aflock ran out of memory :(\n");
+        fprintf(stderr, "trying to get %zu more bytes\n", size);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+
+void *calloc(size_t nmemb, size_t size)
+{
+    if(real_calloc==NULL) {
+        mtrace_init();
+    }
+
+    void *p = NULL;
+
+    p = real_calloc(nmemb, size);
+    if(p == 0)
+    {
+        fprintf(stderr, "aflock ran out of memory :(\n");
+        fprintf(stderr, "trying to get %zu more bytes\n", nmemb*size);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+#endif
 
 /* Activation Distance Struct
  * To be passed to threads */
@@ -1512,6 +1598,15 @@ int main(int argc, char ** argv)
         exit(1);
     }
 
+    /* When argument == 0:
+     *    Limit the memory to the amount of free memory
+     *    right now
+     * When argument > 0
+     *     Limit memory to the number of bytes specified
+     * Only implemented for linux
+     */
+    limit_mem(0);
+
     if(ok != 0)
     {
         usage();
@@ -1744,7 +1839,8 @@ int main(int argc, char ** argv)
         /* Generate contact probability matrix etc */
 
         const size_t nBeads = (1+fc->diploid)*fc->nBeads;
-        const size_t msize = pow(nBeads,2)*sizeof(double);
+        const size_t msize = (size_t) powl(nBeads,2)*sizeof(double);
+        //printf("msize=%zu\n", msize);
 
         pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
         final_tdata ** wtd = malloc(fc->nThreads*sizeof(final_tdata*));

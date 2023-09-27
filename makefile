@@ -12,12 +12,12 @@
 
 CC = gcc -std=gnu99
 CFLAGS=-Wall -Wextra
+LDFLAGS=
 
 DEBUG?=0
 
-ifeq ( DEBUG, 1 )
-CFLAGS += $(CFLAGS) \
--g3 \
+ifeq ($(DEBUG),1)
+CFLAGS +=-g3 \
 -DNOMATLAB
 else
 CFLAGS += -O3 \
@@ -27,8 +27,6 @@ CFLAGS += -O3 \
 -fno-math-errno
 LDFLAGS += -flto
 endif
-
-
 
 #
 # Inject some information in the binaries
@@ -44,12 +42,11 @@ GIT_VERSION = "$(shell git log --pretty=format:'%aD:%H' -n 1)"
 CFLAGS += -DCC_VERSION=\"$(CC_VERSION)\"
 CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 
-
 #
 # Standard libraries
 #
 
-LDFLAGS = -lm  -lpthread  -ldl
+LDFLAGS += -lm  -lpthread  -ldl
 
 # Library: Z
 CFLAGS+=`pkg-config zlib --cflags`
@@ -65,7 +62,7 @@ LDFLAGS+=`pkg-config cairo --libs`
 
 # Library: SDL2
 SDL?=1
-ifeq ( SDL, 1 )
+ifeq ($(SDL),1)
 
 CFLAGS += `pkg-config sdl2 --cflags`
 CFLAGS += -DSDL
@@ -87,11 +84,13 @@ obj/chromflock_init.o \
 obj/balance.o
 
 
+## Targets
+
 bin/chromflock: $(chromflock_files)
-	$(CC) $(CFLAGS) $(chromflock_files) -o bin/chromflock
+	$(CC) $(CFLAGS) $(chromflock_files) $(LDFLAGS) -o bin/chromflock
 
 bin/cmmfilter:
-	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` -o bin/cmmfilter
+	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` $(LDFLAGS) -o bin/cmmfilter
 
 mflock_files = src/mflock.c \
 src/functional.c \
@@ -104,8 +103,10 @@ obj/ellipsoid.o \
 bin/mflock: $(mflock_files) makefile
 	$(CC) $(CFLAGS) $(mflock_files) -o bin/mflock $(LDFLAGS)
 
-bin/aflock: obj/ellipsoid.o
-	$(CC) $(CFLAGS) src/aflock.c src/wio.c src/oscp.c obj/ellipsoid.o -o bin/aflock $(LDFLAGS)
+aflock_files = src/aflock.c src/wio.c src/oscp.c obj/ellipsoid.o
+
+bin/aflock: $(aflock_files) makefile
+	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)
 
 obj/chromflock_init.o: src/chromflock_init.c
 	$(CC) -c $(CFLAGS) src/chromflock_init.c -o obj/chromflock_init.o
