@@ -1,20 +1,11 @@
 # INSTALLATION
 
-On Ubuntu 22.04
+## System requirements
+Only builds on x86-64 systems due to the random number generator. If
+that is replaced it should build on any 64-bit system provided that
+the dependencies can be installed.
 
-``` shell
-cd src/lua-5.3.5/
-make linux # or pick another suitable target
-cd ../../
-make
-./makedeb-ubuntu_2204
-sudo apt install ./chromflock_*.deb
-```
-
-Check the dependencies section if there are any missing libraries. If
-you have another OS, please check the section **Custom install**.
-
-## Dependencies
+## Software Dependencies
 
 For compilation the following is needed:
 
@@ -47,6 +38,21 @@ For compilation the following is needed:
   make linux
   ```
   Please check the Lua documentation if you are on another platform.
+
+
+## Installation on Ubuntu 22.04
+
+``` shell
+cd src/lua-5.3.5/
+make linux # or pick another suitable target
+cd ../../
+make
+./makedeb-ubuntu_2204
+sudo apt install ./chromflock_*.deb
+```
+
+Check the dependencies section if there are any missing libraries. If
+you have another OS, please check the section **Custom install**.
 
 
 ## Custom install
