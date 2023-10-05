@@ -7,7 +7,7 @@
 
 #include "functional.h"
 
-double static clockdiff(struct timespec* start, struct timespec * finish)
+static double clockdiff(struct timespec* start, struct timespec * finish)
 {
   double elapsed = (finish->tv_sec - start->tv_sec);
   elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
@@ -20,7 +20,6 @@ void test_ellipsoid(size_t N, // number of points
     size_t nPairs, // number of pair constraints
     uint32_t * P, // Their 2xnPairs indices
     double * R, // wanted radius
-    uint8_t * A,
     double * G1, double * G2) //storage for gradeints
 {
   printf("--> Testing _ellipsoidal_ geometry\n");
@@ -174,13 +173,19 @@ int main(int argc, char ** argv)
   printf("Using %zu beads\n", N);
 
   double * X = malloc(3*N*sizeof(double));
+  assert(X != NULL);
   double * R = malloc(N*sizeof(double));
+  assert(R != NULL);
   double * G1 = malloc(3*N*sizeof(double));
+  assert(G1 != NULL);
   double * G2 = malloc(3*N*sizeof(double));
+  assert(G2 != NULL);
   double * G3 = malloc(3*N*sizeof(double));
+  assert(G3 != NULL);
 
   printf("Constructing contact matrix (TODO: use only pair list)\n");
   uint8_t * A = malloc(N*N*sizeof(uint8_t));
+  assert(A != NULL);
 
   for(size_t kk = 0; kk<N*N; kk++)
   {
@@ -205,6 +210,7 @@ int main(int argc, char ** argv)
   // Construct the list
   size_t writepos = 0;
   uint32_t * P = malloc(nPairs*2*sizeof(uint32_t));
+  assert(P!=NULL);
   for(size_t kk = 0; kk<N; kk++)
     for(size_t ll = kk+1; ll<N; ll++)
     {
@@ -320,7 +326,7 @@ int main(int argc, char ** argv)
 
   printf("\n");
 
-  test_ellipsoid(N, X, nPairs, P,  R, A, G1, G2);
+  test_ellipsoid(N, X, nPairs, P,  R, G1, G2);
 
 
   fprintf(stdout, "Testing gradients\n");

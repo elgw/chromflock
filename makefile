@@ -15,10 +15,10 @@ CFLAGS=-Wall -Wextra
 
 DEBUG?=0
 
-ifeq ( DEBUG, 1 )
-CFLAGS += $(CFLAGS) \
--g3 \
--DNOMATLAB
+ifeq ($(DEBUG),1)
+CFLAGS += -g3 \
+-DNOMATLAB \
+-fanalyzer
 else
 CFLAGS += -O3 \
 -DNDEBUG \
@@ -44,20 +44,21 @@ GIT_VERSION = "$(shell git log --pretty=format:'%aD:%H' -n 1)"
 CFLAGS += -DCC_VERSION=\"$(CC_VERSION)\"
 CFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 
-
 #
 # Standard libraries
 #
 
-LDFLAGS = -lm  -lpthread  -ldl
+LDFLAGS += -lm  -lpthread  -ldl
 
 # Library: Z
-CFLAGS+=`pkg-config zlib --cflags`
-LDFLAGS+=`pkg-config zlib --libs`
+CFLAGS += `pkg-config zlib --cflags`
+LDFLAGS += `pkg-config zlib --libs`
+
+$(info $$LDFLAGS=$(LDFLAGS))
 
 # Library: LUA
-CFLAGS+=-Isrc/lua-5.3.5/src
-LDFLAGS+=-Lsrc/lua-5.3.5/src -llua
+CFLAGS += -Isrc/lua-5.3.5/src
+LDFLAGS += -Lsrc/lua-5.3.5/src -llua
 
 # Library: Cairo
 CFLAGS+=`pkg-config cairo --cflags`
@@ -88,7 +89,7 @@ obj/balance.o
 
 
 bin/chromflock: $(chromflock_files)
-	$(CC) $(CFLAGS) $(chromflock_files) -o bin/chromflock
+	$(CC) $(CFLAGS) $(chromflock_files) $(LDFLAGS) -o bin/chromflock
 
 bin/cmmfilter:
 	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` -o bin/cmmfilter

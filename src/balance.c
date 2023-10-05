@@ -1,7 +1,3 @@
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <math.h>
 #include "balance.h"
 
 static void rsums0(double * R, double * A, size_t N)
@@ -23,6 +19,8 @@ double balance(double * A, size_t N)
   const int verbose = 0;
 
   double * R = malloc(N*sizeof(double));
+  assert(R != NULL);
+
   for(size_t iter = 0; iter<24; iter++)
   {
     if(verbose) {
@@ -50,11 +48,11 @@ printf("\n");
   }
   rsums0(R, A, N);
   double maxError = 0;
-  
-  /* 
+
+  /*
    * Check error and ignore empty rows/columns
    */
-  
+
   size_t nzeros = 0;
   for(size_t kk = 0; kk <  N; kk++)
   {
@@ -62,7 +60,7 @@ printf("\n");
     {
       nzeros++;
     }
-    else 
+    else
     {
     double aerror = fabs(R[kk]-1.0);
     if( aerror > maxError)
@@ -82,4 +80,3 @@ printf("\n");
 
   return maxError;
 }
-

@@ -7,13 +7,8 @@
 #include "hsvrgb.c"
 #include "hsvrgb.h"
 
-static void usage(char * cmd)
-{
-  fprintf(stdout, "%s r g b\n", cmd);
-  return;
-}
 
-double static eudist3(const double * A, const double * B)
+static double eudist3(const double * A, const double * B)
 {
   /* Euclidean distance between two 3D-vectors */
   return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
@@ -22,12 +17,16 @@ double static eudist3(const double * A, const double * B)
 int main(int argc, char ** argv)
 {
 
-
   double * rgb = malloc(3*sizeof(double));
+  assert(rgb != NULL);
   double * rgb2 = malloc(3*sizeof(double));
+  assert(rgb2 != NULL);
   double * hsv = malloc(3*sizeof(double));
+  assert(hsv != NULL);
   double * hsv2 = malloc(3*sizeof(double));
+  assert(hsv2 != NULL);
   double * rgb3 = malloc(3*sizeof(double));
+  assert(rgb3 != NULL);
 
   if(argc == 4)
   {
@@ -48,7 +47,7 @@ int main(int argc, char ** argv)
     hsv2rgb(hsv2, rgb3);
 
     fprintf(stdout, "Round trip, RGB->HSV->RGB\n");
-    fprintf(stdout, "% f, % f, % f\n", 
+    fprintf(stdout, "% f, % f, % f\n",
         rgb[0] - rgb3[0],
         rgb[1] - rgb3[1],
         rgb[2] - rgb3[2]);
@@ -62,7 +61,7 @@ int main(int argc, char ** argv)
   double delta = 0.001;
   fprintf(stdout, "Testing rgb->hsv->rgb with step %f\n", delta);
   /* Can't test the other way around since hsv values are not unique,
-   * i.e., (0,1,1) and (1,1,1) are the same 
+   * i.e., (0,1,1) and (1,1,1) are the same
    */
   size_t nTests = 0;
   for(double r = 0; r<=1; r+=delta)

@@ -1,8 +1,19 @@
 #ifndef __view_h_
 #define __view_h_
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <assert.h>
+#include <math.h>
+#include <unistd.h>
+#include <SDL.h>
+#include "hsvrgb.h"
+#include "ellipsoid.h"
+
+
 /* Example:
- 
+
 #include <liveview.h>
 ...
 
@@ -37,14 +48,6 @@ typedef struct {
 
 void * liveview_t(void * conf);
 
-
-// Static version
 int liveview(double * X, uint8_t * L, size_t N, int * quit, double radius, elli * E);
-
-static void rot_x(double *, double);
-static void rot_y(double *, double);
-static void rot_z(double *, double);
-static void matmul(double * , double *, double *);
-// static void matshow(double * );
 
 #endif

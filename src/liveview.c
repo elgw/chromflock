@@ -1,18 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <assert.h>
-#include <math.h>
-#include <unistd.h>
-#include <SDL.h>
-#include "hsvrgb.h"
-#include "ellipsoid.h"
-
 #include "liveview.h"
 
 /* Idea:
  * Create a light weight renderer that can be plugged in anywhere to monitor the status of some
- * matrix 
+ * matrix
  *
  *  - Use pthreads to run separately
  *  - Update window whenever the appointed data is changed
@@ -21,36 +11,42 @@
  *
  * */
 
+static void rot_x(double *, double);
+static void rot_y(double *, double);
+static void rot_z(double *, double);
+static void matmul(double * , double *, double *);
+// static void matshow(double * );
+
 float mousex = 0;
 float mousey = 0;
 int mousedown = 0;
 
-static uint8_t cmap[] = {255,255,255, 	
+static uint8_t cmap[] = {255,255,255,
   240,163,255,
-  0,117,220, 	
-  153,63,0, 	
-  76,0,92, 	
-  25,25,25, 	
-  0,92,49, 	
-  43,206,72, 	
-  255,204,153, 	
-  128,128,128, 	
-  148,255,181, 	
-  143,124,0, 	
-  157,204,0, 	
-  194,0,136, 	
-  0,51,128, 	
-  255,164,5, 	
-  255,168,187, 	
-  66,102,0, 	
-  255,0,16, 	
-  94,241,242, 	
-  0,153,143, 	
-  224,255,102, 	
-  116,10,255, 	
-  153,0,0, 	
-  255,255,128, 	
-  255,255,0, 	
+  0,117,220,
+  153,63,0,
+  76,0,92,
+  25,25,25,
+  0,92,49,
+  43,206,72,
+  255,204,153,
+  128,128,128,
+  148,255,181,
+  143,124,0,
+  157,204,0,
+  194,0,136,
+  0,51,128,
+  255,164,5,
+  255,168,187,
+  66,102,0,
+  255,0,16,
+  94,241,242,
+  0,153,143,
+  224,255,102,
+  116,10,255,
+  153,0,0,
+  255,255,128,
+  255,255,0,
   255,80,5};
 
 typedef struct {
@@ -188,18 +184,18 @@ void bead_init(scene * s, bead * b, int label)
   uint32_t amask = 0xff000000;
 
   SDL_Surface* surf = SDL_CreateRGBSurfaceFrom(
-      (void*) pixels, 
-      width, 
-      height, 
-      depth, 
-      pitch, 
-      rmask, 
-      gmask, 
-      bmask, 
+      (void*) pixels,
+      width,
+      height,
+      depth,
+      pitch,
+      rmask,
+      gmask,
+      bmask,
       amask);
 
   b->texture = SDL_CreateTextureFromSurface(
-      s->renderer, 
+      s->renderer,
       surf);
 
   SDL_FreeSurface(surf);
@@ -232,7 +228,7 @@ static void gInit(scene * s)
 
   if (SDL_Init(SDL_INIT_VIDEO) == 0) {
 
-    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1"); 
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
 
     // s->surface??
 
@@ -265,7 +261,7 @@ static void getEvents(scene * s)
 
   SDL_Event evt;
 
-  while(SDL_PollEvent(&evt)) { 
+  while(SDL_PollEvent(&evt)) {
 
     if(evt.type == SDL_QUIT) {
       s->done = 1;
@@ -294,9 +290,9 @@ static void getEvents(scene * s)
     {
       mousedown = 0;
 
-      // SDL_WarpMouseInWindow(s->window, 
+      // SDL_WarpMouseInWindow(s->window,
       //     s->window_w/2.0, s->window_h/2.0);
-    }   
+    }
 
     if(evt.type == SDL_KEYDOWN)
     {
@@ -486,7 +482,7 @@ static void matshow(double * X)
     int woff = 0;
     int hoff = 0l;
     int d1 = s->window_w - s->window_h;
-    if(d1 > 0)      
+    if(d1 > 0)
       woff = d1/2;
     if(d1 < 0)
       hoff = -d1/2;

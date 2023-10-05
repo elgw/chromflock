@@ -101,6 +101,11 @@ int wio_write_z(char * fileName, size_t nel, void * data)
 int wio_write_u(char * fileName, size_t nel, void * restrict data)
 {
     FILE * f = fopen(fileName, "wb1");
+    if(f == NULL)
+    {
+        fprintf(stderr, "Unable to open %s for writing\n", fileName);
+        return -1;
+    }
     fwrite((void *) data, sizeof(uint8_t), nel, f);
     fclose(f);
     return 0;
@@ -204,6 +209,8 @@ int wio_ut(int argc, char ** argv)
 
     size_t N = 3000;
     uint8_t * w = malloc(N*N*sizeof(uint8_t));
+    assert(w != NULL);
+
     size_t nset = 0;
     for(size_t kk  = 0; kk<N*N; kk++)
     {
@@ -223,9 +230,11 @@ int wio_ut(int argc, char ** argv)
 
     size_t nelz = 0;
     uint8_t * wz = wio_read(wzFile, &nelz);
+    assert(wz != NULL);
 
     size_t nelu = 0;
     uint8_t * wu = wio_read(wuFile, &nelu);
+    assert(wu != NULL);
 
     printf("nelz: %zu nelu: %zu\n", nelz, nelu);
     size_t diffu = 0;

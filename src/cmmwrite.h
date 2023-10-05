@@ -1,9 +1,14 @@
 #ifndef _cmmwrite_h_
 #define _cmmwrite_h_
 
+#include <assert.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <zlib.h>
 
-int cmmwrite(char * fname, 
+int cmmwrite(char * fname,
     double * D, // 3xnD list with dot coordinates
     size_t nD, // number of beads/dots
     double radius, // bead radius

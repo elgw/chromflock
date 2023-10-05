@@ -128,9 +128,11 @@ void radpos(double * X, optparam * p, FILE * f)
     // mX mean X positions
     size_t size_mX = 3*256*sizeof(double);
     double * mX = malloc(size_mX);
+    assert(mX != NULL);
     memset(mX, 0, size_mX);
     // Number of points per label
     size_t * nL = malloc(256*sizeof(size_t));
+    assert(nL != NULL);
     memset(nL, 0, 256*sizeof(size_t));
 
     // Get centroid for each chromosome/label
@@ -304,6 +306,7 @@ double * init_X(optparam * p)
     if(p->xfname != NULL)
     {
         X = malloc(3*p->N*sizeof(double));
+        assert(X != NULL);
         if(param_readX(p, X) != 0)
         {
             logwrite(p, 2, "Could not open x-file, starting from random\n");
@@ -318,6 +321,7 @@ double * init_X(optparam * p)
         logwrite(p, 1, "Using random initialization for X\n");
         srand(p->rseed);
         X = malloc(3*p->N*sizeof(double));
+        assert(X != NULL);
         elli * E = p->E;
         if(E == NULL){
             E = elli_new(1, 1, 1);
@@ -356,6 +360,7 @@ int param_readL(optparam * p)
     logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
     int readAsText = 0;
     p->L = malloc(p->N*sizeof(double));
+    assert(p->L != NULL);
 
     // Try to read as binary
     FILE * f = fopen(p->lfname, "rb");
@@ -409,6 +414,7 @@ int param_readL(optparam * p)
         f = fopen(p->lfname, "r");
         size_t nbuf = 1024;
         char * buf = malloc(nbuf*sizeof(char));
+        assert(buf != NULL);
 
         size_t pos = 0;
         while (fgets(buf, nbuf, f) != NULL && (pos < p->N))
@@ -814,19 +820,25 @@ int argparsing(optparam * p, int argc, char ** argv)
             param_show(p, stdout);
             return ARGS_QUIT;
         case 'w':
+            if(p->wfname != NULL)
+            {free(p->wfname);}
             p->wfname = malloc(strlen(optarg)+1);
+            assert(p->wfname != NULL);
             strcpy(p->wfname, optarg);
             break;
         case 'x':
             p->xfname = malloc(strlen(optarg)+1);
+            assert(p->xfname != NULL);
             strcpy(p->xfname, optarg);
             break;
         case 'r':
             p->rfname = malloc(strlen(optarg)+1);
+            assert(p->rfname != NULL);
             strcpy(p->rfname, optarg);
             break;
         case 'L':
             p->lfname = malloc(strlen(optarg)+1);
+            assert(p->lfname != NULL);
             strcpy(p->lfname, optarg);
             break;
         case 'n':
@@ -861,11 +873,13 @@ int argparsing(optparam * p, int argc, char ** argv)
             break;
         case 'o':
             p->ofoldername = malloc(strlen(optarg)+1);
+            assert(p->ofoldername != NULL);
             strcpy(p->ofoldername, optarg);
             break;
         case 'l':
             p->luaDynamics = 1;
             p->luaDynamicsFile = malloc(strlen(optarg) + 1);
+            assert(p->luaDynamicsFile != NULL);
             strcpy(p->luaDynamicsFile, optarg);
             break;
         case 'M':
@@ -939,6 +953,7 @@ int argparsing(optparam * p, int argc, char ** argv)
 optparam *  param_alloc(void)
 {
     optparam * p = malloc(sizeof(optparam));
+    assert(p != NULL);
 
     struct timespec ts;
     //  timespec_get(&ts, TIME_UTC);
@@ -990,6 +1005,7 @@ optparam *  param_alloc(void)
     {
 
         p->ofoldername = malloc(1024*sizeof(char));
+        assert(p->ofoldername != NULL);
 
         size_t fn = 1;
         int okfolder = 0;
@@ -1053,9 +1069,11 @@ int param_init(optparam * p)
 
     // Set names of output files
     p->xoutfname = malloc(1024*sizeof(char));
+    assert(p->xoutfname != NULL);
     sprintf(p->xoutfname, "%s%s", p->ofoldername, "coords.csv");
 
     p->logfname = malloc(1024*sizeof(char));
+    assert(p->logfname != NULL);
     sprintf(p->logfname, "%s%s", p->ofoldername, "log.txt");
 
     // Open log
@@ -1206,6 +1224,7 @@ int param_readX(optparam * p, double * X)
     }
 
     char * line = malloc(1024*sizeof(char));
+    assert(line != NULL);
     size_t len = 0;
 
     char delim[] = ",";
@@ -1365,12 +1384,14 @@ int main(int argc, char ** argv)
     if(p->cmmz == 1)
     {
         char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
         cmmwritez(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
 
         cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
@@ -1383,6 +1404,7 @@ int main(int argc, char ** argv)
     /* Write radial profile to disk */
     if(1) {
         char * rpfname = malloc(1024*sizeof(char));
+        assert(rpfname != NULL);
         sprintf(rpfname, "%s/rad.csv", p->ofoldername);
         FILE * rpfile = fopen(rpfname, "w");
         assert(rpfile != NULL);

@@ -1,6 +1,7 @@
 #ifndef chromflock_init_h
 #define chromflock_init_h
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

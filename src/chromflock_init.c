@@ -6,6 +6,8 @@ char * mylocation(void)
 {
     size_t bufsize = 1024;
     char * buf = malloc(bufsize);
+    assert(buf != NULL);
+
     if(readlink("/proc/self/exe", buf, bufsize) == -1)
     {
         sprintf(buf, "./");
@@ -76,7 +78,7 @@ typedef struct {
 /* Copy the file, specified by name to this folder.
  * If chromflock is run from the source dir in relpath, prefer files in the
  * repository. Else look in the default install dir. */
-int place_here(cf_file * file)
+int place_here(const cf_file * file)
 {
 
     char * outname = file->filename;
@@ -97,6 +99,7 @@ int place_here(cf_file * file)
     char * filename = malloc( strlen(srcdir)
                               +strlen(file->relpath)
                               +strlen(file->filename)+16 );
+    assert(filename != NULL);
     sprintf(filename, "%s%s%s", srcdir, file->relpath, file->filename);
     free(srcdir);
     if(isfile(filename))
@@ -141,7 +144,6 @@ copy_file:
 
 fail:
     free(filename);
-    free(outname);
     return EXIT_FAILURE;
 }
 

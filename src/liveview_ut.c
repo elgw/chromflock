@@ -9,6 +9,10 @@
 
 int main(int argc, char ** argv)
 {
+    if(argc > 1)
+    {
+        printf("WARNING: %s takes no parameters\n", argv[0]);
+    }
 
   size_t N = 3030;
 
@@ -46,7 +50,7 @@ int main(int argc, char ** argv)
   }
   usleep(100);
   }
-  
+
   xlview.quit = 1;
   pthread_join(th, NULL);
   // liveview(X, L, N);
@@ -57,4 +61,3 @@ int main(int argc, char ** argv)
   free(L);
   return 0;
 }
-

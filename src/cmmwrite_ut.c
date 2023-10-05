@@ -8,7 +8,7 @@
 #include "cmmwrite.h"
 #include "cmmwrite.c"
 
-double static clockdiff(struct timespec* start, struct timespec * finish)
+static double clockdiff(struct timespec* start, struct timespec * finish)
 {
   double elapsed = (finish->tv_sec - start->tv_sec);
   elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
@@ -54,6 +54,7 @@ void savecmap()
   /* Writing in the foreground */
 
   char * label = malloc(1024*sizeof(char));
+  assert(label != NULL);
 
   for (int kk=0; kk<5; kk++)
   {
@@ -101,7 +102,10 @@ void savecmap()
 
 int main(int argc, char ** argv)
 {
-
+    if(argc > 1)
+    {
+        printf("%s does not use any parameters\n", argv[0]);
+    }
   savecmap();
 
   size_t nD = 3000;

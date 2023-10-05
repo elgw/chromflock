@@ -10,7 +10,12 @@
  * Returns -1 in the case that M is 0
  */
 
-#include "stdint.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <math.h>
+
 
 double balance(double * M, size_t N);
 

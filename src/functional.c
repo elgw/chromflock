@@ -125,6 +125,7 @@ double errRepulsion(double * restrict D,
 
   size_t nH = pow(nDiv, 3);
   uint32_t * S = malloc(nH*sizeof(uint32_t));
+  assert(S!=NULL);
 
   for(size_t kk = 0; kk<nH; kk++)
   {
@@ -138,9 +139,9 @@ double errRepulsion(double * restrict D,
 
   /* Create boundaries for the data */
   uint32_t * B = malloc((nH+1)*sizeof(uint32_t));
-  uint32_t * C = malloc((nH+1)*sizeof(uint32_t));
-
   assert(B != NULL);
+  uint32_t * C = malloc((nH+1)*sizeof(uint32_t));
+  assert(C != NULL);
 
   B[0] = 0;
   C[0] = 0; // Start positions when writing
@@ -159,6 +160,7 @@ double errRepulsion(double * restrict D,
 
   /* Dots sorted according to their bucket and put into E */
   double * E = malloc(3*N*sizeof(double));
+  assert(E!=NULL);
 
   /* Move data into new structure */
   for(size_t kk = 0; kk<N; kk++)
@@ -258,6 +260,7 @@ static double gradRepulsion(double * restrict D,
   }
   size_t nH = pow(nDiv, 3);
   uint32_t * S = malloc(nH*sizeof(uint32_t));
+  assert(S!=NULL);
 
   for(size_t kk = 0; kk<nH; kk++)
   {
@@ -271,7 +274,9 @@ static double gradRepulsion(double * restrict D,
 
   /* Create boundaries for the data */
   uint32_t * B = malloc((nH+1)*sizeof(uint32_t));
+  assert(B!=NULL);
   uint32_t * C = malloc((nH+1)*sizeof(uint32_t));
+  assert(C!=NULL);
 
   B[0] = 0;
   C[0] = 0; // Start positions when writing
@@ -290,7 +295,9 @@ static double gradRepulsion(double * restrict D,
 
   // Dots sorted according to their bucket
   double * E = malloc(3*N*sizeof(double));
+  assert(E!=NULL);
   size_t * P = malloc(N*sizeof(double)); // Keep also bead numbers
+  assert(P!=NULL);
 
   /* Move data into new structure */
   for(size_t kk = 0; kk<N; kk++)

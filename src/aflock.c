@@ -64,6 +64,7 @@ typedef struct{
 fconf * fconf_init()
 {
     fconf * c = calloc(1, sizeof(fconf));
+    assert(c != NULL);
     c->verbose = 1;
     c->afname = NULL;
     c->nBeads = 0;
@@ -184,7 +185,7 @@ void fconf_load_A(fconf * fc)
     if(fc->A == NULL)
     {
         fprintf(stderr, "Failed to allocate memory for A\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     size_t nRead = fread(fc->A, sizeof(double), fsize/sizeof(double), afile);
@@ -226,9 +227,11 @@ int chrom_init(chrom * c, size_t nQ, size_t n)
     c->X = NULL;
     c->nQ = 0; /* Number of elements in the queue */
     c->Q = malloc(2*nQ*sizeof(uint32_t));
+    assert(c->Q != NULL);
 
     size_t bsize = 64;
     c->wfName = malloc(bsize);
+    assert(c->wfName != NULL);
     snprintf(c->wfName, bsize, "cf_%06zu/W.uint8.gz", n+1);
     c->W = 0;
 
@@ -236,6 +239,7 @@ int chrom_init(chrom * c, size_t nQ, size_t n)
         return 1;
 
     c->xfName = malloc(bsize);
+    assert(c->xfName != NULL);
     snprintf(c->xfName, bsize, "cf_%06zu/coords.csv", n+1);
 
     if(c->xfName == NULL)
@@ -265,6 +269,7 @@ int ch_load_X(fconf * fc, chrom * c)
     size_t nBeads = fc->nBeads*(1+fc->diploid);
 
     c->X = malloc(nBeads*3*sizeof(float));
+    assert(c->X != NULL);
     /* Read from c->xfName ... */
 
     //  fprintf(stdout, "Reading X-data from %s\n", c->xfName);
@@ -278,6 +283,7 @@ int ch_load_X(fconf * fc, chrom * c)
     }
 
     char * line = malloc(1024*sizeof(char));
+    assert(line != NULL);
     size_t len = 1024*sizeof(char);
 
     char delim[] = ",";
@@ -347,6 +353,7 @@ chrom * load_structures(fconf * fc)
 {
     fprintf(stdout, "Initializing %zu structures ...\n", fc->nStruct);
     chrom * flock = malloc(fc->nStruct*sizeof(chrom));
+    assert(flock != NULL);
 
     /* Load them */
     for(size_t kk = 0; kk<fc->nStruct; kk++)
@@ -538,6 +545,8 @@ void flock_assign_with_w_randblock(fconf * fc, chrom * flock, size_t kk, size_t 
 
     /* Array of pairwise distance between point kk and ll */
     float * D = malloc(nChrom*sizeof(float));
+    assert(D != NULL);
+
     for(size_t pp = 0; pp<nChrom; pp++)
     {
         D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
@@ -557,6 +566,7 @@ void flock_assign_with_w_randblock(fconf * fc, chrom * flock, size_t kk, size_t 
     }
 
     float * DS = malloc(nChrom*sizeof(float));
+    assert(DS != NULL);
     memcpy(DS, D, nChrom*sizeof(float));
 
     qsort(DS, nChrom, sizeof(float), cmp_float);
@@ -592,7 +602,7 @@ void flock_assign_with_w_randblock(fconf * fc, chrom * flock, size_t kk, size_t 
         fprintf(stderr, "Threshold: %f\n", threshold);
         assert(0);
     }
-
+    free(D);
     return;
 }
 
@@ -606,6 +616,7 @@ void flock_assign_with_w(fconf * fc, chrom * flock, size_t kk, size_t ll, float 
 
     /* Array of pairwise distance between point kk and ll */
     float * D = malloc(nChrom*sizeof(float));
+    assert(D != NULL);
     for(size_t pp = 0; pp<nChrom; pp++)
     {
         D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
@@ -619,6 +630,7 @@ void flock_assign_with_w(fconf * fc, chrom * flock, size_t kk, size_t ll, float 
     }
 
     float * DS = malloc(nChrom*sizeof(float));
+    assert(DS != NULL);
     memcpy(DS, D, nChrom*sizeof(float));
 
     qsort(DS, nChrom, sizeof(float), cmp_float);
@@ -654,7 +666,7 @@ void flock_assign_with_w(fconf * fc, chrom * flock, size_t kk, size_t ll, float 
         fprintf(stderr, "Threshold: %f\n", threshold);
         assert(0);
     }
-
+    free(D);
     return;
 }
 
@@ -677,6 +689,7 @@ void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
         printf("prob=%f -> %zu/%zu structures\n", prob, nAssign, nChrom);
     }
     float * D = malloc(nChrom*sizeof(float));
+    assert(D != NULL);
     for(size_t pp = 0; pp<nChrom; pp++)
     {
         D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
@@ -686,6 +699,7 @@ void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
     }
 
     float * DS = malloc(nChrom*sizeof(float));
+    assert(DS != NULL);
     memcpy(DS, D, nChrom*sizeof(float));
 
     qsort(DS, nChrom, sizeof(float), cmp_float);
@@ -721,6 +735,7 @@ void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
         /* Experimental random assignment! */
 
         uint8_t * set = malloc(nChrom*sizeof(uint8_t));
+        assert(set != NULL);
         memset(set, 0, nChrom*sizeof(uint8_t));
 
         for(size_t pp =0; pp<nAssign; pp++)
@@ -738,9 +753,11 @@ void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
                 }
             }
         }
+        free(set);
     }
     assert(nAssigned == nAssign);
     free(D);
+
     return;
 }
 
@@ -819,7 +836,9 @@ static int argparsing(fconf * p, int argc, char ** argv)
             printf("Compiler: %s\n", CC_VERSION);
             exit(0);
         case 'A': /* sphere contact probability matrix */
+            if(p->afname != NULL) { free(p->afname); }
             p->afname = malloc(strlen(optarg)+1);
+            assert(p->afname != NULL);
             strcpy(p->afname, optarg);
             break;
         case 'B':
@@ -838,7 +857,9 @@ static int argparsing(fconf * p, int argc, char ** argv)
             p->mode = MODE_INIT;
             break;
         case 'P':
+            if(p->mflock_arguments != NULL) { free(p->mflock_arguments); }
             p->mflock_arguments = malloc(strlen(optarg)+1);
+            assert(p->mflock_arguments != NULL);
             strcpy(p->mflock_arguments, optarg);
             break;
         case 'Q':
@@ -880,11 +901,15 @@ static int argparsing(fconf * p, int argc, char ** argv)
             p->nStruct = atol(optarg);
             break;
         case 'p':
+            if(p->prfname != NULL) { free(p->prfname); }
             p->prfname = malloc(strlen(optarg)+1);
+            assert(p->prfname != NULL);
             strcpy(p->prfname, optarg);
             break;
         case 'r':
+            if(p->rfname != NULL) { free(p->rfname); }
             p->rfname = malloc(strlen(optarg)+1);
+            assert(p->rfname != NULL);
             strcpy(p->rfname, optarg);
             break;
         case 'u':
@@ -1095,6 +1120,7 @@ double getQuality(fconf * fc, chrom * flock)
 {
 
     double * quality = malloc(fc->nStruct*sizeof(double));
+    assert(quality != NULL);
     memset(quality, 0, fc->nStruct*sizeof(double));
 
     double q = 0;
@@ -1135,6 +1161,7 @@ void calc_activation_distance_th( adstruct * s)
 
     /* temporary array for each bead pair */
     float * DS = malloc(nDist*sizeof(float));
+    assert(DS != NULL);
 
     for(size_t aa = thread; aa < fc->nBeads; aa = aa+nThreads)
     {
@@ -1190,11 +1217,14 @@ void * final_tfun(void * data)
 
     /* This thread sums up all individual W to td->W */
     td->W = malloc(pow(N, 2)*sizeof(double));
+    assert(td->W != NULL);
 
     if(td->thread == 0){
         printf("   Summing up wanted contacts ... \n");
     }
     td->wFileName = malloc(1024*sizeof(char));
+    assert(td->wFileName != NULL);
+
     for(size_t pp = td->thread; pp < td->nStruct ; pp+=td->nThreads)
     {
         sprintf(td->wFileName, "cf_%06zu/W.uint8.gz", pp+1); fflush(stdout);
@@ -1241,6 +1271,7 @@ void * final_tfun(void * data)
         printf("   Constructing radial profile ... \n");
     }
     td->rprof = calloc(N, sizeof(double));
+    assert(td->rprof != NULL);
     for(size_t pp = td->thread; pp < td->nStruct ; pp+=td->nThreads)
     {
         float * X = td->flock[pp].X;
@@ -1307,10 +1338,13 @@ void calc_activation_distance(fconf * fc, chrom * flock, double th_high, double 
      */
 
     pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
+    assert(threads != NULL);
     adstruct ** S = malloc(fc->nThreads*sizeof(adstruct * ));
+    assert(S != NULL);
     for(size_t kk = 0; kk<fc->nThreads; kk++)
     {
         S[kk] = malloc(sizeof(adstruct));
+        assert(S[kk] != NULL);
         S[kk]->thread = kk;
         S[kk]->nThreads = fc->nThreads;
 
@@ -1372,7 +1406,9 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
 
     /* Find a threshold for each positions */
     double * TH = (double * ) malloc(fc->nBeads*sizeof(double));
+    assert(TH != NULL);
     float * DS = malloc(fc->nStruct*sizeof(float));
+    assert(DS != NULL);
     for(size_t pp = 0; pp < fc->nBeads; pp++)
     {
         if((PR[pp] < th_high) & (PR[pp] >= th_low))
@@ -1400,6 +1436,7 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
     for(size_t ss = 0; ss < fc->nStruct ; ss++)
     {
         flock[ss].rfName = malloc(1024*sizeof(char));
+        assert(flock[ss].rfName != NULL);
         sprintf(flock[ss].rfName, "cf_%06zu/radius.double.gz", ss+1);
 
         size_t bytesRead = 0;
@@ -1445,6 +1482,7 @@ uint8_t * initial_W(fconf * fc)
     if(fc->diploid == 0)
     {
         uint8_t * W0 = malloc(pow(fc->nBeads, 2)*sizeof(uint8_t));
+        assert(W0 != NULL);
         for(size_t kk = 0; kk<pow(fc->nBeads,2); kk++)
         {
             if(fc->A[kk] == 1)
@@ -1460,6 +1498,7 @@ uint8_t * initial_W(fconf * fc)
     if(fc->diploid == 1)
     {
         uint8_t * W0 = calloc(pow(2*fc->nBeads, 2), sizeof(uint8_t));
+        assert(W0 != NULL);
         size_t Widx[4];
 
         for(size_t kk = 0; kk<fc->nBeads; kk++)
@@ -1561,6 +1600,7 @@ int main(int argc, char ** argv)
 
         fprintf(stdout, "Creating initial contact indication matrices, W\n");
         char * dir = malloc(32*sizeof(char));
+        assert(dir != NULL);
 
         for(size_t kk = 0; kk<fc->nStruct; kk++)
         {
@@ -1629,6 +1669,7 @@ int main(int argc, char ** argv)
 
             size_t used_R = 0;
             double * R0 = malloc(fc->nBeads*sizeof(double));
+            assert(R0 != NULL);
             for(size_t kk = 0; kk< fc->nBeads; kk++)
             {
                 R0[kk] = NAN;
@@ -1645,6 +1686,7 @@ int main(int argc, char ** argv)
                 printf("\r%zu", pp); fflush(stdout);
                 sprintf(dir, "cf_%06zu/", pp+1);
                 flock[pp].rfName = malloc(128*sizeof(char));
+                assert(flock[pp].rfName != NULL);
                 sprintf(flock[pp].rfName, "%sradius.double.gz", dir);
                 struct_write_R0(fc, &flock[pp], R0);
                 free(flock[pp].rfName);
@@ -1679,6 +1721,7 @@ int main(int argc, char ** argv)
 
         /* Activation distance initialize as NAN */
         double * AD = malloc(fc->nBeads*fc->nBeads*sizeof(double));
+        assert(AD != NULL);
         for(size_t kk = 0 ; kk<pow(fc->nBeads,2) ; kk++)
         {
             AD[kk] = NAN;
@@ -1690,10 +1733,13 @@ int main(int argc, char ** argv)
         fprintf(stdout, "Writing to disk\n");
 
         pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
+        assert(threads != NULL);
         adstruct ** S = malloc(fc->nThreads*sizeof(adstruct * ));
+        assert(S != NULL);
         for(size_t kk = 0; kk<fc->nThreads; kk++)
         {
             S[kk] = malloc(sizeof(adstruct));
+            assert(S[kk] != NULL);
             S[kk]->thread = kk;
             S[kk]->nThreads = fc->nThreads;
             S[kk]->fc = fc;
@@ -1747,15 +1793,19 @@ int main(int argc, char ** argv)
         const size_t msize = pow(nBeads,2)*sizeof(double);
 
         pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
+        assert(threads != NULL);
         final_tdata ** wtd = malloc(fc->nThreads*sizeof(final_tdata*));
+        assert(wtd != NULL);
         for(size_t kk = 0; kk<fc->nThreads; kk++)
         {
             wtd[kk] = malloc(sizeof(final_tdata));
+            assert(wtd[kk] != NULL);
             wtd[kk]->thread = kk;
             wtd[kk]->nThreads = fc->nThreads;
             wtd[kk]->nBeads = (1+fc->diploid)*fc->nBeads;
             wtd[kk]->nStruct = fc->nStruct;
             wtd[kk]->M = malloc(msize);
+            assert(wtd[kk]->M != NULL);
             wtd[kk]->flock = flock;
             wtd[kk]->fc = fc;
 
@@ -1776,6 +1826,7 @@ int main(int argc, char ** argv)
 
         /* Sum up all the wanted contacts */
         double * Wtotal = malloc(pow(nBeads,2)*sizeof(double));
+        assert(Wtotal != NULL);
         memset(Wtotal, 0, pow(nBeads,2)*sizeof(double));
         for(size_t kk = 0; kk<fc->nThreads; kk++)
         {
@@ -1788,6 +1839,7 @@ int main(int argc, char ** argv)
 
         /* Sum up all found contacts */
         double * M = malloc(msize);
+        assert(M != NULL);
         memset(M, 0, msize);
         for(size_t kk = 0; kk<fc->nThreads; kk++)
         {
@@ -1812,6 +1864,7 @@ int main(int argc, char ** argv)
 
         /* Sum up radial profile */
         double * rprof = malloc(nBeads*sizeof(double));
+        assert(rprof != NULL);
         memset(rprof, 0, nBeads*sizeof(double));
         for(size_t kk = 0; kk<fc->nThreads; kk++)
         {
@@ -1846,6 +1899,7 @@ int main(int argc, char ** argv)
 
         /* Write radial profile */
         char * rproffname = malloc(1024*sizeof(char));
+        assert(rproffname != NULL);
         sprintf(rproffname, "radial_profile.csv");
         fprintf(stdout, "   Writing radial profile to: %s\n", rproffname);
         FILE * rproffile = fopen(rproffname, "w");
@@ -1859,6 +1913,7 @@ int main(int argc, char ** argv)
 
         /* Write contact map */
         char * mfilename = malloc(1024*sizeof(char));
+        assert(mfilename != NULL);
         sprintf(mfilename, "all_contacts.double");
         fprintf(stdout, "   Writing contact map to: %s\n", mfilename);
         FILE * mout = fopen(mfilename, "w");

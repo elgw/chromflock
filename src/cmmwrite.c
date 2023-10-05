@@ -9,39 +9,35 @@ radius="0.5" note="An example note"/>
 </marker_set>
 */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <zlib.h>
-#include <stdint.h>
+
 #include "cmmwrite.h"
 
-uint8_t cmap[] = {255,255,255, 	
+uint8_t cmap[] = {255,255,255,
   240,163,255,
-  0,117,220, 	
-  153,63,0, 	
-  76,0,92, 	
-  25,25,25, 	
-  0,92,49, 	
-  43,206,72, 	
-  255,204,153, 	
-  128,128,128, 	
-  148,255,181, 	
-  143,124,0, 	
-  157,204,0, 	
-  194,0,136, 	
-  0,51,128, 	
-  255,164,5, 	
-  255,168,187, 	
-  66,102,0, 	
-  255,0,16, 	
-  94,241,242, 	
-  0,153,143, 	
-  224,255,102, 	
-  116,10,255, 	
-  153,0,0, 	
-  255,255,128, 	
-  255,255,0, 	
+  0,117,220,
+  153,63,0,
+  76,0,92,
+  25,25,25,
+  0,92,49,
+  43,206,72,
+  255,204,153,
+  128,128,128,
+  148,255,181,
+  143,124,0,
+  157,204,0,
+  194,0,136,
+  0,51,128,
+  255,164,5,
+  255,168,187,
+  66,102,0,
+  255,0,16,
+  94,241,242,
+  0,153,143,
+  224,255,102,
+  116,10,255,
+  153,0,0,
+  255,255,128,
+  255,255,0,
   255,80,5};
 
 
@@ -49,11 +45,19 @@ int cmmwritez(char * fname, double * D, size_t nD, double radius, uint32_t * P, 
 {
 
   gzFile zf = gzopen(fname, "wb");
+  if(zf == Z_NULL)
+  {
+      fprintf(stderr, "Unable to open %s\n", fname);
+      return -1;
+  }
+
   char * line = malloc(1024*sizeof(char));
+  assert(line != NULL);
 
   if(zf == NULL)
   {
     fprintf(stderr, "Unable to gzopen %s\n", fname);
+    free(line);
     return -1;
   }
 
@@ -83,7 +87,7 @@ int cmmwritez(char * fname, double * D, size_t nD, double radius, uint32_t * P, 
         b = (double) cmap[3*chr+2]/255.0;
     }
 
-    sprintf(line, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n", 
+    sprintf(line, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n",
         kk,
         D[kk*3], D[kk*3+1], D[kk*3+2],
         r, g, b,
@@ -109,9 +113,9 @@ int cmmwritez(char * fname, double * D, size_t nD, double radius, uint32_t * P, 
     }
 
     sprintf(line, "<link id1=\"%u\" id2=\"%u\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\"/>\n",
-        P[2*kk], P[2*kk+1], 
+        P[2*kk], P[2*kk+1],
         r, g, b,
-        radius/3);    
+        radius/3);
     gzwrite(zf, line, strlen(line));
   }
 
@@ -166,7 +170,7 @@ int cmmwrite(char * fname, double * D, size_t nD, double radius, uint32_t * P, s
     }
 
 
-    fprintf(f, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n", 
+    fprintf(f, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n",
         kk,
         D[kk*3], D[kk*3+1], D[kk*3+2],
         r, g, b,
@@ -192,9 +196,9 @@ int cmmwrite(char * fname, double * D, size_t nD, double radius, uint32_t * P, s
 
 
     fprintf(f, "<link id1=\"%u\" id2=\"%u\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\"/>\n",
-        P[2*kk], P[2*kk+1], 
+        P[2*kk], P[2*kk+1],
         r, g, b,
-        radius/3);    
+        radius/3);
   }
 
   fprintf(f, "</marker_set>\n");
