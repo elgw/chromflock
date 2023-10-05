@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.3.8
+- Fixed issues with the makefile. SDL is used by default.
+- Automatic RAM usage limitation (only on Linux) which should give a
+  more graceful exit than **SEGMENTATION FAULT** when running out of
+  RAM. The process is quite crude so it might not work in all
+  situations (only checks the amount of free RAM once).
+
 ## 0.3.7
 - Fixed infinite loop when finding scaling factor in hic2cpm (again!).
 - Fixed the **--aOut** argument which was ignored (hic2cpm).
