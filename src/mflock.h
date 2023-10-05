@@ -1,9 +1,36 @@
 #ifndef __mflock_h__
 #define __mflock_h__
 
+#include <assert.h>
+#include <getopt.h>
+#include <math.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdint.h>
-#include "ellipsoid.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+#include "fast_prng/normal.h"
+
+#ifdef SDL
+#include <pthread.h>
+#include "liveview.h"
+#include "liveview.c"
+#endif
+
 #include "cf_version.h"
+#include "cmmwrite.h"
+#include "ellipsoid.h"
+#include "functional.h"
+#include "wio.h"
 
 typedef struct {
   uint8_t * W; // Matrix with contact indications

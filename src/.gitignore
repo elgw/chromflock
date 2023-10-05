@@ -6,3 +6,6 @@ functional_ut
 hsvrgb
 liveview
 wio_ut
+*.log
+*.uint8
+*.gz

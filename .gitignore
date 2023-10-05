@@ -1,3 +1,4 @@
 src/lua-5.3.5/src/*.o
 src/lua-5.3.5/src/liblua.a
+*.deb
 
