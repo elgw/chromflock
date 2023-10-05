@@ -178,8 +178,8 @@ void * wio_read_u(char * fileName, size_t * nel)
     size_t read_byte = fread(w, 1, size, fd);
     if(read_byte != size)
     {
-        printf("%s/%s/%d Failed reading %s\n",
-               __FILE__, __FUNCTION__, __LINE__, fileName);
+        printf("%s/%d Failed reading %s\n",
+               __FILE__, __LINE__, fileName);
         free(w);
         return NULL;
     }

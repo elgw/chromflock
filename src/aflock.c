@@ -66,7 +66,7 @@ void limit_mem(size_t max_bytes)
 #endif
 }
 
-#ifdef __linux__
+#if 0 // #ifdef __linux__
 static void* (*real_malloc)(size_t) = NULL;
 static void* (*real_calloc)(size_t, size_t) = NULL;
 
@@ -115,6 +115,8 @@ void *calloc(size_t nmemb, size_t size)
     }
     return p;
 }
+#else
+#define mtrace_init()
 #endif
 
 /* Activation Distance Struct
@@ -1618,6 +1620,7 @@ uint8_t * initial_W(fconf * fc)
 
 int main(int argc, char ** argv)
 {
+    mtrace_init();
 
     if(argc == 1)
     {
@@ -1718,7 +1721,7 @@ int main(int argc, char ** argv)
             fprintf(jobFile, "\n");
 
             struct stat st;
-            memset(&st, 0, sizeof(stat));
+            memset(&st, 0, sizeof(struct stat));
 
             if (stat(dir, &st) == -1)
             {

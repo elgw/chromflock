@@ -236,8 +236,8 @@ void param_readW(optparam * p)
     p->W = wio_read(p->wfname, &fsize);
     if(fsize == 0)
     {
-        printf("%s/%s/%d Failed reading %s!\n",
-               __FILE__, __FUNCTION__, __LINE__, p->wfname);
+        printf("%s/%d Failed reading %s!\n",
+               __FILE__,  __LINE__, p->wfname);
         exit(EXIT_FAILURE);
     }
 

@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.3.9
+- Compiles with **-pedantic** and **-fanalyzer** without any warnings
+  with gcc 11.4.0.
+
 ## 0.3.8
 - Fixed issues with the makefile. SDL is used by default.
 - Automatic RAM usage limitation (only on Linux) which should give a

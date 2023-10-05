@@ -1,12 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
+#include "string2any.h"
 
 /* TODO:
  * If no data is given, i.e., if argc==3,
  * read from stdin
  */
+
 
 static void usage(char ** argv)
 {
@@ -30,6 +28,11 @@ int string2any(int argc, char ** argv)
     if(strcmp(argv[2], "uint8_t") == 0)
     {
         FILE * fout = fopen(argv[1], "wb");
+        if(fout == NULL)
+        {
+            fprintf(stderr, "Unable to open %s for writing\n", argv[1]);
+            exit(EXIT_FAILURE);
+        }
         for(int kk = 3; kk<argc; kk++)
         {
             uint8_t val = atoi(argv[kk]);
@@ -42,6 +45,11 @@ int string2any(int argc, char ** argv)
     if(strcmp(argv[2], "double") == 0)
     {
         FILE * fout = fopen(argv[1], "wb");
+        if(fout == NULL)
+        {
+            fprintf(stderr, "Unable to open %s for writing\n", argv[1]);
+            exit(EXIT_FAILURE);
+        }
         for(int kk = 3; kk<argc; kk++)
         {
             double val = atof(argv[kk]);

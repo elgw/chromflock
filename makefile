@@ -19,7 +19,8 @@ DEBUG?=0
 ifeq ($(DEBUG),1)
 CFLAGS += -g3 \
 -DNOMATLAB \
--fanalyzer
+-fanalyzer \
+-pedantic
 else
 CFLAGS += -O3 \
 -DNDEBUG \
@@ -52,8 +53,6 @@ LDFLAGS += -lm  -lpthread  -ldl
 # Library: Z
 CFLAGS += `pkg-config zlib --cflags`
 LDFLAGS += `pkg-config zlib --libs`
-
-$(info $$LDFLAGS=$(LDFLAGS))
 
 # Library: LUA
 CFLAGS += -Isrc/lua-5.3.5/src

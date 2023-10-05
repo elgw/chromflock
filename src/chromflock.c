@@ -10,6 +10,27 @@
 #include "any2string.h"
 #include "sprite2cmap.h"
 
+#ifndef NDEBUG
+
+#define malloc(x) assert_malloc(x)
+static void * assert_malloc(size_t x)
+{
+    double * p = (malloc)(x);
+    assert(p!=NULL);
+    return p;
+}
+#if 0
+#define calloc(x,y) assert_calloc(x, y)
+static void * assert_calloc(size_t x, size_t y)
+{
+    double * p = (calloc)(x, y);
+    assert(p!=NULL);
+    return p;
+}
+#endif
+#endif
+
+
 static int show_version(void)
 {
     printf("chromflock v.%s\n", cf_version);
