@@ -1,21 +1,8 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <assert.h>
-#include <stdint.h>
-#include <time.h>
-
-#ifdef MATLAB
-#include "mex.h"
-#endif
-
 #include "functional.h"
-#include "ellipsoid.h"
 
 #define INLINED inline __attribute__((always_inline))
 
-
-INLINED void vec3_minus(const double * A, const double * B, double * C)
+INLINED static void vec3_minus(const double * A, const double * B, double * C)
 { // C = A-B
     for(int kk = 0; kk<3; kk++)
     {
@@ -31,7 +18,7 @@ INLINED static double norm3(const double * restrict X)
     return sqrt(n);
 }
 
-INLINED void vec3_normalize(double * restrict X)
+INLINED static void vec3_normalize(double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -60,7 +47,7 @@ INLINED static double eudist3(const double * A, const double * B)
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-INLINED size_t hash_coord(const int nDiv, const double X)
+INLINED static size_t hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
@@ -74,7 +61,7 @@ INLINED size_t hash_coord(const int nDiv, const double X)
 }
 
 
-INLINED size_t hash(const size_t nDiv, double * restrict X)
+INLINED static size_t hash(const size_t nDiv, double * restrict X)
 {
 
     size_t h = hash_coord(nDiv, X[0]) +

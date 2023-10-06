@@ -275,8 +275,8 @@ void comforce(optparam * restrict p,
  * @param p the settings
  * @param Fb: the Brownian force
  */
-int dynamic(double * X,
-            optparam * p,
+int dynamic(double * restrict X,
+            optparam * restrict p,
             double Fb)
 {
 
@@ -310,12 +310,12 @@ int dynamic(double * X,
     clock_gettime(CLOCK_MONOTONIC, &ta);
 
     /* Gradient */
-    double * g = malloc(p->N*3*sizeof(double));
+    double * restrict g = malloc(p->N*3*sizeof(double));
     memset(g, 0, p->N*3*sizeof(double)); /* zero initial velocity */
     // Velocity
-    double * v = malloc(p->N*3*sizeof(double));
+    double * restrict v = malloc(p->N*3*sizeof(double));
     memset(v, 0, p->N*3*sizeof(double)); /* zero initial velocity */
-    double * Xm = malloc(3*p->N*sizeof(double));
+    double * restrict Xm = malloc(3*p->N*sizeof(double));
     /* Set last position to be the current position, i.e. initial velocity will be 0 */
     for(size_t pp = 0; pp< 3*p->N ; pp++)
     { Xm[pp] = X[pp]; }
