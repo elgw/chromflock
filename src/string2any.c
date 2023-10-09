@@ -42,6 +42,23 @@ int string2any(int argc, char ** argv)
         return EXIT_SUCCESS;
     }
 
+    if(strcmp(argv[2], "uint32_t") == 0)
+    {
+        FILE * fout = fopen(argv[1], "wb");
+        if(fout == NULL)
+        {
+            fprintf(stderr, "Unable to open %s for writing\n", argv[1]);
+            exit(EXIT_FAILURE);
+        }
+        for(int kk = 3; kk<argc; kk++)
+        {
+            uint32_t val = atoi(argv[kk]);
+            fwrite(&val, 1, sizeof(uint32_t), fout);
+        }
+        fclose(fout);
+        return EXIT_SUCCESS;
+    }
+
     if(strcmp(argv[2], "double") == 0)
     {
         FILE * fout = fopen(argv[1], "wb");
@@ -61,7 +78,7 @@ int string2any(int argc, char ** argv)
 
 
     fprintf(stderr, "Does not recognized format: %s\n", argv[2]);
-    fprintf(stderr, "Supported formats: 'double', 'uint8_t'\n");
+    fprintf(stderr, "Supported formats: 'double', 'uint8_t' and 'uint32_t'\n");
     fprintf(stderr, "\n");
     usage(argv);
 

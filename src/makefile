@@ -55,3 +55,7 @@ hsvrgb:
 FILES=cc2cpm.c cc2cpm_cli.c balance.c
 cc2cpm_cli: $(FILES)
 	$(CC) $(CFLAGS) $(FILES) $(LDFLAGS) -o cc2cpm_cli
+
+FILES = contact_pairs_io.c contact_pairs_io_ut.c
+contact_pairs_io_ut: $(FILES)
+	$(CC) $(CFLAGS) $(FILES) $(LDFLAGS) -o contact_pairs_io_ut -lz

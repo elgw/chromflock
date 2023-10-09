@@ -100,6 +100,7 @@ src/cmmwrite.c \
 src/wio.c \
 src/hsvrgb.c \
 obj/ellipsoid.o \
+obj/contact_pairs_io.o
 
 
 bin/mflock: $(mflock_files) makefile
@@ -118,3 +119,6 @@ obj/ellipsoid.o: src/ellipsoid.c
 
 obj/balance.o: src/balance.c
 	$(CC) -c $(CFLAGS) src/balance.c -o obj/balance.o
+
+obj/contact_pairs_io.o: src/contact_pairs_io.c
+	$(CC) -c $(CFLAGS) src/contact_pairs_io.c -o obj/contact_pairs_io.o

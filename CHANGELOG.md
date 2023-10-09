@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.4.0
+mflock:
+- Removed the option to set the simulation parameters from command line.
+- Reads/writes gz compressed contact pairs instead of the binary
+  indication matrix (W.uint8).
+- [ ] Writes ISO time to log files.
+- [ ] Writes command line to log files.
+
 ## 0.3.9
 - Compiles with **-pedantic** and **-fanalyzer** without any warnings
   with gcc 11.4.0.
