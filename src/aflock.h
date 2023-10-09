@@ -115,6 +115,37 @@ typedef struct {
     uint8_t * W;
 } chrom;
 
+/* Activation Distance Struct
+ * To be passed to threads */
+typedef struct{
+    double * A; /* For storing activation distances */
+    double * AD;
+    size_t thread;
+    size_t nThreads;
+    double th_low;
+    double th_high;
+    fconf * fc;
+    chrom * flock;
+} adstruct;
+
+
+/* To be passed to each thread (final_tfun)
+ * when running in final mode */
+typedef struct{
+    size_t thread;
+    size_t nThreads;
+    size_t nStruct;
+    size_t nBeads;
+    char * wFileName;
+    fconf * fc;
+    chrom * flock;
+    // TODO: these do not need double, should be uint16_t
+    double * M; /* Counting number of captured contacts for this thread */
+    double * W; /* Sum of all individual W (uint8_t) for this thread */
+    double * rprof; /* Sum of radial values for this thread */
+} final_tdata;
+
+
 // Initialize a new fconf object
 static fconf * fconf_init(void);
 /* deallocate an fconf object */
@@ -153,8 +184,8 @@ int cmp_float(const void * A, const void * B);
 /* Load the contact probability matrix shared between the structures */
 static void fconf_load_A(fconf * fc);
 
-static float eudist3(float * A, float * B);
-static float norm3(float * X);
+static float eudist3(const float * A, const float * B);
+static float norm3(const float * X);
 
 static int argparsing(fconf * p, int argc, char ** argv);
 static void usage();

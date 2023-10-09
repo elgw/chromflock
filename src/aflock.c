@@ -1,5 +1,17 @@
 #include "aflock.h"
 
+/* @brief Limit the memory available to chromflock
+ *
+ * So that malloc, calloc, etc actually returns NULL at some point
+ *
+ * @param max_bytes
+ * When argument == 0:
+ *    Limit the memory to the amount of free memory
+ *    right now
+ * When argument > 0
+ *     Limit memory to the number of bytes specified
+ * Only implemented for linux
+ */
 static void limit_mem(size_t max_bytes)
 {
 #ifdef __linux__
@@ -25,99 +37,12 @@ static void limit_mem(size_t max_bytes)
 #endif
 }
 
-#if 0 // #ifdef __linux__
-static void* (*real_malloc)(size_t) = NULL;
-static void* (*real_calloc)(size_t, size_t) = NULL;
-
-static void mtrace_init(void)
-{
-    real_malloc = dlsym(RTLD_NEXT, "malloc");
-    if (NULL == real_malloc) {
-        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
-    }
-    real_calloc = dlsym(RTLD_NEXT, "calloc");
-    if (NULL == real_calloc) {
-        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
-    }
-    return;
-}
-
-void * malloc(size_t size)
-{
-    if(real_malloc==NULL) {
-        mtrace_init();
-    }
-    void * p = real_malloc(size);
-    if(p == 0)
-    {
-        fprintf(stderr, "aflock ran out of memory :(\n");
-        fprintf(stderr, "trying to get %zu more bytes\n", size);
-        exit(EXIT_FAILURE);
-    }
-    return p;
-}
-
-void *calloc(size_t nmemb, size_t size)
-{
-    if(real_calloc==NULL) {
-        mtrace_init();
-    }
-
-    void *p = NULL;
-
-    p = real_calloc(nmemb, size);
-    if(p == 0)
-    {
-        fprintf(stderr, "aflock ran out of memory :(\n");
-        fprintf(stderr, "trying to get %zu more bytes\n", nmemb*size);
-        exit(EXIT_FAILURE);
-    }
-    return p;
-}
-#else
-#define mtrace_init()
-#endif
-
-/* Activation Distance Struct
- * To be passed to threads */
-typedef struct{
-    double * A; /* For storing activation distances */
-    double * AD;
-    size_t thread;
-    size_t nThreads;
-    double th_low;
-    double th_high;
-    fconf * fc;
-    chrom * flock;
-} adstruct;
-
-
-/* To be passed to each thread (final_tfun)
- * when running in final mode */
-typedef struct{
-    size_t thread;
-    size_t nThreads;
-    size_t nStruct;
-    size_t nBeads;
-    char * wFileName;
-    fconf * fc;
-    chrom * flock;
-    // TODO: these do not need double, should be uint16_t
-    double * M; /* Counting number of captured contacts for this thread */
-    double * W; /* Sum of all individual W (uint8_t) for this thread */
-    double * rprof; /* Sum of radial values for this thread */
-} final_tdata;
-
 
 static fconf * fconf_init()
 {
     fconf * c = calloc(1, sizeof(fconf));
     assert(c != NULL);
     c->verbose = 1;
-    c->afname = NULL;
-
-    c->rfname = NULL;
-    c->prfname = NULL;
 
     c->mode = MODE_UNKNOWN;
     c->QS = 2500;
@@ -125,8 +50,6 @@ static fconf * fconf_init()
     c->ea = -1;
     c->eb = -1;
     c->ec = -1;
-    c->E = NULL;
-
     c->r0 = -1;
     c->vq = -1;
 
@@ -135,19 +58,16 @@ static fconf * fconf_init()
     int nCpus = sysconf(_SC_NPROCESSORS_ONLN);
     /* Assuming this is the number of cores,
      * it is faster than using all threads */
-    nCpus/= 2;
+
     if(nCpus < 0)
     {
         printf("WARNING: Could not figure out the number of CPUs "
                "from sysconfig!\n");
         nCpus = 4;
     }
-    c->nThreads = nCpus;
 
-    if(c->verbose > 1)
-    {
-        printf("Using %zu threads\n", c->nThreads);
-    }
+    c->nThreads = nCpus/2;
+    c->nThreads == 0 ? c->nThreads = 1 : 0;
 
     return c;
 }
@@ -162,16 +82,14 @@ static void fconf_free(fconf * c)
     free(c->mflock_arguments);
 }
 
-/* 10,000 structures, 2300 beads each, 1m 32s on MBP
- * 1m 35 s on erikwfractal. Requires loads of ram... */
 
-static float eudist3(float * A, float * B)
+static float eudist3(const float * A, const float * B)
 {
     /* Euclidean distance between two 3D-vectors */
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-static float norm3(float * X)
+static float norm3(const float * X)
 {
     float n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -660,7 +578,15 @@ static int argparsing(fconf * p, int argc, char ** argv)
         return 1;
     }
 
-    return 0;
+    if(p->mode == MODE_UNKNOWN)
+    {
+        printf("No MODE specified!\n");
+        return(EXIT_FAILURE);
+    }
+
+    limit_mem(0); // TODO: set by command line
+
+    return EXIT_SUCCESS;
 }
 
 
@@ -717,17 +643,6 @@ static void set_bead_radius(fconf * fc)
     fprintf(stdout, "   Contact distance (%.1f x bead radius): %f\n", captureFactor, fc->dContact);
     assert(fabs(fc->vq - vBeads/vDomain)<1e-6);
     assert(vBeads/vDomain < 1);
-    return;
-}
-
-
-static void echo_args(int argc, char ** argv)
-{
-    for(int kk = 0; kk<argc; kk++)
-    {
-        printf("%s ", argv[kk]);
-    }
-    printf("\n");
     return;
 }
 
@@ -1122,45 +1037,12 @@ static uint8_t * initial_W(fconf * fc)
 
 int main(int argc, char ** argv)
 {
-    mtrace_init();
-
-    if(argc == 1)
-    {
-        usage();
-        exit(EXIT_SUCCESS);
-    }
-
-    echo_args(argc, argv);
-
     fconf * fc = fconf_init();
 
-    int ok = argparsing(fc, argc, argv);
-
-    if(fc->mode == MODE_UNKNOWN)
-    {
-        printf("No MODE specified!\n");
-        exit(1);
-    }
-
-    /* When argument == 0:
-     *    Limit the memory to the amount of free memory
-     *    right now
-     * When argument > 0
-     *     Limit memory to the number of bytes specified
-     * Only implemented for linux
-     */
-    limit_mem(0);
-
-    if(ok != 0)
+    if(argparsing(fc, argc, argv))
     {
         usage();
         exit(1);
-    }
-
-    if(fc->diploid == 1) {
-        printf("Diploid\n");
-    } else {
-        printf("Haploid\n");
     }
 
     /* Load the contact probability map specified with -A
@@ -1176,7 +1058,7 @@ int main(int argc, char ** argv)
 
     chrom * flock = load_structures(fc);
 
-    // TODO: switch and functions. fc->mode by ENUMERATE
+    // TODO: Use a switch and call functions. fc->mode by ENUMERATE
     if(fc->mode == MODE_INIT)
     {
         /* Creates initial W matrices for each structure
