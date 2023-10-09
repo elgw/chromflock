@@ -9,3 +9,4 @@ wio_ut
 *.log
 *.uint8
 *.gz
+contact_pairs_io_ut

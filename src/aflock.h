@@ -1,6 +1,47 @@
 #ifndef _aflock_h_
 #define _aflock_h_
 
+#define _GNU_SOURCE
+
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <math.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#ifdef __linux__
+#include <dlfcn.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+#include <sys/types.h>
+#endif
+
+#include "cf_version.h"
+#include "ellipsoid.h"
+#include "oscp.h"
+#include "wio.h"
+
+/*
+ * Implementation notes:
+ *
+ * - Is is assumed that all coordinates will fit into memory.
+ * - Pairwise distances are computed when needed and not stored.
+ * - Some parts to be parallelized.
+ * - For diploid structures there are 2*nBeads beads -- ugly!
+ *
+ * General:
+ * - Uses infinite math so DON'T compile with -ffitnite-math-only
+ *
+ */
+
 #define MODE_UNKNOWN -1
 #define MODE_UPDATE 0
 #define MODE_INIT 1
@@ -11,7 +52,7 @@
 
 // Meta data etc, flock configuration
 typedef struct {
-    int mode; // What to do
+    int mode; // What to do // TODO: enumerate
 
     char * afname; // File with contact probability matrix
     double * A; // Contact probability matrix
@@ -39,7 +80,6 @@ typedef struct {
 
     // Flags
     int experimental;
-    int get_quality;
     int diploid;
 
     char * rfname;
@@ -58,7 +98,7 @@ typedef struct {
 } fconf;
 
 
-// For each individual chromatine structure
+/* For each individual chromflock structure */
 typedef struct {
     // All points are loaded
     float * X; // 3xN
@@ -73,57 +113,45 @@ typedef struct {
 
     // size_t N;
     uint8_t * W;
-
-
 } chrom;
 
 // Initialize a new fconf object
-fconf * fconf_init(void);
-// deallocate an fconf object
-void fconf_free(fconf *);
+static fconf * fconf_init(void);
+/* deallocate an fconf object */
+static void fconf_free(fconf *);
 
 // Load all structures specified in fc->ffname
-chrom * load_structures(fconf * fc);
-void struct_write_W(fconf * fc, chrom * c);
-// Load the contact probability matrix shared between the structures
-void fconf_load_A(fconf * fc);
+static chrom * load_structures(fconf * fc);
+
 
 // Load all coordinates from all structures
-chrom * load_structures(fconf * fc);
-
+static chrom * load_structures(fconf * fc);
 
 // Initialize a chrom object
-int chrom_init(chrom * c, size_t nQ, size_t n);
-// Assign a contact pair (kk, ll) to a chrom structure
-void chrom_assign(fconf * fc, chrom * ch, size_t kk, size_t ll);
-// Write down all assigned contact pairs for a structure
-// and empty the queue, used in MODE_UPDATE
-void struct_write_W(fconf * fc, chrom * c);
+static void chrom_init(chrom * c, size_t nQ, size_t n);
+
+
 // Write a complete W matrix for a structure,
 // i.e., no update. Used in MODE_INIT only
-void struct_write_W0(fconf * fc, chrom * cc, uint8_t * W0);
+static void struct_write_W0(fconf * fc, chrom * cc, uint8_t * W0);
 
-void ch_free(chrom * c);
-int ch_load_X(fconf * fc, chrom * c);
+static void ch_free(chrom * c);
+static int ch_load_X(fconf * fc, chrom * c);
 
 // The main functionality,
-// assign contacts to the most suited structures
-void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob);
-
-// Build a contact map from all structures
-// for the final mode
-void struct_get_interactions(fconf * fc, chrom * cc, double * M, double cDistance);
 
 /* Update/reassign radial constraints among the chromatin structures in flock
  * only radial positions with a probability of being used < th_high, and >= th_low
  * are used
  */
-void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low);
+static void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low);
 
 
 // Float comparison for quicksort
 int cmp_float(const void * A, const void * B);
 
+/* Load the contact probability matrix shared between the structures */
+static void fconf_load_A(fconf * fc);
 
 static float eudist3(float * A, float * B);
 static float norm3(float * X);
