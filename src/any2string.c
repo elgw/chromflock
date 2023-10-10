@@ -65,7 +65,7 @@ int any2string(int argc, char ** argv)
         uint32_t token = 0;
         while(fread(&token, sizeof(uint32_t), 1, fin) != 0)
         {
-            printf("%lu\n", token);
+            printf("%u\n", token);
         }
         fclose(fin);
         return EXIT_SUCCESS;

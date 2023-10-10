@@ -106,7 +106,11 @@ obj/contact_pairs_io.o
 bin/mflock: $(mflock_files) makefile
 	$(CC) $(CFLAGS) $(mflock_files) -o bin/mflock $(LDFLAGS)
 
-aflock_files = src/aflock.c src/wio.c src/oscp.c obj/ellipsoid.o
+aflock_files = src/aflock.c \
+src/wio.c \
+src/oscp.c \
+obj/ellipsoid.o \
+obj/contact_pairs_io.o
 
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)

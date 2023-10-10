@@ -457,10 +457,15 @@ int dynamic(double * restrict X,
                          p->R,
                          p->I,
                          &fconf);
-            logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n", iter, error, gnorm);
+            logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n",
+                     iter, error, gnorm);
+            fflush(p->logf);
         }
 
     } while( (iter < maxiter) && (run == 1) && (luaquit == 0));
+
+    // TODO this is already calculated at at end of the last iteration.
+    // also DRY.
 
     /* At final step, report back */
     double errorFinal = err3(X,
@@ -1230,6 +1235,12 @@ int argparsing(optparam * p, int argc, char ** argv)
         }
     }
 
+    if(p->luaDynamics == 0)
+    {
+        fprintf(stderr, "--dconf not specified\n");
+        exit(EXIT_FAILURE);
+    }
+
     /* Make sure that the outfolder ends with a path_separator.
        Note: it should already be allocated to have room for it if missing */
     if(p->ofoldername)
@@ -1695,16 +1706,17 @@ int main(int argc, char ** argv)
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-
         cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
         free(cmmfile);
     }
 
     /* Write coordinates to disk */
+    // TODO: rename mflock_write_coords(mflock * m, double * X)
     param_dumpX(p, X);
 
-    /* Write radial profile to disk */
-    if(1) {
+    /* Write radial profile to disk ? */
+    // Just wastes space, can as well be calculated on the fly.
+    if(0) {
         char * rpfname = malloc(1024*sizeof(char));
         assert(rpfname != NULL);
         sprintf(rpfname, "%s/rad.csv", p->ofoldername);

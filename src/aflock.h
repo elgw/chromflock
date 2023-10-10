@@ -8,6 +8,7 @@
 #include <getopt.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,10 +25,12 @@
 #include <sys/types.h>
 #endif
 
+#include "contact_pairs_io.h"
 #include "cf_version.h"
 #include "ellipsoid.h"
 #include "oscp.h"
 #include "wio.h"
+
 
 /*
  * Implementation notes:
@@ -42,17 +45,19 @@
  *
  */
 
-#define MODE_UNKNOWN -1
-#define MODE_UPDATE 0
-#define MODE_INIT 1
-#define MODE_FINAL 2
-#define MODE_UPDATE_BLOCKED 3
-#define MODE_EXPERIMENTAL 4
-#include "ellipsoid.h"
+typedef enum {
+    MODE_UNKNOWN, /* Mode not set */
+    MODE_UPDATE, /* Update existing structures */
+    MODE_INIT, /* First iterations */
+    MODE_FINAL, /* Perform some measurements */
+    MODE_UPDATE_BLOCKED, /* ?? */
+    MODE_EXPERIMENTAL /* ..  */
+} aflock_mode;
 
-// Meta data etc, flock configuration
+
+/* Configuration and state of the program */
 typedef struct {
-    int mode; // What to do // TODO: enumerate
+    aflock_mode mode; // What to do
 
     char * afname; // File with contact probability matrix
     double * A; // Contact probability matrix
@@ -76,11 +81,13 @@ typedef struct {
     elli * E;
     double dContact; // contact threshold
 
-    char * mflock_arguments; // Will be written to mflock-jobs
+    /* The command line arguments to mflock which will be written to mflock-jobs */
+    char * mflock_arguments;
 
     // Flags
     int experimental;
-    int diploid;
+    /* Haploid or diploid */
+    bool diploid;
 
     char * rfname;
     char * prfname;
@@ -95,25 +102,21 @@ typedef struct {
     double * probR;
     size_t nThreads;
     int verbose;
-} fconf;
+    size_t mem_limit;
+} aflock;
 
 
 /* For each individual chromflock structure */
 typedef struct {
-    // All points are loaded
-    float * X; // 3xN
+    char * contact_pairs_file; /* Contact indicator matrix */
+    char * xfName; /* Coordinates */
+    char * rfName; /* Radial constraints, e.g., GPSeq */
 
-    uint32_t * Q; // Queued contacts to write, 2xQS
-    size_t nQ; // Number of pairs in the queue
-
-    // File names
-    char * wfName; // Contact indicator matrix
-    char * xfName; // Coordinates
-    char * rfName;
-
-    // size_t N;
-    uint8_t * W;
-} chrom;
+    float * X; /* 3xN 3D coordinates */
+    uint32_t * Q; /* Queued contacts to write, 2xQS */
+    size_t nQ; /* Number of pairs in the queue */
+    uint8_t * W; /* Contact indicator matrix */
+} cf_structure;
 
 /* Activation Distance Struct
  * To be passed to threads */
@@ -124,8 +127,8 @@ typedef struct{
     size_t nThreads;
     double th_low;
     double th_high;
-    fconf * fc;
-    chrom * flock;
+    aflock * fc;
+    cf_structure * flock;
 } adstruct;
 
 
@@ -136,9 +139,9 @@ typedef struct{
     size_t nThreads;
     size_t nStruct;
     size_t nBeads;
-    char * wFileName;
-    fconf * fc;
-    chrom * flock;
+
+    aflock * fc;
+    cf_structure * flock;
     // TODO: these do not need double, should be uint16_t
     double * M; /* Counting number of captured contacts for this thread */
     double * W; /* Sum of all individual W (uint8_t) for this thread */
@@ -146,48 +149,53 @@ typedef struct{
 } final_tdata;
 
 
-// Initialize a new fconf object
-static fconf * fconf_init(void);
-/* deallocate an fconf object */
-static void fconf_free(fconf *);
+// Initialize a new aflock object
+static aflock * aflock_init(void);
+/* deallocate an aflock object */
+static void aflock_free(aflock *);
 
 // Load all structures specified in fc->ffname
-static chrom * load_structures(fconf * fc);
-
-
-// Load all coordinates from all structures
-static chrom * load_structures(fconf * fc);
-
-// Initialize a chrom object
-static void chrom_init(chrom * c, size_t nQ, size_t n);
-
-
+static cf_structure * load_structures(aflock * fc);
+// Initialize a cf_structure object
+static void cf_structure_init(cf_structure * c, size_t nQ, size_t n);
 // Write a complete W matrix for a structure,
 // i.e., no update. Used in MODE_INIT only
-static void struct_write_W0(fconf * fc, chrom * cc, uint8_t * W0);
 
-static void ch_free(chrom * c);
-static int ch_load_X(fconf * fc, chrom * c);
+static void cf_structure_free(cf_structure * c);
+static int cf_structure_load_X(aflock * fc, cf_structure * c);
 
 // The main functionality,
 
-/* Update/reassign radial constraints among the chromatin structures in flock
+/* Update/reassign radial constraints among the chromflock structures
  * only radial positions with a probability of being used < th_high, and >= th_low
  * are used
  */
-static void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low);
+static void flock_updateR(aflock * fc, cf_structure * flock, double th_high, double th_low);
 
+/** @brief Assign new contacts and write them to disk
+ *
+ * Write a new W matrix to disk, setting contacts between beads to
+ * 1 if the distance is below the activation distance given by AD
+ *
+ * This will read an existing W matrix and only update contacts for which
+ * A is in the threshold range.
+ * */
+static void struct_write_W_AD(aflock * fc,
+                              cf_structure * c,
+                              double * AD,
+                              double th_high,
+                              double th_low);
 
 // Float comparison for quicksort
 int cmp_float(const void * A, const void * B);
 
 /* Load the contact probability matrix shared between the structures */
-static void fconf_load_A(fconf * fc);
+static void aflock_load_A(aflock * fc);
 
 static float eudist3(const float * A, const float * B);
 static float norm3(const float * X);
 
-static int argparsing(fconf * p, int argc, char ** argv);
+static int argparsing(aflock * p, int argc, char ** argv);
 static void usage();
 
 #endif

@@ -206,17 +206,44 @@ uint32_t * contact_pairs_read(const char * file,
         CP = contact_pairs_read_raw(file, nPairs);
     }
 
-#if 0
+
+
     if(CP != NULL)
     {
+        size_t N = *nPairs;
+        for(size_t kk = 0; kk < N; kk++)
+        {
+            uint32_t * pair = CP + 2*kk;
+            if(pair[0] >= pair[1])
+            {
+                fprintf(stderr, "Error when checking %s\n", file);
+                fprintf(stderr, "Contact pair #%zu = (%u, %u)\n",
+                        kk, pair[0], pair[1]);
+                fprintf(stderr, "I.e., %u >= %u which isn't allowed\n",
+                        pair[0], pair[1]);
+                exit(EXIT_FAILURE);
+            }
+        }
+        for(size_t kk = 1; kk<N; kk++)
+        {
+            if(CP[2*(kk-1)] > CP[2*kk])
+            {
+                fprintf(stderr, "Invalid order of pairs\n");
+                fprintf(stderr, "(%u, %u) comes before (%u, %u)\n",
+                        CP[2*(kk-1)], CP[2*(kk-1) + 1],
+                        CP[2*kk], CP[2*kk + 1]);
+                fprintf(stderr, "I.e. the pairs are not sorted\n");
+                exit(EXIT_FAILURE);
+            }
+        }
         uint32_t max = CP[0];
         for(size_t kk = 0; kk< *nPairs*2; kk++)
         {
             CP[kk] > max ? max = CP[kk] : 0;
         }
-        printf("%lu Contact pairs indicate at least %u beads\n", *nPairs, max);
+        printf("    %lu Contact pairs. ( max bead id: %u)\n", *nPairs, max);
     }
-#endif
+
 
     return CP;
 }
