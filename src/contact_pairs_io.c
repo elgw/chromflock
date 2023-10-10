@@ -1,5 +1,69 @@
 #include "contact_pairs_io.h"
 
+uint32_t *
+contact_pairs_from_matrix(const uint8_t * restrict W,
+                          const uint64_t N,
+                          uint64_t * nPairs)
+{
+    uint64_t nPairsAlloc = 2*N;
+    uint64_t nPairsWritten = 0;
+    uint32_t * CP = malloc(nPairsAlloc*2*sizeof(uint32_t));
+    if(CP == NULL)
+    {
+        return CP;
+    }
+
+    for(size_t ll = 0; ll< N; ll++)
+    {
+        for(size_t kk = ll+1; kk<N; kk++)
+        {
+            size_t pos = kk+N*ll;
+            if(W[pos])
+            {
+                /* increase allocation */
+                if(nPairsWritten == nPairsAlloc)
+                {
+                    nPairsAlloc*=1.2;
+                    uint32_t * CP2 = realloc(CP, nPairsAlloc*2*sizeof(uint32_t));
+                    if(CP2==NULL)
+                    {
+                        free(CP);
+                        return NULL;
+                    } else {
+                        CP = CP2;
+                    }
+
+                }
+                CP[nPairsWritten*2] = ll;
+                CP[nPairsWritten*2+1] = kk;
+                nPairsWritten++;
+            }
+        }
+    }
+    *nPairs = nPairsWritten;
+    return CP;
+}
+
+uint8_t * contact_pairs_to_matrix(const uint32_t * CP, uint64_t nPairs, uint64_t N)
+{
+    assert(CP != NULL);
+    uint8_t * W = calloc(N*N, sizeof(uint8_t));
+    if(W == NULL)
+    {
+        return NULL;
+    }
+
+    for(uint64_t pp = 0; pp < nPairs; pp++)
+    {
+        size_t a = CP[2*pp];
+        size_t b = CP[2*pp + 1];
+        W[a + N*b] = 1;
+        W[b + N*a] = 1;
+    }
+
+    return W;
+}
+
 /* Check if the file ends with .gz */
 static int isgzfile(const char * file)
 {
@@ -91,7 +155,7 @@ static size_t get_gz_size(const char * file)
 }
 
 static uint32_t * contact_pairs_read_gz(const char * file,
-                                     uint64_t * nPairs)
+                                        uint64_t * nPairs)
 {
     size_t uncompressed_size = get_gz_size(file);
 
@@ -132,7 +196,7 @@ static uint32_t * contact_pairs_read_gz(const char * file,
 }
 
 uint32_t * contact_pairs_read(const char * file,
-                                     uint64_t * nPairs)
+                              uint64_t * nPairs)
 {
     uint32_t * CP = NULL;
     if(isgzfile(file))
@@ -142,7 +206,7 @@ uint32_t * contact_pairs_read(const char * file,
         CP = contact_pairs_read_raw(file, nPairs);
     }
 
-    #if 0
+#if 0
     if(CP != NULL)
     {
         uint32_t max = CP[0];
@@ -223,6 +287,38 @@ int contact_pairs_write(const char * file,
     }
 }
 
+static uint32_t * gen_random_contact_pairs(uint64_t nBeads, uint64_t nPairs)
+{
+/* To get a sorted list we start with the matrix form */
+    uint8_t * W = calloc(nBeads*nBeads, sizeof(uint8_t));
+    size_t nPairs_set = 0;
+    while(nPairs_set != nPairs)
+    {
+        size_t a = rand() % nBeads;
+        size_t b = rand() % nBeads;
+        if(a != b)
+        {
+            if(W[a + nBeads*b] == 0)
+            {
+                W[a + b*nBeads] = 1;
+                W[b + a*nBeads] = 1;
+                nPairs_set++;
+            }
+        }
+    }
+    uint64_t nPairsGot;
+    uint32_t * CP = contact_pairs_from_matrix(W, nBeads, &nPairsGot);
+    if(nPairs != nPairsGot)
+    {
+        fprintf(stderr, "Got an unexpected number of pairs\n");
+        fprintf(stderr, "Got %ld expected %ld\n", nPairsGot, nPairs_set);
+        fprintf(stderr, "%s %d\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    free(W);
+    return CP;
+}
+
 int contact_pairs_io_ut(int argc, char ** argv)
 {
     if(argc != 1)
@@ -233,11 +329,35 @@ int contact_pairs_io_ut(int argc, char ** argv)
     /* Simple test. Allocate, write, read, compare to allocated */
 
     size_t nPairs = 123;
-    uint32_t * CP = calloc(nPairs*2, sizeof(uint32_t));
-    for(size_t kk = 0; kk<nPairs*2; kk++)
+    size_t N = 50; /* Number of beads */
+    uint32_t * CP = gen_random_contact_pairs(N, nPairs);
+    assert(CP != NULL);
+
+    printf(" -> Conversions between representations: matrices and lists of pairs\n");
+    uint8_t * W = contact_pairs_to_matrix(CP, nPairs, N);
+    assert(W != NULL);
+
+    uint64_t nPairs2 = 0;
+    uint32_t * CP2 = contact_pairs_from_matrix(W, N, &nPairs2);
+    if(nPairs != nPairs2)
     {
-        CP[kk] = rand() % UINT32_MAX;
+        fprintf(stderr, "contact_pairs_to_matrix or contact_pairs_from_matrix has a problem\n");
+        exit(EXIT_FAILURE);
     }
+    for(size_t kk = 0; kk<nPairs; kk++)
+    {
+        if(CP[2*kk] != CP2[2*kk])
+        {
+            fprintf(stderr, "Disagreement between CP and CP2\n");
+        }
+        if(CP[2*kk+1] != CP2[2*kk+1])
+        {
+            fprintf(stderr, "Disagreement between CP and CP2\n");
+        }
+    }
+
+    free(W);
+    free(CP2);
 
     printf(" -> Writing and reading uncompressed data\n");
     char tempfile[] = "contact_pairs_io_ut_XXXXXX.u32";
@@ -255,7 +375,7 @@ int contact_pairs_io_ut(int argc, char ** argv)
         exit(EXIT_FAILURE);
     }
 
-    uint64_t nPairs2;
+    nPairs2 = 0;
     uint32_t * CP_raw = contact_pairs_read(tempfile, &nPairs2);
     if(nPairs != nPairs2)
     {
@@ -321,5 +441,33 @@ int contact_pairs_io_ut(int argc, char ** argv)
     printf("All tests passed and temporary files cleaned up\n");
 
 
+    return EXIT_SUCCESS;
+}
+
+
+int contact_pairs_write_from_matrix(const char * filename,
+                                    uint64_t n_elements ,
+                                    const uint8_t * restrict W)
+{
+    uint64_t N = sqrtl(n_elements);
+    if(N*N != n_elements)
+    {
+        fprintf(stderr, "%ld x %ld != %ld\n",
+                N, N, n_elements);
+        fprintf(stderr, "Unable to write to %s\n", filename);
+        fprintf(stderr, "%s %d\n", __FILE__, __LINE__);
+        return EXIT_FAILURE;
+    }
+
+    uint64_t nPairs;
+    uint32_t * CP = contact_pairs_from_matrix(W, N, &nPairs);
+    if(CP == NULL)
+    {
+        fprintf(stderr, "Unable to get contact pairs from matrix\n");
+        fprintf(stderr, "%s %d\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    contact_pairs_write(filename, CP, nPairs);
+    free(CP);
     return EXIT_SUCCESS;
 }
