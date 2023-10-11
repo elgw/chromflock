@@ -51,22 +51,29 @@ chromflock string2any chromosome_labels.u8 uint8_t 1 1
 If you generate structures with this input, the first and third bead
 would be in contact in $`\leq`$ 40% of the structures. I.e., if you
 generate 3 structures the contact between the first and the third bead
-will be in contact in one of them.
+will be in contact in one of them. I.e., visualized with chimera, this
+is what you might get:
 
 <img src="doc/three_beads/cf_000001.png" width="30%"><img src="doc/three_beads/cf_000002.png" width="30%"><img src="doc/three_beads/cf_000003.png" width="30%">
+
+where connections between adjacent beads are shown in yellow, other
+connections in grey (e.g., the connection between the first and third
+bead in this example).
 
 ### From Hi-C data
 For real data you would start with Hi-C data, load it into
 Python/MATLAB or your language of preference and then convert the Hi-C
-counts to contact probabilities. Chromflock has a tool to do that
-which is called by commands like:
+counts to contact probabilities. Chromflock has a tool to convert raw
+counts to contact probabilities (note there are many alternative ways
+to do that) which has a command line interface like this:
 
 ``` shell
 chromflock hic2cpm --help # check this out first
 chromflock hic2cpm --hFile HiC-data.double --lFile chromosome_labels.u8 --nStruct 1000
 ```
 
-which might be useful.
+Note that you would still have to export the Hi-C data as raw doubles
+and write to disk.
 
 ## Example usage
 Here is how you use the input data that you have prepared to generate
