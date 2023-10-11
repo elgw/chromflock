@@ -22,10 +22,11 @@ Chromflock requires two data sources:
 Both files have to be written as raw data and the user, you, have to
 create them.
 
+### Example with two beads
 A really small, but correct input pair would be this:
 
 ``` math
-\mbox{contact\_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix}
+\mbox{contact\_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix},
 \mbox{labels} = \begin{bmatrix} 1 \\ 1 \end{bmatrix}
 ```
 
@@ -40,6 +41,13 @@ By command line you could create such input by:
 chromflock string2any contact_pairs.u32 uint32_t 0 1 # note 0-indexed
 chromflock string2any chromosome_labels.u8 uint8_t 1 1
 ```
+
+### Example with three beads
+``` math
+\mbox{CP} = \begin{bmatrix} 0 & 1 0.4\\ 1 & 0 & 1\\ 0.4 & 1 & 0 \end{bmatrix},
+\mbox{L} = \begin{bmatrix} 1 \\ 1 \\ 1 \end{bmatrix}
+```
+
 
 For real data you would start with Hi-C data, load it into
 Python/MATLAB or your language of preference and then convert the Hi-C
