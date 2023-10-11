@@ -103,7 +103,8 @@ static float norm3(const float * X)
 static void aflock_load_A(aflock * fc)
 {
 
-    fprintf(stdout, "Loading A: %s ... \n", fc->afname);
+    fprintf(stdout, "Loading the Contact Probability Matrix ...\n");
+    fprintf(stdout, "   '%s' ... \n", fc->afname);
 
     FILE * afile = fopen(fc->afname, "r");
 
@@ -165,7 +166,7 @@ static void aflock_load_A(aflock * fc)
         fprintf(stderr, "The matrix does not seem to be in square form\n");
         exit(EXIT_FAILURE);
     }
-    fprintf(stdout, "   .. contains [%zu x %zu] elements.\n", fc->nBeads, fc->nBeads);
+    fprintf(stdout, "   contains [%zu x %zu] elements.\n", fc->nBeads, fc->nBeads);
     return;
 }
 
@@ -280,7 +281,7 @@ int cmp_float(const void * A, const void * B)
  */
 static cf_structure * load_structures(aflock * fc)
 {
-    fprintf(stdout, "Initializing %zu structures ...\n", fc->nStruct);
+    fprintf(stdout, "Preparing to load %zu structures ...\n", fc->nStruct);
     cf_structure * flock = malloc(fc->nStruct*sizeof(cf_structure));
     assert(flock != NULL);
 
@@ -294,11 +295,12 @@ static cf_structure * load_structures(aflock * fc)
 
     if(fc->mode == MODE_INIT)
     {
-        printf("No coordinates to be loaded\n");
+        printf("   No coordinates to be loaded\n");
     }
     else
     {
-        printf("Loading coordinates ...\n");
+        printf("   Loading bead coordinates from %zu structures...\n",
+               fc->nStruct);
 
         for(size_t kk = 0; kk<fc->nStruct; kk++)
         {
@@ -310,7 +312,7 @@ static cf_structure * load_structures(aflock * fc)
 
     printf("\r");
 
-    fprintf(stdout, "   ... done.\n");
+    fprintf(stdout, "   done.\n");
     return flock;
 }
 
@@ -735,8 +737,6 @@ static void * final_tfun(void * data)
     const size_t N = td->nBeads;
 
     /* This thread sums up all individual W to td->W */
-    td->W = calloc(powl(N, 2), sizeof(double));
-    assert(td->W != NULL);
 
     if(td->thread == 0){
         printf("   Summing up wanted contacts ... \n");
@@ -747,7 +747,7 @@ static void * final_tfun(void * data)
     {
         uint64_t nCP;
         uint32_t * CP = contact_pairs_read(td->flock[pp].contact_pairs_file, &nCP);
-        uint8_t * W = contact_pairs_to_matrix(CP, nCP, N*N);
+        uint8_t * W = contact_pairs_to_matrix(CP, nCP, N);
         free(CP);
         for(size_t kk = 0; kk<N*N; kk++)
         {
@@ -756,10 +756,6 @@ static void * final_tfun(void * data)
         free(W);
     }
 
-    if(td->thread == 0)
-    {
-        printf("   Finding beads in contact ... \n");
-    }
     /* TODO:
      *
      * - dContact should be deduced from the dynamics program
@@ -1238,25 +1234,27 @@ static void chromflock_update_structures(aflock * fc, cf_structure * flock)
 }
 
 
+/** @brief Measure the final structures
+ *
+ * In the 'finalization' step, some properties of the structures are measured. They are not update.
+ *
+ * Loops over all the structures and creates a joint contact map.
+ * Note that the capture distance, cDistance is calculated as a
+ * function of the bead radius. The bead radius in this step does not
+ * have to match the one used in the simulations.  TODO: reduce memory
+ * usage of this part
+ */
+
 static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
 {
-    /* Loops over all the structures and
-     * creates a joint contact map.
-     * Note that the capture distance, cDistance is calculated
-     * as a function of the bead radius. The bead radius
-     * in this step does not have to match the one used in the simulations.
-     * TODO: reduce memory usage of this part
-     */
+    fprintf(stdout, "Finalization mode.\n");
 
-    fprintf(stdout, ">  Finalization mode.\n");
-
+    /* Will not work with more threads than structures */
     fc->nThreads > fc->nStruct ? fc->nThreads = fc->nStruct : 0;
 
     /* Generate contact probability matrix etc */
 
     const size_t nBeads = (1+fc->diploid)*fc->nBeads;
-    const size_t msize = (size_t) powl(nBeads,2)*sizeof(double);
-    //printf("msize=%zu\n", msize);
 
     pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
     assert(threads != NULL);
@@ -1265,18 +1263,18 @@ static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
 
     for(size_t kk = 0; kk<fc->nThreads; kk++)
     {
-        wtd[kk] = malloc(sizeof(final_tdata));
+        wtd[kk] = calloc(1, sizeof(final_tdata));
         assert(wtd[kk] != NULL);
         wtd[kk]->thread = kk;
         wtd[kk]->nThreads = fc->nThreads;
-        wtd[kk]->nBeads = (1+fc->diploid)*fc->nBeads;
+        wtd[kk]->nBeads = nBeads;
         wtd[kk]->nStruct = fc->nStruct;
-        wtd[kk]->M = malloc(msize);
+        wtd[kk]->M = calloc(nBeads*nBeads, sizeof(uint16_t));
         assert(wtd[kk]->M != NULL);
+        wtd[kk]->W = calloc(nBeads*nBeads, sizeof(uint16_t));
+        assert(wtd[kk]->W != NULL);
         wtd[kk]->flock = flock;
         wtd[kk]->fc = fc;
-
-        memset(wtd[kk]->M, 0, msize);
 
         pthread_create(&threads[kk],
                        NULL,
@@ -1291,36 +1289,61 @@ static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
 
     /* Summarize what the threads calculated from wtd */
 
-    /* Sum up all the wanted contacts */
-    double * Wtotal = calloc(powl(nBeads, 2), sizeof(double));
+    /* Sum up assigned contacts */
+    uint16_t * Wtotal = calloc(powl(nBeads, 2), sizeof(uint16_t));
     assert(Wtotal != NULL);
-
     for(size_t kk = 0; kk<fc->nThreads; kk++)
     {
         for(size_t mm = 0; mm<nBeads; mm++) {
             for(size_t nn = mm; nn<nBeads; nn++) {
-                Wtotal[mm*nBeads + nn] += (double) wtd[kk]->W[mm*nBeads + nn];
+                Wtotal[mm*nBeads + nn] += wtd[kk]->W[mm*nBeads + nn];
             }
         }
-        free(wtd[kk]->W);
+        free( wtd[kk]->W );
     }
 
-    /* Sum up all found contacts */
-    double * M = malloc(msize);
+    /* Copy to second triangle */
+    for(size_t mm = 0; mm < nBeads; mm++) {
+        for(size_t nn = mm; nn < nBeads; nn++) {
+            Wtotal[nn*nBeads + mm] = Wtotal[mm*nBeads + nn];
+        }
+    }
+
+    /* Write assigned contacts */
+    char Wtotal_name[] = "assigned_contacts.u16";
+    fprintf(stdout, "   Writing sum of assigned contacts to '%s'\n", Wtotal_name);
+    FILE * fid = fopen(Wtotal_name, "w");
+    if(fid == NULL)
+    {
+        fprintf(stderr, "Unable to open %s for writing\n", Wtotal_name);
+        exit(EXIT_FAILURE);
+    }
+    size_t nWritten = fwrite(Wtotal, sizeof(uint16_t), powl(nBeads,2), fid);
+    if(nWritten != powl(nBeads,2))
+    {
+        fprintf(stderr, "Failed to write to %s\n", Wtotal_name);
+        fprintf(stderr, "Wrote %zu elements. Intended to write %zu elements\n",
+                nWritten, (size_t) powl(nBeads,2));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fid);
+    free(Wtotal);
+
+
+    /* Sum up all found contacts based on proximity */
+    uint16_t * M = calloc(nBeads*nBeads, sizeof(uint16_t));
     assert(M != NULL);
-    memset(M, 0, msize);
     for(size_t kk = 0; kk<fc->nThreads; kk++)
     {
         for(size_t mm = 0; mm < nBeads; mm++) {
             for(size_t nn = mm; nn < nBeads; nn++) {
                 size_t idx1 = nn*nBeads + mm;
-                // size_t idx2 = mm*nBeads + nn;
                 M[idx1] += wtd[kk]->M[idx1];
             }
         }
-
         free(wtd[kk]->M);
     }
+
     /* Copy to second triangle */
     for(size_t mm = 0; mm < nBeads; mm++) {
         for(size_t nn = mm; nn < nBeads; nn++) {
@@ -1329,6 +1352,24 @@ static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
             M[idx2] = M[idx1];
         }
     }
+
+    /* Write contact map */
+    char mfilename[] = "measured_contacts.u16";
+    fprintf(stdout, "   Writing contact map to '%s'\n", mfilename);
+    FILE * mout = fopen(mfilename, "w");
+    if(mout == NULL)
+    {
+        printf("Failed to open output file %s\n", mfilename);
+        exit(EXIT_FAILURE);
+    }
+    size_t nwrite = fwrite(M, sizeof(uint16_t), powl(nBeads,2), mout);
+    if(nwrite != (size_t) powl(nBeads,2))
+    {
+        fprintf(stderr, "Failed to write to %s\n", mfilename);
+        exit(EXIT_FAILURE);
+    }
+    fclose(mout);
+    free(M);
 
     /* Sum up radial profile */
     double * rprof = malloc(nBeads*sizeof(double));
@@ -1356,19 +1397,11 @@ static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
     free(wtd);
     free(threads);
 
-    {
-        size_t nBeads = (fc->diploid + 1)*fc->nBeads;
-        for(size_t mm = 0; mm < nBeads; mm++) {
-            for(size_t nn = mm; nn < nBeads; nn++) {
-                Wtotal[nn*nBeads + mm] = Wtotal[mm*nBeads + nn];
-            }
-        }
-    }
+
+
 
     /* Write radial profile */
-    char * rproffname = malloc(1024*sizeof(char));
-    assert(rproffname != NULL);
-    sprintf(rproffname, "radial_profile.csv");
+    char rproffname[] = "radial_profile.csv";
     fprintf(stdout, "   Writing radial profile to: %s\n", rproffname);
     FILE * rproffile = fopen(rproffname, "w");
     for(size_t pp = 0; pp < nBeads; pp++)
@@ -1378,53 +1411,12 @@ static void chromflock_finalize_structures(aflock * fc, cf_structure * flock)
     free(rprof);
     fclose(rproffile);
 
-
-    /* Write contact map */
-    char * mfilename = malloc(1024*sizeof(char));
-    assert(mfilename != NULL);
-    sprintf(mfilename, "all_contacts.double");
-    fprintf(stdout, "   Writing contact map to: %s\n", mfilename);
-    FILE * mout = fopen(mfilename, "w");
-
-    if(mout == NULL)
-    {
-        printf("Failed to open output file %s\n", mfilename);
-        exit(1);
-    }
-
-    size_t nwrite = fwrite(M, sizeof(double), (size_t) powl(nBeads,2), mout);
-    printf("      Wrote %zu doubles \n", nwrite);
-    assert(nwrite == (size_t) powl(nBeads,2));
-    fclose(mout);
-
-    /* Write assigned contacts */
-    char Wtotal_name[] = "assigned_contacts.double";
-    fprintf(stdout, "   Writing sum of assigned contacts to %s\n", Wtotal_name);
-    FILE * fid = fopen(Wtotal_name, "w");
-    if(fid == NULL)
-    {
-        fprintf(stderr, "Unable to open %s for writing\n", Wtotal_name);
-        exit(EXIT_FAILURE);
-    }
-    size_t nWritten = fwrite(Wtotal, sizeof(double), powl(nBeads,2), fid);
-    if(nWritten != powl(nBeads,2))
-    {
-        fprintf(stderr, "Failed to write to %s\n", Wtotal_name);
-        fprintf(stderr, "Wrote %zu elements. Intended to write %zu elements\n",
-                nWritten, (size_t) powl(nBeads,2));
-        exit(EXIT_FAILURE);
-    }
-    fclose(fid);
-    free(Wtotal);
-
-    free(rproffname);
-    free(mfilename);
-
-    free(M);
+    /* Free up remaining data */
     for(size_t kk = 0; kk<fc->nStruct; kk++)
     {
         cf_structure_free(&flock[kk]);
     }
+
     return;
 }
 

@@ -143,8 +143,8 @@ typedef struct{
     aflock * fc;
     cf_structure * flock;
     // TODO: these do not need double, should be uint16_t
-    double * M; /* Counting number of captured contacts for this thread */
-    double * W; /* Sum of all individual W (uint8_t) for this thread */
+    uint16_t * M; /* Counting number of captured contacts for this thread */
+    uint16_t * W; /* Sum of all individual W (uint8_t) for this thread */
     double * rprof; /* Sum of radial values for this thread */
 } final_tdata;
 

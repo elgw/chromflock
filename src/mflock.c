@@ -1094,7 +1094,7 @@ int argparsing(optparam * p, int argc, char ** argv)
         { "contact-pairs", required_argument, NULL,  'p' },
         { "xFile",        required_argument, NULL,   'x' },
         { "rFile",        required_argument, NULL,   'r' },
-        { "lFile",        required_argument, NULL,   'L' },
+        { "labels",        required_argument, NULL,   'L' },
         { "outFolder",    required_argument, NULL,   'o' },
         // Settings
         { "maxiter",      required_argument, NULL,   'n' },
@@ -1423,12 +1423,9 @@ int param_init(optparam * p)
         exit(1);
     }
 
-    time_t current_time;
-    char* c_time_string;
-    current_time = time(NULL);
-    c_time_string = ctime(&current_time);
-    fprintf(p->logf, "\n%s\n", c_time_string);
-
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock started: %s\n", time_str);
+    free(time_str);
 
     return 0;
 }
@@ -1726,6 +1723,10 @@ int main(int argc, char ** argv)
         fclose(rpfile);
         free(rpfname);
     }
+
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
+    free(time_str);
 
     /* Close log file */
     fclose(p->logf);

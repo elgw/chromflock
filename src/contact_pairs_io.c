@@ -236,12 +236,14 @@ uint32_t * contact_pairs_read(const char * file,
                 exit(EXIT_FAILURE);
             }
         }
+        #if 0
         uint32_t max = CP[0];
         for(size_t kk = 0; kk< *nPairs*2; kk++)
         {
             CP[kk] > max ? max = CP[kk] : 0;
         }
         printf("    %lu Contact pairs. ( max bead id: %u)\n", *nPairs, max);
+        #endif
     }
 
 

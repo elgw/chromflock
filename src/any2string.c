@@ -47,7 +47,7 @@ int any2string(int argc, char ** argv)
         return EXIT_SUCCESS;
     }
 
-    if(strcmp(argv[1], "uint8_t") == 0)
+    if( (strcmp(argv[1], "uint8_t") == 0) | (strcmp(argv[1], "u8") == 0) )
     {
         FILE * fin = openfile(argv[2]);
         uint8_t byte = 0;
@@ -59,7 +59,19 @@ int any2string(int argc, char ** argv)
         return EXIT_SUCCESS;
     }
 
-    if(strcmp(argv[1], "uint32_t") == 0)
+    if( (strcmp(argv[1], "uint16_t") == 0 ) | (strcmp(argv[1], "u16") == 0) )
+    {
+        FILE * fin = openfile(argv[2]);
+        uint16_t token = 0;
+        while(fread(&token, sizeof(uint16_t), 1, fin) != 0)
+        {
+            printf("%u\n", token);
+        }
+        fclose(fin);
+        return EXIT_SUCCESS;
+    }
+
+    if( (strcmp(argv[1], "uint32_t") == 0) | (strcmp(argv[1], "u32") == 0) )
     {
         FILE * fin = openfile(argv[2]);
         uint32_t token = 0;

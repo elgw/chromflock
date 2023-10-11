@@ -83,7 +83,8 @@ src/any2string.c \
 src/oscp.c \
 src/sprite2cmap.c \
 obj/chromflock_init.o \
-obj/balance.o
+obj/balance.o \
+obj/cf_util.o
 
 
 ## Targets
@@ -100,7 +101,8 @@ src/cmmwrite.c \
 src/wio.c \
 src/hsvrgb.c \
 obj/ellipsoid.o \
-obj/contact_pairs_io.o
+obj/contact_pairs_io.o \
+obj/cf_util.o
 
 
 bin/mflock: $(mflock_files) makefile
@@ -126,3 +128,6 @@ obj/balance.o: src/balance.c
 
 obj/contact_pairs_io.o: src/contact_pairs_io.c
 	$(CC) -c $(CFLAGS) src/contact_pairs_io.c -o obj/contact_pairs_io.o
+
+obj/cf_util.o: src/cf_util.c src/cf_util.h
+	$(CC) -c $(CFLAGS) src/cf_util.c -o obj/cf_util.o

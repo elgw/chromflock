@@ -27,6 +27,7 @@
 #endif
 
 #include "cf_version.h"
+#include "cf_util.h"
 #include "cmmwrite.h"
 #include "ellipsoid.h"
 #include "functional.h"

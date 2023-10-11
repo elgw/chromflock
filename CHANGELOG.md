@@ -1,12 +1,48 @@
 # CHANGELOG
 
 ## 0.4.0
+This update breaks compatibility with older version since contacts for
+the structures are written as lists of contact pairs, replacing the
+contact indicator matrices used previously. This change does
+significantly reduce the storage required for a dataset and also
+reduces the processing times somewhat.
+
+The overall usage procedure should not be changed though. The typical
+chain of commands:
+
+```
+chromflock init
+edit chromflock_gen
+./chromflock_gen
+./chromflock_run
+```
+is the same.
+
+Parts of the code has been refactored to be easier to read. A larger
+part of the codebase is commented although far from all of it.
+
+makefile:
+- The `-fanalyzer` flag has been added to the debug builds. Currently
+  no warnings are issued for any of the binaries with GCC 11.4.
+
+aflock:
+- Unused command line arguments removed.
+- Output files have new names and format. `afock -F` does now produce:
+  `assigned_contacts.u16` and `measured_contacts.u16`.
+- Assigned contacts are stored as `contact-pairs.u32.gz` in the
+  structure folders.
+
 mflock:
+- Command line arguments changed.
 - Removed the option to set the simulation parameters from command line.
 - Reads/writes gz compressed contact pairs instead of the binary
   indication matrix (W.uint8).
 - [ ] Writes ISO time to log files.
 - [ ] Writes command line to log files.
+
+chromflock string2any/any2string
+- Added `uint16_t` and `uint32_t` to the list of supported data
+  types. Also short aliases supported: `u8`, `u16`, `u32`.
 
 ## 0.3.9
 - Compiles with **-pedantic** and **-fanalyzer** without any warnings
