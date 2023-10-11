@@ -1,5 +1,10 @@
-#include "mflock.h"
+/**
+ * @file mflock.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
 
+#include "mflock.h"
 
 static volatile int run = 1;
 

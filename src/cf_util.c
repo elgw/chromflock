@@ -1,3 +1,9 @@
+/**
+ * @file cf_util.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #include "cf_util.h"
 
 int limit_mem(size_t max_bytes)

@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* command line interface */
+/** @short command line interface */
 int string2any(int argc, char ** argv);
 
 #endif

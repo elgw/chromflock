@@ -1,3 +1,9 @@
+/**
+ * @file chromflock.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -10,11 +16,13 @@
 #include "any2string.h"
 #include "sprite2cmap.h"
 
+
 static int show_version(void)
 {
     printf("chromflock v.%s\n", cf_version);
     return EXIT_SUCCESS;
 }
+
 
 static int usage(void)
 {

@@ -1,3 +1,9 @@
+/**
+ * @file aflock.h
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #ifndef _aflock_h_
 #define _aflock_h_
 

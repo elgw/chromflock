@@ -1,3 +1,9 @@
+/**
+ * @file mflock.h
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #ifndef __mflock_h__
 #define __mflock_h__
 

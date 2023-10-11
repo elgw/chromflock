@@ -1,3 +1,9 @@
+/**
+ * @file any2string.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #include "any2string.h"
 
 /* Would be nice:

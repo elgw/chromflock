@@ -1,3 +1,9 @@
+/**
+ * @file cf_util.h
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #ifndef cf_util_h_
 #define cf_util_h_
 
