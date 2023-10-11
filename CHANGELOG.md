@@ -28,13 +28,13 @@ makefile:
   no warnings are issued for any of the binaries with GCC 11.4.
 
 aflock:
-- Unused command line arguments removed.
+- Removed unused command line arguments.
 - Output files have new names and format. `afock -F` does now produce:
   `assigned_contacts.u16` and `measured_contacts.u16`.
 - Assigned contacts are stored as `contact-pairs.u32.gz` in the
   structure folders.
-- RAM requirement reduced to approximately 1/4 of the previous due to
-  change of data types.
+- RAM requirements reduced to approximately 1/4 of the previous
+  version due to change of data types.
 
 mflock:
 - Command line arguments changed.
