@@ -48,7 +48,16 @@ chromflock string2any chromosome_labels.u8 uint8_t 1 1
 \mbox{L} = \begin{bmatrix} 1 \\ 1 \\ 1 \end{bmatrix}
 ```
 
+If you generate structures with this input, the first and third bead
+would be in contact in $`\leq`$ 40% of the structures. I.e., if you
+generate 3 structures the contact between the first and the third bead
+will be in contact in one of them.
 
+<img src="doc/three_beads/cf_000001.png" width="30%">
+<img src="doc/three_beads/cf_000002.png" width="30%">
+<img src="doc/three_beads/cf_000003.png" width="30%">
+
+### From Hi-C data
 For real data you would start with Hi-C data, load it into
 Python/MATLAB or your language of preference and then convert the Hi-C
 counts to contact probabilities. Chromflock has a tool to do that
