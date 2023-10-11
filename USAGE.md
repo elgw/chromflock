@@ -26,7 +26,7 @@ create them.
 A really small, but correct input pair would be this:
 
 ``` math
-\mbox{contact\_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix},
+\mbox{contact\_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix},\quad
 \mbox{labels} = \begin{bmatrix} 1 \\ 1 \end{bmatrix}
 ```
 
@@ -44,7 +44,7 @@ chromflock string2any chromosome_labels.u8 uint8_t 1 1
 
 ### Example with three beads
 ``` math
-\mbox{CP} = \begin{bmatrix} 0 & 1 & 0.4\\ 1 & 0 & 1\\ 0.4 & 1 & 0 \end{bmatrix},
+\mbox{CP} = \begin{bmatrix} 0 & 1 & 0.4\\ 1 & 0 & 1\\ 0.4 & 1 & 0 \end{bmatrix},\quad
 \mbox{L} = \begin{bmatrix} 1 \\ 1 \\ 1 \end{bmatrix}
 ```
 
