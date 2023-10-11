@@ -112,6 +112,7 @@ aflock_files = src/aflock.c \
 src/wio.c \
 src/oscp.c \
 obj/ellipsoid.o \
+obj/cf_util.o \
 obj/contact_pairs_io.o
 
 bin/aflock: $(aflock_files) makefile

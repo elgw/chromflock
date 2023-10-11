@@ -1,5 +1,31 @@
 #include "cf_util.h"
 
+int limit_mem(size_t max_bytes)
+{
+#ifdef __linux__
+    if(max_bytes==0)
+    {
+        struct sysinfo info;
+        if(sysinfo(&info))
+        {
+            fprintf(stderr, "sysinfo returned errno: %d\n", errno);
+            errno = 0;
+        }
+        max_bytes = info.mem_unit*info.freeram;
+    }
+    struct rlimit limit;
+
+    /* The limits are not really limits... */
+    getrlimit(RLIMIT_DATA, &limit);
+    limit.rlim_cur = max_bytes;
+    setrlimit(RLIMIT_DATA, &limit);
+    return EXIT_SUCCESS;
+#else
+    return EXIT_FAILURE;
+#endif
+}
+
+
 char * cf_timestr()
 {
     size_t len = 128;

@@ -27,6 +27,7 @@
 
 #include "contact_pairs_io.h"
 #include "cf_version.h"
+#include "cf_util.h"
 #include "ellipsoid.h"
 #include "oscp.h"
 #include "wio.h"
@@ -125,9 +126,9 @@ typedef struct{
     double * AD;
     size_t thread;
     size_t nThreads;
-    double th_low;
-    double th_high;
-    aflock * fc;
+    //double th_low;
+    //double th_high;
+    aflock * af;
     cf_structure * flock;
 } adstruct;
 
@@ -140,7 +141,7 @@ typedef struct{
     size_t nStruct;
     size_t nBeads;
 
-    aflock * fc;
+    aflock * af;
     cf_structure * flock;
     // TODO: these do not need double, should be uint16_t
     uint16_t * M; /* Counting number of captured contacts for this thread */
@@ -149,53 +150,118 @@ typedef struct{
 } final_tdata;
 
 
-// Initialize a new aflock object
-static aflock * aflock_init(void);
+/** @brief Initialize a new aflock object */
+static aflock *
+aflock_init(void);
+
 /* deallocate an aflock object */
-static void aflock_free(aflock *);
+static void
+aflock_free(aflock *);
 
-// Load all structures specified in fc->ffname
-static cf_structure * load_structures(aflock * fc);
-// Initialize a cf_structure object
-static void cf_structure_init(cf_structure * c, size_t nQ, size_t n);
-// Write a complete W matrix for a structure,
-// i.e., no update. Used in MODE_INIT only
+/** @brief Load the contact probability matrix shared between the structures */
+static void
+aflock_load_contact_probabilities(aflock * af);
 
-static void cf_structure_free(cf_structure * c);
-static int cf_structure_load_X(aflock * fc, cf_structure * c);
+/** @brief Load all structures specified in af->ffname */
+static cf_structure *
+aflock_load_structures(aflock * af);
 
-// The main functionality,
+/** @brief Sets both the bead radius and the volume quotient based on
+ * one of them */
+static void aflock_set_bead_radius(aflock * af);
 
-/* Update/reassign radial constraints among the chromflock structures
+/** @brief Parse the command line arguments
+ *
+ * @return EXIT_SUCCESS or EXIT_FAILURE
+ */
+static int
+aflock_parse_command_line(aflock * p, int argc, char ** argv);
+
+/** @brief Show the command line options */
+static void
+aflock_usage();
+
+
+/** @brief Load the coordinates of all structures */
+static int
+aflock_load_coordinates(aflock * af, cf_structure * c);
+
+/** @brief Initialize a cf_structure object */
+static void
+cf_structure_init(cf_structure * c, size_t nQ, size_t n);
+
+/** @brief free a cf_structure */
+static void
+cf_structure_free(cf_structure * c);
+
+
+/** @brief Create one folder per structure
+
+ * Creates a folder per structure and places the contacts-pairs there.
+ * This stage only assigns the contacts with theta == 1, hence the
+ * contact pairs are identical for all structures.
+ */
+static void aflock_init_structures(aflock * af, cf_structure * flock);
+
+/** @brief Update structures by assigning more contacts to them
+ *
+ * Or, possibly shuffle around contacts withing the given threshold range.
+ */
+static void aflock_update_structures(aflock * af, cf_structure * flock);
+
+/** @brief Measure the final structures
+ *
+ * In the 'finalization' step, some properties of the structures are measured. They are not update.
+ *
+ * Loops over all the structures and creates a joint contact map.
+ * Note that the capture distance, cDistance is calculated as a
+ * function of the bead radius. The bead radius in this step does not
+ * have to match the one used in the simulations.  TODO: reduce memory
+ * usage of this part
+ */
+static void aflock_finalize_structures(aflock * af, cf_structure * flock);
+
+/* @brief Find what beads that might accept a radial contraint
+ *
+ * Similar to how contacts are handed out. Used when aflock is called
+ * with --rpos set.
+ *
+ * Update/reassign radial constraints among the chromflock structures
  * only radial positions with a probability of being used < th_high, and >= th_low
  * are used
- */
-static void flock_updateR(aflock * fc, cf_structure * flock, double th_high, double th_low);
+ *
+ * Consider all positions in PR where p<th_high and p>= th_low
+ * For each beads:
+ * hand the constrains to the structures that has the closest radii already
+ * similar to how the contact restraints are handled
+ *
+ * To start with, all coordinates should already be available in flock.
+ * Load preferred radial positions R
+ * Load probability/proportion of structures having the constraint into PR */
+static void flock_updateR(aflock * af, cf_structure * flock, double th_high, double th_low);
+
 
 /** @brief Assign new contacts and write them to disk
  *
- * Write a new W matrix to disk, setting contacts between beads to
- * 1 if the distance is below the activation distance given by AD
+ * Assigns new contact constraints to the structure c based on
+ * the activation distance AD and the contact_probabilities in af->A
  *
- * This will read an existing W matrix and only update contacts for which
- * A is in the threshold range.
+ * Finally writes the updated contact constraints to disk.
+ *
  * */
-static void struct_write_W_AD(aflock * fc,
-                              cf_structure * c,
-                              double * AD,
-                              double th_high,
-                              double th_low);
+static void
+cf_structure_assign_contacts(cf_structure * c,
+                             aflock * af,
+                             double * AD);
 
-// Float comparison for quicksort
+
+/* Float comparison for quicksort */
 int cmp_float(const void * A, const void * B);
 
-/* Load the contact probability matrix shared between the structures */
-static void aflock_load_A(aflock * fc);
 
 static float eudist3(const float * A, const float * B);
 static float norm3(const float * X);
 
-static int argparsing(aflock * p, int argc, char ** argv);
-static void usage();
+
 
 #endif
