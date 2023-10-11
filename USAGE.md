@@ -25,7 +25,7 @@ create them.
 A really small, but correct input pair would be this:
 
 ``` math
-\mbox{contact_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix}
+\mbox{contact\_probabilities} = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix}
 \mbox{labels} = \begin{bmatrix} 1 \\ 1 \end{bmatrix}
 ```
 
