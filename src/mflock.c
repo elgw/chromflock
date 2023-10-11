@@ -1366,7 +1366,7 @@ optparam *  param_alloc(void)
     return p;
 }
 
-int param_init(optparam * p)
+int param_init(optparam * p, int argc, char ** argv)
 {
 
     struct stat st;
@@ -1426,6 +1426,14 @@ int param_init(optparam * p)
     char * time_str = cf_timestr();
     fprintf(p->logf, "\nmflock started: %s\n", time_str);
     free(time_str);
+
+    fprintf(p->logf, "CMD: ");
+    for(int kk = 0; kk<argc; kk++)
+    {
+        fprintf(p->logf, "%s ", argv[kk]);
+    }
+    fprintf(p->logf, "\n");
+    fflush(p->logf);
 
     return 0;
 }
@@ -1605,7 +1613,7 @@ int main(int argc, char ** argv)
         break;
     }
 
-    param_init(p);
+    param_init(p, argc, argv);
 
     if(p->contact_pairs_file != NULL)
     {

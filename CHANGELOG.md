@@ -37,8 +37,8 @@ mflock:
 - Removed the option to set the simulation parameters from command line.
 - Reads/writes gz compressed contact pairs instead of the binary
   indication matrix (W.uint8).
-- [ ] Writes ISO time to log files.
-- [ ] Writes command line to log files.
+- Writes ISO time to log files at start and finish.
+- Writes the command line to the log file.
 
 chromflock string2any/any2string
 - Added `uint16_t` and `uint32_t` to the list of supported data
