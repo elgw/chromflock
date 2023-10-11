@@ -53,9 +53,7 @@ would be in contact in $`\leq`$ 40% of the structures. I.e., if you
 generate 3 structures the contact between the first and the third bead
 will be in contact in one of them.
 
-<img src="doc/three_beads/cf_000001.png" width="30%">
-<img src="doc/three_beads/cf_000002.png" width="30%">
-<img src="doc/three_beads/cf_000003.png" width="30%">
+<img src="doc/three_beads/cf_000001.png" width="30%"><img src="doc/three_beads/cf_000002.png" width="30%"><img src="doc/three_beads/cf_000003.png" width="30%">
 
 ### From Hi-C data
 For real data you would start with Hi-C data, load it into
