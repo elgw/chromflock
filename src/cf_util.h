@@ -67,4 +67,12 @@ char * cf_timestr();
  */
 int limit_mem(size_t max_bytes);
 
+
+/* @brief delta t
+ *
+ * Returns the difference in time (s)
+ */
+double clockdiff(struct timespec* start,
+                 struct timespec * finish);
+
 #endif

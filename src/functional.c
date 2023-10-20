@@ -2,7 +2,8 @@
 
 #define INLINED inline __attribute__((always_inline))
 
-INLINED static void vec3_minus(const double * A, const double * B, double * C)
+INLINED static void vec3_minus(const double * A,
+                               const double * B, double * C)
 { // C = A-B
     for(int kk = 0; kk<3; kk++)
     {
@@ -111,13 +112,8 @@ double errRepulsion(double * restrict D,
     // For 33000 points: 15 about 30% faster than using 9
 
     size_t nH = pow(nDiv, 3);
-    uint32_t * S = malloc(nH*sizeof(uint32_t));
+    uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);
-
-    for(size_t kk = 0; kk<nH; kk++)
-    {
-        S[kk] = 0;
-    }
 
     for(size_t kk = 0; kk<N; kk++)
     {
@@ -246,13 +242,8 @@ static double gradRepulsion(double * restrict D,
         nDiv = 15;
     }
     size_t nH = pow(nDiv, 3);
-    uint32_t * S = malloc(nH*sizeof(uint32_t));
+    uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);
-
-    for(size_t kk = 0; kk<nH; kk++)
-    {
-        S[kk] = 0;
-    }
 
     for(size_t kk = 0; kk<N; kk++)
     {

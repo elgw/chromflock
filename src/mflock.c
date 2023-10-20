@@ -8,10 +8,9 @@
 
 static volatile int run = 1;
 
-#define INLINED static inline __attribute__((always_inline))
-
-static void luaerror (lua_State *L, const char *fmt, ...) {
-    /* show lua error string */
+/* show lua error string */
+static void luaerror(lua_State *L, const char *fmt, ...)
+{
     va_list argp;
     va_start(argp, fmt);
     vfprintf(stderr, fmt, argp);
@@ -21,8 +20,10 @@ static void luaerror (lua_State *L, const char *fmt, ...) {
     exit(EXIT_FAILURE);
 }
 
-static double getglobfloat (lua_State *L, const char *var) {
-    /* get global variable by name */
+/* get global variable by name from lua */
+static double lua_get_float (lua_State *L,
+                             const char *var)
+{
     int isnum;
     double result;
     lua_getglobal(L, var);
@@ -34,7 +35,8 @@ static double getglobfloat (lua_State *L, const char *var) {
     return result;
 }
 
-static int getglobint (lua_State *L, const char *var) {
+/* get an integer from lua */
+static int lua_get_int (lua_State *L, const char *var) {
     /* get global variable by name */
     int isnum, result;
     lua_getglobal(L, var);
@@ -51,12 +53,6 @@ static void stoprun(int ignore)
     run = 0 + 0*ignore;
 }
 
-static double clockdiff(struct timespec* start, struct timespec * finish)
-{
-    double elapsed = (finish->tv_sec - start->tv_sec);
-    elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
-    return elapsed;
-}
 
 static double norm3(const double * restrict X)
 {
@@ -66,14 +62,14 @@ static double norm3(const double * restrict X)
     return sqrt(n);
 }
 
-INLINED double dmax(double a, double b)
+static double dmax(double a, double b)
 {
     if(a>b)
         return a;
     return b;
 }
 
-INLINED double dmin(double a, double b)
+static double dmin(double a, double b)
 {
     if(a<b)
         return a;
@@ -82,62 +78,9 @@ INLINED double dmin(double a, double b)
 
 typedef struct {
     double * X;
-    optparam * p;
+    mflock_t * p;
 } solve_t_args;
 
-void radpos(double * X, optparam * p, FILE * f)
-{
-    /* Show radial positions of each chromosome, using centre of mass
-     * an alternative would be to show mean radius. */
-
-    if(p->L == NULL)
-    {
-        printf("No L!\n");
-        return;
-    }
-    // mX mean X positions
-    size_t size_mX = 3*256*sizeof(double);
-    double * mX = malloc(size_mX);
-    assert(mX != NULL);
-    memset(mX, 0, size_mX);
-    // Number of points per label
-    size_t * nL = malloc(256*sizeof(size_t));
-    assert(nL != NULL);
-    memset(nL, 0, 256*sizeof(size_t));
-
-    // Get centroid for each chromosome/label
-    for(size_t kk = 0 ; kk < p->N ; kk++)
-    {
-        size_t label = p->L[kk];
-        nL[label]++;
-        for(size_t idx = 0; idx < 3 ; idx ++)
-        {
-            mX[3*label+idx] += X[3*kk+idx];
-        }
-    }
-
-    // Print the results
-    fprintf(f, "chr, com_x, com_y, com_z, r\n");
-    for(size_t ll = 0; ll < 256; ll++)
-    {
-        if(nL[ll] > 0)
-        {
-            for(size_t idx = 0; idx<3; idx++)
-            {
-                mX[3*ll+idx]/=nL[ll];
-            }
-            fprintf(f, "%3zu,% 2.3f, % 2.3f, % 2.3f, %.3f\n", ll,
-                    mX[3*ll],
-                    mX[3*ll+1],
-                    mX[3*ll+2],
-                    norm3(mX+3*ll));
-        }
-    }
-
-    free(mX);
-    free(nL);
-    return;
-}
 
 /* when usleep is called from the lua script
  * This is useful when visualizations are enabled
@@ -167,16 +110,11 @@ static int usleep_lua(lua_State * L)
 
 }
 
-INLINED double eudist3p2(const double * A, const double * B)
-{
-    /* Euclidean distance between two 3D-vectors */
-    return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
-}
 
-INLINED double eudist3(const double * A, const double * B)
+/* Euclidean distance between two 3D-vectors */
+static double eudist3p2(const double * A, const double * B)
 {
-    /* Euclidean distance between two 3D-vectors */
-    return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
+    return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
 }
 
 
@@ -189,7 +127,7 @@ INLINED double eudist3(const double * A, const double * B)
  * TODO: Unnecessary to allocate/free things here and to count the
  * number of beads per chromosome.
  */
-void comforce(optparam * restrict p,
+void comforce(mflock_t * restrict p,
               const double * restrict X,
               double * restrict G)
 {
@@ -251,18 +189,13 @@ void comforce(optparam * restrict p,
     return;
 }
 
-/**
- * @breif The beads dynamics main loop
- * @param X the coordinates of each bead
- * @param p the settings
- * @param Fb: the Brownian force
- */
-int dynamic(double * restrict X,
-            optparam * restrict p,
-            double Fb)
-{
 
-    normal_setup();  /* set up fast prng */
+static int mflock_dynamics(double * restrict X,
+                           mflock_t * restrict p,
+                           double Fb)
+{
+    /* set up fast prng in normal.h before calling normal() */
+    normal_setup();
 
     /* Prepare settings */
     size_t maxiter = p->maxiter;
@@ -292,15 +225,15 @@ int dynamic(double * restrict X,
     clock_gettime(CLOCK_MONOTONIC, &ta);
 
     /* Gradient */
-    double * restrict g = malloc(p->N*3*sizeof(double));
-    memset(g, 0, p->N*3*sizeof(double)); /* zero initial velocity */
-    // Velocity
-    double * restrict v = malloc(p->N*3*sizeof(double));
-    memset(v, 0, p->N*3*sizeof(double)); /* zero initial velocity */
+    double * restrict g = calloc(p->N*3, sizeof(double));
+
+    /* Velocity */
+    double * restrict v = calloc(p->N*3, sizeof(double));
+
+    /* Set previous position, initially to be the current position,
+       i.e. initial velocity will be 0 */
     double * restrict Xm = malloc(3*p->N*sizeof(double));
-    /* Set last position to be the current position, i.e. initial velocity will be 0 */
-    for(size_t pp = 0; pp< 3*p->N ; pp++)
-    { Xm[pp] = X[pp]; }
+    memcpy(Xm, X, 3*p->N*sizeof(double));
 
     double error = 9e99;
     double gnorm = 9e99;
@@ -311,18 +244,16 @@ int dynamic(double * restrict X,
 
     lua_State *L = NULL;
 
-    if(p->luaDynamics)
-    {
-        L = luaL_newstate();
-        luaL_openlibs(L); // might not be needed, performance penalty?
-        lua_register(L, "usleep", usleep_lua);
 
-        if (luaL_dofile(L, p->luaDynamicsFile))
-            luaerror(L, "cannot run config. file: %s", lua_tostring(L, -1));
-    }
+    L = luaL_newstate();
+    luaL_openlibs(L); // might not be needed, performance penalty?
+    lua_register(L, "usleep", usleep_lua);
+
+    if (luaL_dofile(L, p->luaDynamicsFile))
+        luaerror(L, "cannot run config. file: %s", lua_tostring(L, -1));
+
 
     int luaquit = 0;
-
     size_t iter = 0;
     do{
         iter++;
@@ -333,12 +264,6 @@ int dynamic(double * restrict X,
          *
          * Theses schemes typically includes some heuristics to avoid local minima
          */
-
-        if(p->luaDynamics == 0)
-        {
-            fprintf(stderr, "luaDynamics == 0\n");
-            exit(EXIT_FAILURE);
-        }
 
         /* Settings from lua script */
         //     printf("Getting settings from lua script: %s\n", p->luaDynamicsFile);
@@ -353,14 +278,14 @@ int dynamic(double * restrict X,
                      lua_tostring(L, -1));
 
         /* retrieve result */
-        fconf.kDom = getglobfloat(L, "kDom");
-        fconf.kVol = getglobfloat(L, "kVol");
-        fconf.kInt = getglobfloat(L, "kInt");
-        fconf.kRad = getglobfloat(L, "kRad");
-        p->compress = getglobfloat(L, "kCom");
-        Fb = getglobfloat(L, "fBrown");
-        luaquit = getglobint(L, "quit");
-        fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
+        fconf.kDom = lua_get_float(L, "kDom");
+        fconf.kVol = lua_get_float(L, "kVol");
+        fconf.kInt = lua_get_float(L, "kInt");
+        fconf.kRad = lua_get_float(L, "kRad");
+        p->compress = lua_get_float(L, "kCom");
+        Fb = lua_get_float(L, "fBrown");
+        luaquit = lua_get_int(L, "quit");
+        fconf.dInteraction = fconf.r0 * lua_get_float(L, "dInteraction");
         if(p->verbose > 10)
         {
             printf("kInteraction: %f\n", fconf.kInt);
@@ -507,11 +432,8 @@ int dynamic(double * restrict X,
     return 0;
 }
 
-/** @brief Report on success to log and screen
- *
- * @todo Time in ISO format.
- */
-void param_summary(optparam * p, const double * restrict X)
+
+void mflock_summary(mflock_t * p, const double * restrict X)
 {
     assert(p->N>0);
 
@@ -562,13 +484,14 @@ void param_summary(optparam * p, const double * restrict X)
         logwrite(p, 0, "abnormal exit (Ctrl+c was pressed?)\n");
     }
 
+    char * timestr = cf_timestr();
+    logwrite(p, 2, "Finished at: %s\n", timestr);
+    free(timestr);
+
 }
 
-/** @brief Read contact pairs from a binary file
-    Sets p->I (the contacts) and p->NI (number of contact pairs)
-    @return - Nothing, but aborts the program on failure.
-*/
-void param_read_contact_pairs(optparam * p)
+
+static void mflock_read_contact_pairs(mflock_t * p)
 {
     logwrite(p, 1, "Reading pairwise interactions from %s\n",
              p->contact_pairs_file);
@@ -585,92 +508,7 @@ void param_read_contact_pairs(optparam * p)
     return;
 }
 
-/** @brief Read binary indication matrix.
-
-    Read the uint8 matrix, typically W.uint8, and set p->I to the
-    contact pairs that can be found,
-    p->I = [ a1, a2
-    b1, b2,
-    ...
-    ]
-    such that a1 < a2, b1 < b2 etc.
-    also set p->NI
-    also set p->N
-    depreciated. Use param_read_contact_pairs
-*/
-void param_readW(optparam * p)
-{
-
-    logwrite(p, 1, "Reading pairwise interactions from %s\n", p->wfname);
-
-    size_t fsize = 0;
-    uint8_t * W = wio_read(p->wfname, &fsize);
-    if(fsize == 0)
-    {
-        printf("%s/%d Failed reading %s!\n",
-               __FILE__,  __LINE__, p->wfname);
-        exit(EXIT_FAILURE);
-    }
-
-    logwrite(p, 1, " W = [ %d, %d, %d, %d, ..., %d, %d, %d, %d]\n",
-             (int) W[0],
-             (int) W[1],
-             (int) W[2],
-             (int) W[3],
-             W[fsize-4],
-             W[fsize-3],
-             W[fsize-2],
-             W[fsize-1]);
-
-    // Set the number of elements
-    p->N = (size_t) sqrt(fsize);
-    assert(p->N*p->N == fsize);
-    logwrite(p, 1, " %zu points\n", p->N);
-
-    // Initiate the list with pairs in contact
-    // I.e. p->I and p->NI
-
-    // Count them
-    size_t nPairs = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
-    {
-        for(size_t ll = kk+1; ll<p->N; ll++)
-        {
-            if(W[kk+ll*p->N] == 1)
-            {
-                nPairs++;
-            }
-        }
-    }
-
-    logwrite(p, 1, " Found %zu interaction pairs\n", nPairs);
-
-    if(nPairs > 12*p->N)
-    {
-        logwrite(p, 0, "more than 12 pairs per bead in average!\n");
-    }
-
-    p->NI = nPairs;
-    p->I = malloc(nPairs*2*sizeof(uint32_t));
-    assert(p->I != NULL);
-
-    // Construct the list
-    size_t writepos = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
-        for(size_t ll = kk+1; ll<p->N; ll++)
-        {
-            if(W[kk+ll*p->N] == 1)
-            {
-                p->I[writepos++] = kk;
-                p->I[writepos++] = ll;
-            }
-        }
-    printf(" ok\n");
-    free(W);
-    return;
-}
-
-double * init_X(optparam * p)
+double * mflock_init_coordinates(mflock_t * p)
 {
     double * X = NULL;
 
@@ -679,15 +517,15 @@ double * init_X(optparam * p)
     {
         X = malloc(3*p->N*sizeof(double));
         assert(X != NULL);
-        if(param_readX(p, X) != 0)
+        if(mflock_load_coordinates(p, X) != 0)
         {
             logwrite(p, 2, "Could not open x-file, starting from random\n");
             free(X);
-            X=NULL;
+            X = NULL;
         }
     }
 
-    if(X==NULL)
+    if(X == NULL)
     {
         p->newx = 1;
         logwrite(p, 1, "Using random initialization for X\n");
@@ -718,11 +556,9 @@ double * init_X(optparam * p)
     return X;
 }
 
-int param_readL(optparam * p)
-{
-    /* Read label matrix pointed to by p->lfname
-     */
 
+static int mflock_load_bead_labels(mflock_t * p)
+{
     if(p->lfname == NULL)
     {
         logwrite(p, 1, "No L-file specified\n");
@@ -761,11 +597,10 @@ int param_readL(optparam * p)
     return 0;
 }
 
-int param_readR(optparam * p)
+
+int mflock_load_radial_constraints(mflock_t * p)
 {
-    /* Read GPSeq radius values as binary double.
-     * If that does not work, try as text, one value per line
-     */
+
     if(p->rfname == NULL)
     {
         logwrite(p, 1, "No radial preferences to read\n");
@@ -820,15 +655,10 @@ int param_readR(optparam * p)
     return EXIT_SUCCESS;
 }
 
-/* Write coordinates to disk, also write the column names
-   to the log file  */
-void param_dumpX(optparam * p, double * X)
+
+void mflock_save_coordinates(mflock_t * p, double * X)
 {
     size_t N = p->N;
-
-    int write_R = 0;
-    if(p->R != NULL)
-        write_R = 1;
 
     if(run == 1)
     {
@@ -849,10 +679,6 @@ void param_dumpX(optparam * p, double * X)
     {
         logwrite(p, 1, "Columns: x, y, z, r");
 
-        if(write_R)
-        {
-            logwrite(p, 1, ", R");
-        }
         logwrite(p, 1, "\n");
     }
 
@@ -869,10 +695,6 @@ void param_dumpX(optparam * p, double * X)
         }
 
         fprintf(f, "%f, %f, %f, %f", X[3*kk], X[3*kk+1], X[3*kk+2], radius);
-        if(write_R)
-        {
-            fprintf(f, ", %f", p->R[kk]);
-        }
 
         fprintf(f, "\n");
     }
@@ -880,7 +702,7 @@ void param_dumpX(optparam * p, double * X)
     return;
 }
 
-void param_show(optparam * p, FILE * f)
+void mflock_show(mflock_t * p, FILE * f)
 {
     double volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
 
@@ -894,25 +716,7 @@ void param_show(optparam * p, FILE * f)
     fprintf(f, " >> Parameters:\n");
     fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->N, 3*p->N);
     fprintf(f, "    - Model parameters\n");
-    if(p->luaDynamics == 0)
-    {
-        fprintf(f, "    Spring constant volume exclusion (repulsion): %f\n", p->kVol);
-        fprintf(f, "    Spring constant bead interactions (attraction): %f\n", p->kInt);
-        fprintf(f, "    Spring constant domain confinement: %f\n", p->kDom);
-        fprintf(f, "    Spring constant radial positioning: %f\n", p->kRad);
-        fprintf(f, "    Max iterations: %zu\n", p->maxiter);
-        fprintf(f, "    Max time: %zu (s)\n", p->maxtime);
-        if(p->compress == 1)
-        {
-            fprintf(f, "    Compression: on\n");
-        } else {
-            fprintf(f, "    Compression: off\n");
-        }
-    }
-    if(p->luaDynamics == 1)
-    {
-        fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
-    }
+    fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
     fprintf(f, "    Bead radius %f (vol. occ. %f)\n", p->r0, volocc);
     fprintf(f, "    - Optimization parameters\n");
     //fprintf(f, "# Optimization: simulated annealing / molecular dynamics\n");
@@ -1025,24 +829,25 @@ void dump_lua_dynamics(char * luafile)
                          luafun,
                          lua_tostring(L, -1));
 
-            double kDom = getglobfloat(L, "kDom");
-            double kVol = getglobfloat(L, "kVol");
-            double dInt = getglobfloat(L, "dInteraction");
-            double kInt = getglobfloat(L, "kInt");
-            double kRad = getglobfloat(L, "kRad");
-            double compress = getglobfloat(L, "kCom");
-            double Fb = getglobfloat(L, "fBrown");
-            luaquit = getglobint(L, "quit");
-            //fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
+            double kDom = lua_get_float(L, "kDom");
+            double kVol = lua_get_float(L, "kVol");
+            double dInt = lua_get_float(L, "dInteraction");
+            double kInt = lua_get_float(L, "kInt");
+            double kRad = lua_get_float(L, "kRad");
+            double compress = lua_get_float(L, "kCom");
+            double Fb = lua_get_float(L, "fBrown");
+            luaquit = lua_get_int(L, "quit");
+
             printf("%d, %zu, %f, %f, %f, %f, %f, %f, %f\n",
                    newx, iter, kDom, kVol, kInt, dInt, kRad, compress, Fb);
         } while(luaquit == 0);
+
         lua_close(L);
     }
     return;
 }
 
-void usage()
+static void usage()
 {
     printf("Note that mflock typically is run via chromflock\n"
            "see man chromflock for more details\n");
@@ -1083,9 +888,8 @@ void usage()
 #define ARGS_ERR 1
 #define ARGS_QUIT 2
 
-int argparsing(optparam * p, int argc, char ** argv)
+static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 {
-
     /* Specifications of ellipsoid */
     double ea = -1;
     double eb = -1;
@@ -1142,7 +946,7 @@ int argparsing(optparam * p, int argc, char ** argv)
             return ARGS_QUIT;
         case 'd':
             printf("Defaults:\n");
-            param_show(p, stdout);
+            mflock_show(p, stdout);
             return ARGS_QUIT;
         case 'w':
             if(p->wfname != NULL)
@@ -1207,10 +1011,9 @@ int argparsing(optparam * p, int argc, char ** argv)
             strcpy(p->ofoldername, optarg);
             break;
         case 'l':
-            p->luaDynamics = 1;
-            p->luaDynamicsFile = malloc(strlen(optarg) + 1);
+            free(p->luaDynamicsFile);
+            p->luaDynamicsFile = strdup(optarg);
             assert(p->luaDynamicsFile != NULL);
-            strcpy(p->luaDynamicsFile, optarg);
             break;
         case 'M':
             dump_lua_dynamics(optarg);
@@ -1240,7 +1043,7 @@ int argparsing(optparam * p, int argc, char ** argv)
         }
     }
 
-    if(p->luaDynamics == 0)
+    if(p->luaDynamicsFile == NULL)
     {
         fprintf(stderr, "--dconf not specified\n");
         exit(EXIT_FAILURE);
@@ -1299,20 +1102,20 @@ int argparsing(optparam * p, int argc, char ** argv)
     }
     if(efail)
     {
-        printf("ERROR: Ellipsoidal geometry requires 1=ea>=eb>=ec>0\n\n");
+        printf("ERROR: Ellipsoidal geometry requires 1 = ea >= eb >= ec > 0"
+               " \n\n");
         return ARGS_ERR;
     }
 
     return ARGS_OK;
 }
 
-optparam *  param_alloc(void)
+mflock_t *  mflock_new(void)
 {
-    optparam * p = calloc(1, sizeof(optparam));
+    mflock_t * p = calloc(1, sizeof(mflock_t));
     assert(p != NULL);
 
     struct timespec ts;
-    //  timespec_get(&ts, TIME_UTC);
     clock_gettime(CLOCK_REALTIME, &ts);
 
     p->rseed = time(NULL)*getpid()*ts.tv_nsec;
@@ -1320,35 +1123,18 @@ optparam *  param_alloc(void)
     p->maxiter = 1000000; // iterations
     p->maxtime = 60*60*10; // seconds
 
-    p->grad_final = 0;
-    p->iter_final = 0;
-    p->time_final = 0;
-
     p->kVol = 1;
     p->kInt = 1;
     p->kDom = 1;
-    p->kRad = 0;
     p->r0 = -1;
     p->volq = 0.2;
 
-    p->N = 0;
-    p->I = NULL;
-    p->NI = 0;
-    p->R = NULL;
     p->verbose = 1;
-    p->compress = 0;
-    p->cmmz = 0;
-    p->liveView = 0;
-
-    p->L = NULL;
-
-    p->E = NULL;
     p->newx = 1;
 
-    // Create a suggestion for the output folder
+    /* Create a suggestion for the output folder */
     if(p->ofoldername == NULL)
     {
-
         p->ofoldername = malloc(1024*sizeof(char));
         assert(p->ofoldername != NULL);
 
@@ -1371,9 +1157,8 @@ optparam *  param_alloc(void)
     return p;
 }
 
-int param_init(optparam * p, int argc, char ** argv)
+static int mflock_init(mflock_t * p, int argc, char ** argv)
 {
-
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
 
@@ -1425,7 +1210,7 @@ int param_init(optparam * p, int argc, char ** argv)
     if(p->logf== NULL)
     {
         printf("Failed to open log file\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     char * time_str = cf_timestr();
@@ -1444,7 +1229,7 @@ int param_init(optparam * p, int argc, char ** argv)
 }
 
 
-void param_free(optparam * p)
+void mflock_free(mflock_t * p)
 {
     free(p->R);
     free(p->I);
@@ -1465,18 +1250,19 @@ void param_free(optparam * p)
 }
 
 
-void param_validate(optparam * p)
+static void mflock_validate(mflock_t * p)
 {
+    int quit = 0;
     if(p->N == 0)
     {
-        fprintf(stderr, "p->N = 0\nCheck the size of the W-matrix\n");
-        exit(1);
+        fprintf(stderr, "mflock error: No beads!\n\n");
+        quit = 1;
     }
 
     if(p->logf == NULL)
     {
-        fprintf(stderr, "p->logf = NULL\nThis indicates that the log file could not be opened\n");
-        exit(1);
+        fprintf(stderr, "mflock error: No log file available\n\n");
+        quit = 1;
     }
 
     if(p->r0 < 0)
@@ -1499,9 +1285,14 @@ void param_validate(optparam * p)
         assert(fabs(Vbeads/Vd - vq)<1e-5);
 #endif
     }
+
+    if(quit)
+    {
+        exit(EXIT_FAILURE);
+    }
 }
 
-void logwrite(optparam * p, int level, const char *fmt, ...)
+void logwrite(mflock_t * p, int level, const char *fmt, ...)
 {
 
     if(p->verbose >= level)
@@ -1526,7 +1317,7 @@ void logwrite(optparam * p, int level, const char *fmt, ...)
 }
 
 
-int param_readX(optparam * p, double * X)
+int mflock_load_coordinates(mflock_t * p, double * X)
 {
 
     //  fprintf(stdout, "Reading X-data from %s\n", p->xfname);
@@ -1563,35 +1354,10 @@ int param_readX(optparam * p, double * X)
 }
 
 
-void optimize(double * restrict X, optparam * restrict p)
-{
-    if(p->luaDynamics == 0)
-    {
-        double Fb = .7;
-        while(Fb>0.1)
-        {
-            dynamic(X, p, Fb);
-            Fb = Fb*.7;
-        }
-        dynamic(X, p, 0);
-
-        if(p->compress == 1)
-        {
-            printf("Running again with compression off (relaxation)\n");
-            p->compress = 0;
-            dynamic(X, p, 0);
-        }
-    } else {
-        dynamic(X, p, 0); /* Default way */
-    }
-
-}
-
-
 void * solve_t(void * args)
 {
     solve_t_args * sargs = (solve_t_args *) args;
-    optimize(sargs->X, sargs->p);
+    mflock_dynamics(sargs->X, sargs->p, 0);
     return NULL;
 }
 
@@ -1601,59 +1367,42 @@ int main(int argc, char ** argv)
     time_t starttime, nowtime;
     time(&starttime);
 
-    optparam * p = param_alloc(); // Set default options
+    mflock_t * p = mflock_new();
 
-    switch(argparsing(p, argc, argv))
+    switch(mflock_parse_cli(p, argc, argv))
     {
     case ARGS_OK:
         break;
     case ARGS_ERR:
         usage();
-        param_free(p);
+        mflock_free(p);
         return EXIT_FAILURE;
         break;
     case ARGS_QUIT:
-        param_free(p);
+        mflock_free(p);
         return EXIT_SUCCESS;
         break;
     }
 
-    param_init(p, argc, argv);
-
-    if(p->contact_pairs_file != NULL)
-    {
-        param_read_contact_pairs(p);
-    } else {
-        if(p->wfname != NULL)
-        {
-            /* Read binary contact indication matrix */
-            param_readW(p);
-        } else {
-            fprintf(stderr, "No contact pairs specified\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    /* Read radial preferences, if rfname is set */
-    param_readR(p);
-
-    /* Read chromosome labels */
-    param_readL(p);
+    mflock_init(p, argc, argv);
+    mflock_read_contact_pairs(p);
+    mflock_load_radial_constraints(p);
+    mflock_load_bead_labels(p);
 
     /* Read coordinates from previous iteration, or generate
        random coordinates if not previous iteration is available
     */
-    double * X = init_X(p);
+    double * X = mflock_init_coordinates(p);
 
     /* Double check that the parameters make sense and that
        everything necessary could be loaded. */
-    param_validate(p);
+    mflock_validate(p);
 
     if(p->verbose>0)
     {
-        param_show(p, stdout);
+        mflock_show(p, stdout);
     }
-    param_show(p, p->logf);
+    mflock_show(p, p->logf);
 
     /* Set up capturing of Ctrl+C for graceful exit */
     struct sigaction act;
@@ -1690,18 +1439,18 @@ int main(int argc, char ** argv)
         liveview(X, p->L, p->N, &quit, p->r0, E);
         pthread_join(th, NULL);
     } else {
-        optimize(X,p);
+        mflock_dynamics(X,p, 0);
     }
 #else
-    optimize(X, p);
+    mflock_dynamics(X, p, 0);
 #endif
-    //radpos(X, p, stdout);
 
+
+    /* resolution: 1 s, consider clockdiff  */
     time(&nowtime);
     p->time_final = difftime(nowtime, starttime);
 
-    /* Write a summary of how the simulations proceeded to the log file */
-    param_summary(p, X);
+    mflock_summary(p, X);
 
     /* Write chimera file (for simple visualization) */
     if(p->cmmz == 1)
@@ -1721,21 +1470,7 @@ int main(int argc, char ** argv)
     }
 
     /* Write coordinates to disk */
-    // TODO: rename mflock_write_coords(mflock * m, double * X)
-    param_dumpX(p, X);
-
-    /* Write radial profile to disk ? */
-    // Just wastes space, can as well be calculated on the fly.
-    if(0) {
-        char * rpfname = malloc(1024*sizeof(char));
-        assert(rpfname != NULL);
-        sprintf(rpfname, "%s/rad.csv", p->ofoldername);
-        FILE * rpfile = fopen(rpfname, "w");
-        assert(rpfile != NULL);
-        radpos(X, p, rpfile);
-        fclose(rpfile);
-        free(rpfname);
-    }
+    mflock_save_coordinates(p, X);
 
     char * time_str = cf_timestr();
     fprintf(p->logf, "\nmflock finished: %s\n", time_str);
@@ -1744,7 +1479,7 @@ int main(int argc, char ** argv)
     /* Close log file */
     fclose(p->logf);
     /* Free most data */
-    param_free(p);
+    mflock_free(p);
     /* Free coordinates */
     free(X);
 
