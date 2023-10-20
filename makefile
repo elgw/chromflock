@@ -83,7 +83,8 @@ src/any2string.c \
 src/oscp.c \
 src/sprite2cmap.c \
 obj/chromflock_init.o \
-obj/balance.o
+obj/balance.o \
+obj/cf_util.o
 
 
 ## Targets
@@ -100,12 +101,19 @@ src/cmmwrite.c \
 src/wio.c \
 src/hsvrgb.c \
 obj/ellipsoid.o \
+obj/contact_pairs_io.o \
+obj/cf_util.o
 
 
 bin/mflock: $(mflock_files) makefile
 	$(CC) $(CFLAGS) $(mflock_files) -o bin/mflock $(LDFLAGS)
 
-aflock_files = src/aflock.c src/wio.c src/oscp.c obj/ellipsoid.o
+aflock_files = src/aflock.c \
+src/wio.c \
+src/oscp.c \
+obj/ellipsoid.o \
+obj/cf_util.o \
+obj/contact_pairs_io.o
 
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)
@@ -118,3 +126,9 @@ obj/ellipsoid.o: src/ellipsoid.c
 
 obj/balance.o: src/balance.c
 	$(CC) -c $(CFLAGS) src/balance.c -o obj/balance.o
+
+obj/contact_pairs_io.o: src/contact_pairs_io.c
+	$(CC) -c $(CFLAGS) src/contact_pairs_io.c -o obj/contact_pairs_io.o
+
+obj/cf_util.o: src/cf_util.c src/cf_util.h
+	$(CC) -c $(CFLAGS) src/cf_util.c -o obj/cf_util.o

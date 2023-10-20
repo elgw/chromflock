@@ -1,244 +1,60 @@
-/*
- * Implementation notes:
- *
- * - Is is assumed that all coordinates will fit into memory.
- * - Pairwise distances are computed when needed and not stored.
- * - Some parts to be parallelized.
- * - For diploid structures there are 2*nBeads beads -- ugly!
- *
- * General:
- * - Uses infinite math so DON'T compile with -ffitnite-math-only
- *
+/**
+ * @file aflock.c
+ * @author Erik Wernersson
+ * @date 2020-2023
  */
-#define _GNU_SOURCE
 
-#include <assert.h>
-#include <errno.h>
-#include <getopt.h>
-#include <math.h>
-#include <pthread.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-#include "cf_version.h"
 #include "aflock.h"
-#include "ellipsoid.h"
-#include "oscp.h"
-#include "wio.h"
 
-
-#ifdef __linux__
-#include <dlfcn.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/sysinfo.h>
-#include <sys/types.h>
-#endif
-
-
-void limit_mem(size_t max_bytes)
+static aflock * aflock_init()
 {
-#ifdef __linux__
-    if(max_bytes==0)
-    {
-        struct sysinfo info;
-        if(sysinfo(&info))
-        {
-            fprintf(stderr, "sysinfo returned errno: %d\n", errno);
-            errno = 0;
-        }
-        max_bytes = info.mem_unit*info.freeram;
-    }
-    struct rlimit limit;
-
-    /* The limits are not really limits... */
-    getrlimit(RLIMIT_DATA, &limit);
-    limit.rlim_cur = max_bytes;
-    setrlimit(RLIMIT_DATA, &limit);
-    return;
-#else
-    return;
-#endif
-}
-
-#if 0 // #ifdef __linux__
-static void* (*real_malloc)(size_t) = NULL;
-static void* (*real_calloc)(size_t, size_t) = NULL;
-
-static void mtrace_init(void)
-{
-    real_malloc = dlsym(RTLD_NEXT, "malloc");
-    if (NULL == real_malloc) {
-        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
-    }
-    real_calloc = dlsym(RTLD_NEXT, "calloc");
-    if (NULL == real_calloc) {
-        fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
-    }
-    return;
-}
-
-void * malloc(size_t size)
-{
-    if(real_malloc==NULL) {
-        mtrace_init();
-    }
-    void * p = real_malloc(size);
-    if(p == 0)
-    {
-        fprintf(stderr, "aflock ran out of memory :(\n");
-        fprintf(stderr, "trying to get %zu more bytes\n", size);
-        exit(EXIT_FAILURE);
-    }
-    return p;
-}
-
-void *calloc(size_t nmemb, size_t size)
-{
-    if(real_calloc==NULL) {
-        mtrace_init();
-    }
-
-    void *p = NULL;
-
-    p = real_calloc(nmemb, size);
-    if(p == 0)
-    {
-        fprintf(stderr, "aflock ran out of memory :(\n");
-        fprintf(stderr, "trying to get %zu more bytes\n", nmemb*size);
-        exit(EXIT_FAILURE);
-    }
-    return p;
-}
-#else
-#define mtrace_init()
-#endif
-
-/* Activation Distance Struct
- * To be passed to threads */
-typedef struct{
-    double * A; /* For storing activation distances */
-    double * AD;
-    size_t thread;
-    size_t nThreads;
-    double th_low;
-    double th_high;
-    fconf * fc;
-    chrom * flock;
-} adstruct;
-
-
-/* To be passed to each thread (final_tfun)
- * when running in final mode */
-typedef struct{
-    size_t thread;
-    size_t nThreads;
-    size_t nStruct;
-    size_t nBeads;
-    char * wFileName;
-    fconf * fc;
-    chrom * flock;
-    double * M; /* Counting number of captured contacts for this thread */
-    double * W; /* Sum of all individual W (uint8_t) for this thread */
-    double * rprof; /* Sum of radial values for this thread */
-} final_tdata;
-
-
-fconf * fconf_init()
-{
-    fconf * c = calloc(1, sizeof(fconf));
+    aflock * c = calloc(1, sizeof(aflock));
     assert(c != NULL);
     c->verbose = 1;
-    c->afname = NULL;
-    c->nBeads = 0;
-    c->nStruct = 0;
 
-    c->rfname = NULL;
-    c->prfname = NULL;
-
-    c->th_low = 0;
-    c->th_high = 0;
     c->mode = MODE_UNKNOWN;
     c->QS = 2500;
 
     c->ea = -1;
     c->eb = -1;
     c->ec = -1;
-    c->E = NULL;
-
     c->r0 = -1;
     c->vq = -1;
 
-    c->mflock_arguments = NULL;
-
-    c->experimental = 0;
-    c->get_quality = 0;
     int nCpus = sysconf(_SC_NPROCESSORS_ONLN);
     /* Assuming this is the number of cores,
      * it is faster than using all threads */
-    nCpus/= 2;
+
     if(nCpus < 0)
     {
         printf("WARNING: Could not figure out the number of CPUs "
                "from sysconfig!\n");
         nCpus = 4;
     }
-    c->nThreads = nCpus;
 
-    if(c->verbose > 1)
-    {
-        printf("Using %zu threads\n", c->nThreads);
-    }
-
-    /* Haploid or diploid cell line */
-    c->diploid = 0;
+    c->nThreads = nCpus/2;
+    c->nThreads == 0 ? c->nThreads = 1 : 0;
 
     return c;
 }
 
-void fconf_free(fconf * c)
+static void aflock_free(aflock * c)
 {
-    if(c->E != NULL)
-    {
-        free(c->E);
-    }
-    if(c->A != NULL)
-    {
-        free(c->A);
-    }
-    if(c->afname != NULL)
-    {
-        free(c->afname);
-    }
-    if(c->rfname != NULL)
-    {
-        free(c->rfname);
-    }
-    if(c->prfname != NULL)
-    {
-        free(c->prfname);
-    }
-    if(c->mflock_arguments != NULL)
-    {
-        free(c->mflock_arguments);
-    }
+    free(c->E);
+    free(c->A);
+    free(c->afname);
+    free(c->rfname);
+    free(c->prfname);
+    free(c->mflock_arguments);
 }
 
-/* 10,000 structures, 2300 beads each, 1m 32s on MBP
- * 1m 35 s on erikwfractal. Requires loads of ram... */
-
-static float eudist3(float * A, float * B)
+static float eudist3(const float * A, const float * B)
 {
     /* Euclidean distance between two 3D-vectors */
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-static float norm3(float * X)
+static float norm3(const float * X)
 {
     float n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -246,115 +62,113 @@ static float norm3(float * X)
     return sqrt(n);
 }
 
-void fconf_load_A(fconf * fc)
+static void aflock_load_contact_probabilities(aflock * af)
 {
+    fprintf(stdout, "Loading the Contact Probability Matrix ...\n");
+    fprintf(stdout, "   '%s' ... \n", af->afname);
 
-    fprintf(stdout, "Loading A: %s ... \n", fc->afname);
-
-    FILE * afile = fopen(fc->afname, "r");
+    FILE * afile = fopen(af->afname, "r");
 
     if(afile == NULL)
     {
         fprintf(stderr, "Failed to open file\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     struct stat st;
-    int status = stat(fc->afname, &st);
+    int status = stat(af->afname, &st);
     if(status != 0)
     {
-        fprintf(stderr, "Failed to get file size of %s\n", fc->afname);
-        exit(-1);
+        fprintf(stderr, "Failed to get file size of %s\n", af->afname);
+        exit(EXIT_FAILURE);
     }
 
     size_t fsize = st.st_size;
 
-    fc->A = malloc(fsize);
-    if(fc->A == NULL)
+    af->A = malloc(fsize);
+    if(af->A == NULL)
     {
         fprintf(stderr, "Failed to allocate memory for A\n");
         exit(EXIT_FAILURE);
     }
 
-    size_t nRead = fread(fc->A, sizeof(double), fsize/sizeof(double), afile);
+    size_t nRead = fread(af->A, sizeof(double), fsize/sizeof(double), afile);
 
     if(nRead*sizeof(double) != fsize)
     {
         fprintf(stderr, "nRead = %zu, fsize = %zu\n", nRead, fsize);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     fclose(afile);
 
     for(size_t kk = 0 ; kk<fsize/sizeof(double) ; kk++)
     {
-        if(isfinite(fc->A[kk]))
+        if(isfinite(af->A[kk]))
         {
-            if(fc->A[kk] < 0)
+            if(af->A[kk] < 0)
             {
-                fprintf(stderr, "ERROR: A[%zu] = %f < 0\n", kk, fc->A[kk]);
-                exit(-1);
+                fprintf(stderr, "ERROR: A[%zu] = %f < 0\n", kk, af->A[kk]);
+                exit(EXIT_FAILURE);
             }
-            if(fc->A[kk] > 1)
+            if(af->A[kk] > 1)
             {
-                fprintf(stderr, "ERROR: A[%zu] = %f > 1\n", kk, fc->A[kk]);
-                exit(-1);
+                fprintf(stderr, "ERROR: A[%zu] = %f > 1\n", kk, af->A[kk]);
+                exit(EXIT_FAILURE);
             }
         }
     }
 
 
-    fc->nBeads = sqrt(fsize/sizeof(double));
-    assert(pow(fc->nBeads, 2) == fsize/sizeof(double));
-    fprintf(stdout, "   .. contains [%zu x %zu] elements.\n", fc->nBeads, fc->nBeads);
+    af->nBeads = sqrtl(fsize/sizeof(double));
+    if(powl(af->nBeads, 2) != fsize/sizeof(double))
+    {
+        fprintf(stderr, "Something is wrong with %s\n", af->afname);
+        fprintf(stderr, "The matrix does not seem to be in square form\n");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(stdout, "   contains [%zu x %zu] elements.\n", af->nBeads, af->nBeads);
     return;
 }
 
-int chrom_init(chrom * c, size_t nQ, size_t n)
+/** @brief Initialize a cf_structure
+ *
+ * sets the contact_pairs_file and xfName based on n
+ **/
+static void cf_structure_init(cf_structure * c, size_t nQ, size_t n)
 {
-    c->X = NULL;
-    c->nQ = 0; /* Number of elements in the queue */
+    memset(c, 0, sizeof(cf_structure));
+
     c->Q = malloc(2*nQ*sizeof(uint32_t));
     assert(c->Q != NULL);
 
-    size_t bsize = 64;
-    c->wfName = malloc(bsize);
-    assert(c->wfName != NULL);
-    snprintf(c->wfName, bsize, "cf_%06zu/W.uint8.gz", n+1);
-    c->W = 0;
+    c->contact_pairs_file = malloc(64);
+    assert(c->contact_pairs_file != NULL);
+    snprintf(c->contact_pairs_file, 64, "cf_%06zu/contact-pairs.u32.gz", n+1);
 
-    if(c->wfName == NULL)
-        return 1;
-
-    c->xfName = malloc(bsize);
+    c->xfName = malloc(64);
     assert(c->xfName != NULL);
-    snprintf(c->xfName, bsize, "cf_%06zu/coords.csv", n+1);
+    snprintf(c->xfName, 64, "cf_%06zu/coords.csv", n+1);
 
-    if(c->xfName == NULL)
-        return 1;
-
-    return 0;
+    return;
 }
 
-void ch_free(chrom * c)
+static void cf_structure_free(cf_structure * c)
 {
-    if(c->W != NULL)
-        free(c->W);
-    if(c->X != NULL)
-        free(c->X);
-    if(c->Q != NULL)
-        free(c->Q);
-    free(c->wfName);
+    free(c->W);
+    free(c->X);
+    free(c->Q);
+    free(c->contact_pairs_file);
     free(c->xfName);
     c->nQ = 0;
     return;
 }
 
 
-int ch_load_X(fconf * fc, chrom * c)
+static int aflock_load_coordinates(aflock * af, cf_structure * c)
 {
 
-    size_t nBeads = fc->nBeads*(1+fc->diploid);
+    size_t nBeads = af->nBeads*(1+af->diploid);
 
     c->X = malloc(nBeads*3*sizeof(float));
     assert(c->X != NULL);
@@ -367,7 +181,7 @@ int ch_load_X(fconf * fc, chrom * c)
     {
         fprintf(stderr, "\rCan't open %s\n", c->xfName);
         fprintf(stderr, "Did you forget to run mflock after aflock -I?\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     char * line = malloc(1024*sizeof(char));
@@ -381,7 +195,7 @@ int ch_load_X(fconf * fc, chrom * c)
         if(read == -1)
         {
             printf("Failed to read line %zu\n", ll+1);
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
         char *ptr = strtok(line, delim);
         c->X[3*ll] = atof(ptr);
@@ -421,115 +235,83 @@ int cmp_float(const void * A, const void * B)
     return 0;
 }
 
-void chrom_assign(fconf * fc, chrom * ch, size_t kk, size_t ll)
+
+/** @brief Load the spatial coordinates of all structures
+ *
+ *
+ */
+static cf_structure * aflock_load_structures(aflock * af)
 {
-    if(ch->nQ == fc->QS)
-    {
-        /* Empty the queue first by writing to disk. */
-        struct_write_W(fc, ch);
-    }
-
-    /* Insert in Queue */
-    ch->Q[2*ch->nQ] = kk;
-    ch->Q[2*ch->nQ+1] = ll;
-
-    ch->nQ++;
-}
-
-
-chrom * load_structures(fconf * fc)
-{
-    fprintf(stdout, "Initializing %zu structures ...\n", fc->nStruct);
-    chrom * flock = malloc(fc->nStruct*sizeof(chrom));
+    fprintf(stdout, "Preparing to load %zu structures ...\n", af->nStruct);
+    cf_structure * flock = malloc(af->nStruct*sizeof(cf_structure));
     assert(flock != NULL);
 
     /* Load them */
-    for(size_t kk = 0; kk<fc->nStruct; kk++)
+    for(size_t kk = 0; kk<af->nStruct; kk++)
     {
         printf("\r%zu", kk+1); fflush(stdout);
-        chrom_init(&flock[kk], fc->QS, kk);
+        cf_structure_init(&flock[kk], af->QS, kk);
     }
     printf("\r");
 
-    if(fc->mode == MODE_INIT)
+    if(af->mode == MODE_INIT)
     {
-        printf("No coordinates to be loaded\n");
+        printf("   No coordinates to be loaded\n");
     }
     else
     {
-        printf("Loading coordinates ...\n");
+        printf("   Loading bead coordinates from %zu structures...\n",
+               af->nStruct);
 
-        for(size_t kk = 0; kk<fc->nStruct; kk++)
+        for(size_t kk = 0; kk<af->nStruct; kk++)
         {
             printf("\r%zu", kk); fflush(stdout);
-            ch_load_X(fc, &flock[kk]);
+            aflock_load_coordinates(af, &flock[kk]);
         }
         printf("\r");
     }
 
     printf("\r");
 
-    fprintf(stdout, "   ... done.\n");
+    fprintf(stdout, "   done.\n");
     return flock;
 }
 
-void writew(char * wfname, uint8_t * W, size_t nElements)
-{
-    wio_write(wfname, nElements, W);
-}
 
-void struct_write_W0(fconf * fc, chrom * cc, uint8_t * W0)
+static void struct_write_R0(aflock * af, cf_structure * cc, double * R0)
 {
-    if(fc->diploid == 1)
+    if(af->diploid)
     {
-        wio_write(cc->wfName, pow(2*fc->nBeads,2), W0);
+        wio_write(cc->rfName, 2*af->nBeads*sizeof(double), (void *) R0);
     } else {
-        wio_write(cc->wfName, pow(fc->nBeads,2), W0);
+        wio_write(cc->rfName, af->nBeads*sizeof(double), (void *) R0);
     }
+    return;
 }
 
-void struct_write_R0(fconf * fc, chrom * cc, double * R0)
+
+static void cf_structure_assign_contacts(cf_structure * c,
+                              aflock * af,
+                                         double * AD)
 {
-    if(fc->diploid == 1)
-    {
-        wio_write(cc->rfName, 2*fc->nBeads*sizeof(double), (void *) R0);
-    } else {
-        wio_write(cc->rfName, fc->nBeads*sizeof(double), (void *) R0);
-    }
-}
+    double th_high = af->th_high;
+    double th_low  = af->th_low;
+    size_t nBeads = (1+af->diploid)*af->nBeads;
+    size_t N = af->nBeads;
 
-uint8_t * readw(char * wfName, size_t nElements)
-{
-    return wio_read(wfName, &nElements);
-}
+    uint64_t nCP;
+    uint32_t * CP = contact_pairs_read(c->contact_pairs_file, &nCP);
+    uint8_t * W = contact_pairs_to_matrix(CP, nCP, nBeads);
+    free(CP);
 
-void struct_write_W_AD(fconf * fc,
-                       chrom * c,
-                       double * AD,
-                       double th_high,
-                       double th_low)
-{
-    /* Write a new W matrix to disk, setting contacts between beads to
-     * 1 if the distance is below the activation distance given by AD
-     *
-     * This will read an existing W matrix and only update contacts for which
-     * A is in the threshold range.
-     * */
-
-
-    size_t nBeads = (1+fc->diploid)*fc->nBeads;
-    size_t N = fc->nBeads;
-
-    size_t nRead = pow(nBeads, 2);
-    uint8_t * W = readw(c->wfName, nRead);
-    double * A = fc->A;
+    double * A = af->A;
 
     for(size_t aa = 0; aa < nBeads; aa++)
     {
         for(size_t bb = aa+1; bb < nBeads; bb++)
         {
-            size_t idx1 = (aa % N) + (bb % N)*fc->nBeads;
-            //size_t idx2 = (bb % N) + (aa % N)*fc->nBeads;
+            size_t idx1 = (aa % N) + (bb % N)*af->nBeads;
+            //size_t idx2 = (bb % N) + (aa % N)*af->nBeads;
             size_t widx1 = aa + bb*nBeads;
             size_t widx2 = bb + aa*nBeads;
 
@@ -543,7 +325,7 @@ void struct_write_W_AD(fconf * fc,
                        for this structure is within the activation distance */
                     double d = eudist3(c->X+aa*3, c->X+bb*3);
 
-                    if(d<AD[idx1])
+                    if(d < AD[idx1])
                     {
                         W[widx1] = 1;
                         W[widx2] = 1;
@@ -558,299 +340,21 @@ void struct_write_W_AD(fconf * fc,
             }
         }
     }
-    /* Write back to disk */
-    //  printf("Will write to: %s\n", c->wfName); fflush(stdout);
-    wio_write(c->wfName, nRead, W);
+
+    /* Write back to disk -- TODO: only if changed ... */
+
+    if(contact_pairs_write_from_matrix(c->contact_pairs_file, nBeads*nBeads, W))
+    {
+        fprintf(stderr, "Failed to write contact pairs to %s\n", c->contact_pairs_file);
+        exit(EXIT_FAILURE);
+    }
+
     free(W);
     return;
 }
 
-void struct_write_W(fconf * fc, chrom * c)
-{
-    //  fprintf(stdout, "Will open %s and write %zu new constraints\n", c->wfName, c->nQ);
 
-    size_t nRead = pow(fc->nBeads, 2);
-    uint8_t * W = readw(c->wfName, nRead);
-
-
-    /* Update W with new contacts */
-    for(size_t pp = 0; pp<c->nQ; pp++)
-    {
-        size_t kk = c->Q[2*pp];
-        size_t ll = c->Q[2*pp+1];
-
-        W[kk+fc->nBeads*ll] = 1;
-        W[ll+fc->nBeads*kk] = 1;
-    }
-
-    /* Write back to disk */
-    wio_write(c->wfName, nRead, W);
-    c->nQ = 0;
-
-    free(W);
-
-    return;
-}
-
-void flock_reset(fconf * fc, chrom * flock, double th_high, double th_low)
-{
-    /* Reset all contacts in each W where th_high < A <= th_low
-     */
-    fprintf(stdout, "Resetting contacts where %f <= A < %f\n", th_low, th_high);
-    size_t nElements = (size_t) pow(fc->nBeads, 2);
-
-    for(size_t pp = 0; pp<fc->nStruct; pp++)
-    {
-        printf("\r%zu", pp); fflush(stdout);
-
-        uint8_t * W = readw(flock[pp].wfName, nElements);
-
-        for(size_t kk = 0; kk<nElements; kk++)
-        {
-            if(fc->A[kk] >= th_low && fc->A[kk] < th_high)
-            {
-                W[kk] = 0;
-            }
-        }
-
-        writew(flock[pp].wfName, W, nElements);
-
-        free(W);
-    }
-    printf("\r");
-    printf("Done!  \n");
-
-
-}
-
-void flock_assign_with_w_randblock(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
-{
-    /* Assign a contacts between bead kk and ll with with probability prob
-     */
-
-    size_t nChrom = fc->nStruct;
-    size_t nAssign = round(prob*(float) nChrom);
-
-    /* Array of pairwise distance between point kk and ll */
-    float * D = malloc(nChrom*sizeof(float));
-    assert(D != NULL);
-
-    for(size_t pp = 0; pp<nChrom; pp++)
-    {
-        D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
-        if(flock[pp].W[kk+fc->nBeads*ll] == 1)
-        {
-            double drand = (double) rand()/ (double) RAND_MAX;
-            if(D[pp] > 2.5*fc->r0)
-            {
-                D[pp] = drand + 2;
-            }
-            else
-            {
-                D[pp] = drand;
-            }
-
-        }
-    }
-
-    float * DS = malloc(nChrom*sizeof(float));
-    assert(DS != NULL);
-    memcpy(DS, D, nChrom*sizeof(float));
-
-    qsort(DS, nChrom, sizeof(float), cmp_float);
-
-    float threshold = DS[nAssign-1];
-    free(DS);
-
-    if(0)
-    {
-        fprintf(stdout, "Found threshold: %f\n", threshold);
-    }
-
-    size_t nAssigned = 0;
-
-    for(size_t pp = 0; pp<nChrom; pp++)
-    {
-        if((D[pp]<=threshold) && (nAssigned < nAssign))
-            /* To avoid the case where multiple structures with the same distance */
-        {
-            flock[pp].W[kk+fc->nBeads*ll] = 1;
-            flock[pp].W[ll+fc->nBeads*kk] = 1;
-            nAssigned++;
-        } else {
-            flock[pp].W[kk+fc->nBeads*ll] = 0;
-            flock[pp].W[ll+fc->nBeads*kk] = 0;
-        }
-    }
-
-    if(nAssigned != nAssign)
-    {
-        fprintf(stderr, "To assign: %zu\n", nAssign);
-        fprintf(stderr, "Assigned: %zu\n", nAssigned);
-        fprintf(stderr, "Threshold: %f\n", threshold);
-        assert(0);
-    }
-    free(D);
-    return;
-}
-
-void flock_assign_with_w(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
-{
-    /* Assign a contacts between bead kk and ll with with probability prob
-     */
-
-    size_t nChrom = fc->nStruct;
-    size_t nAssign = round(prob*(float) nChrom);
-
-    /* Array of pairwise distance between point kk and ll */
-    float * D = malloc(nChrom*sizeof(float));
-    assert(D != NULL);
-    for(size_t pp = 0; pp<nChrom; pp++)
-    {
-        D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
-        if(flock[pp].W[kk+fc->nBeads*ll] == 1)
-        {
-            if(D[pp] > 2.5*fc->r0)
-            {
-                D[pp] += 2;
-            }
-        }
-    }
-
-    float * DS = malloc(nChrom*sizeof(float));
-    assert(DS != NULL);
-    memcpy(DS, D, nChrom*sizeof(float));
-
-    qsort(DS, nChrom, sizeof(float), cmp_float);
-
-    float threshold = DS[nAssign-1];
-    free(DS);
-
-    if(0)
-    {
-        fprintf(stdout, "Found threshold: %f\n", threshold);
-    }
-
-    size_t nAssigned = 0;
-
-    for(size_t pp = 0; pp<nChrom; pp++)
-    {
-        if((D[pp]<=threshold) && (nAssigned < nAssign))
-            /* To avoid the case where multiple structures with the same distance */
-        {
-            flock[pp].W[kk+fc->nBeads*ll] = 1;
-            flock[pp].W[ll+fc->nBeads*kk] = 1;
-            nAssigned++;
-        } else {
-            flock[pp].W[kk+fc->nBeads*ll] = 0;
-            flock[pp].W[ll+fc->nBeads*kk] = 0;
-        }
-    }
-
-    if(nAssigned != nAssign)
-    {
-        fprintf(stderr, "To assign: %zu\n", nAssign);
-        fprintf(stderr, "Assigned: %zu\n", nAssigned);
-        fprintf(stderr, "Threshold: %f\n", threshold);
-        assert(0);
-    }
-    free(D);
-    return;
-}
-
-void flock_assign(fconf * fc, chrom * flock, size_t kk, size_t ll, float prob)
-{
-    /* Assign a contacts between bead kk and ll with with probability prob
-     */
-
-    size_t nChrom = fc->nStruct;
-    size_t nAssign = round(prob*(float) nChrom);
-    assert(nAssign > 0);
-    assert(nAssign <= nChrom);
-    if(nAssign == 0)
-    {
-        return;
-    }
-
-    if(0)
-    {
-        printf("prob=%f -> %zu/%zu structures\n", prob, nAssign, nChrom);
-    }
-    float * D = malloc(nChrom*sizeof(float));
-    assert(D != NULL);
-    for(size_t pp = 0; pp<nChrom; pp++)
-    {
-        D[pp] = eudist3(flock[pp].X+kk*3, flock[pp].X+ll*3);
-        /* If we knew which contacts that failed, we could increase the
-         * distance of them here in order not to try them again...
-         * (at least not in the next round). */
-    }
-
-    float * DS = malloc(nChrom*sizeof(float));
-    assert(DS != NULL);
-    memcpy(DS, D, nChrom*sizeof(float));
-
-    qsort(DS, nChrom, sizeof(float), cmp_float);
-
-
-    float threshold = DS[nAssign-1];
-
-    free(DS);
-
-    if(0)
-    {
-        fprintf(stdout, "Found threshold: %f\n", threshold);
-    }
-
-    size_t nAssigned = 0;
-
-    /* (1) In case that the distances are equal for several structures
-     * the contact is assigned to the first of the structures
-     */
-
-    if(fc->experimental == 0)
-    {
-        for(size_t pp = 0; pp<nChrom; pp++)
-        {
-            if((D[pp] <= threshold) &&
-               (nAssigned < nAssign)) // (1)
-            {
-                chrom_assign(fc, flock+pp, kk, ll);
-                nAssigned++;
-            }
-        }
-    } else {
-        /* Experimental random assignment! */
-
-        uint8_t * set = malloc(nChrom*sizeof(uint8_t));
-        assert(set != NULL);
-        memset(set, 0, nChrom*sizeof(uint8_t));
-
-        for(size_t pp =0; pp<nAssign; pp++)
-        {
-            int isSet = 0;
-            while(isSet == 0)
-            {
-                size_t pos = rand() % nChrom;
-                if(set[pos] == 0)
-                {
-                    isSet = 1;
-                    set[pos] = 1;
-                    chrom_assign(fc, flock+pos, kk, ll);
-                    nAssigned++;
-                }
-            }
-        }
-        free(set);
-    }
-    assert(nAssigned == nAssign);
-    free(D);
-
-    return;
-}
-
-
-static void usage()
+static void aflock_usage()
 {
     printf("Accepted arguments:\n");
     printf(" -A file.dat, --Afile file.dat\n\tcontact probability matrix, square double.\n");
@@ -871,12 +375,11 @@ static void usage()
     printf(" -U, --update\n\tupdate\n");
     printf(" -B, --blockupdate\n\tupdate and block failed contacts\n");
     printf(" -X, --update_experimental\n\texperimental update algorithm\n");
-    printf(" -S, --score\n\tscore current quality (not for -I)\n");
     printf("See the man page for more information\n");
-
+    return;
 }
 
-static int argparsing(fconf * p, int argc, char ** argv)
+static int aflock_parse_command_line(aflock * p, int argc, char ** argv)
 {
 
     struct option longopts[] = {
@@ -884,9 +387,7 @@ static int argparsing(fconf * p, int argc, char ** argv)
         { "help",         no_argument,       NULL,  'u' },
         { "init",         no_argument,       NULL,  'I' },
         { "update",       no_argument,       NULL,  'U' },
-        { "blockupdate",  no_argument,       NULL,  'B' },
         { "final",        no_argument,       NULL,  'F' },
-        { "score",        no_argument,       NULL,  'S' },
         { "update_experimental",
           no_argument,       NULL,  'X' },
         /* Data */
@@ -898,6 +399,7 @@ static int argparsing(fconf * p, int argc, char ** argv)
         { "high",         required_argument, NULL,  'h' },
         { "low",          required_argument, NULL,  'l' },
         { "threads",      required_argument, NULL,  'T' },
+        { "max-mem",      required_argument, NULL,  'M' },
         /* Geometry */
         { "ea",           required_argument, NULL,  'a'},
         { "eb",           required_argument, NULL,  'b'},
@@ -913,7 +415,7 @@ static int argparsing(fconf * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "A:BDEFIP:Q:R:SUXh:l:n:p:r:u",
+                            "A:DEFIM:P:Q:R:UXh:l:n:p:r:u",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -922,18 +424,15 @@ static int argparsing(fconf * p, int argc, char ** argv)
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
             printf("GIT HASH: %s\n", GIT_VERSION);
             printf("Compiler: %s\n", CC_VERSION);
-            exit(0);
+            exit(EXIT_SUCCESS);
         case 'A': /* sphere contact probability matrix */
-            if(p->afname != NULL) { free(p->afname); }
+            free(p->afname);
             p->afname = malloc(strlen(optarg)+1);
             assert(p->afname != NULL);
             strcpy(p->afname, optarg);
             break;
-        case 'B':
-            p->mode = MODE_UPDATE_BLOCKED;
-            break;
         case 'D':
-            p->diploid = 1;
+            p->diploid = true;
             break;
         case 'E':
             p->experimental = 1;
@@ -944,8 +443,11 @@ static int argparsing(fconf * p, int argc, char ** argv)
         case 'I': /* init, i.e., create W */
             p->mode = MODE_INIT;
             break;
+        case 'M':
+            p->mem_limit = atol(optarg);
+            break;
         case 'P':
-            if(p->mflock_arguments != NULL) { free(p->mflock_arguments); }
+            free(p->mflock_arguments);
             p->mflock_arguments = malloc(strlen(optarg)+1);
             assert(p->mflock_arguments != NULL);
             strcpy(p->mflock_arguments, optarg);
@@ -955,9 +457,6 @@ static int argparsing(fconf * p, int argc, char ** argv)
             break;
         case 'R':
             p->r0 = atof(optarg);
-            break;
-        case 'S':
-            p->get_quality = 1;
             break;
         case 'T':
             p->nThreads = atoi(optarg);
@@ -989,296 +488,198 @@ static int argparsing(fconf * p, int argc, char ** argv)
             p->nStruct = atol(optarg);
             break;
         case 'p':
-            if(p->prfname != NULL) { free(p->prfname); }
+            free(p->prfname);
             p->prfname = malloc(strlen(optarg)+1);
             assert(p->prfname != NULL);
             strcpy(p->prfname, optarg);
             break;
         case 'r':
-            if(p->rfname != NULL) { free(p->rfname); }
+            free(p->rfname);
             p->rfname = malloc(strlen(optarg)+1);
             assert(p->rfname != NULL);
             strcpy(p->rfname, optarg);
             break;
         case 'u':
-            usage();
-            exit(0);
+            aflock_usage();
+            exit(EXIT_FAILURE);
+            break;
         default:
-            return(1);
+            return(EXIT_FAILURE);
         }
     }
 
     if(p->afname == NULL)
     {
-        printf("No A file was specified\n");
+        printf("No contact probabilty matrix (-A) file was specified\n");
         return 1;
     }
 
     if(p->nStruct == 0)
     {
-        printf("Don't know how many structures to deal with\n");
-        return 1;
+        printf("Don't know how many structures to generate with (missing --nStruct)\n");
+        return(EXIT_FAILURE);
     }
 
     if((p->rfname != NULL) & (p->prfname == NULL))
     {
         printf("--rpos given but not --prpos\n");
-        return 1;
+        return(EXIT_FAILURE);
     }
 
     if((p->rfname == NULL) & (p->prfname != NULL))
     {
         printf("--prpos given but not --rpos\n");
-        return 1;
+        return(EXIT_FAILURE);
     }
 
-    return 0;
-}
-
-
-void struct_get_interactions(fconf * fc, chrom * cc, double * M,
-                             double cDistance)
-/* cDistance: Contact distance in normalized units */
-{
-    size_t N = (1+fc->diploid)*fc->nBeads;
-
-    for(size_t kk = 0; kk<N; kk++)
+    if(p->mode == MODE_UNKNOWN)
     {
-        for(size_t ll = kk+1; ll<N; ll++)
+        printf("No MODE specified!\n");
+        return(EXIT_FAILURE);
+    }
+
+    if(p->vq <= 0 && p->r0 <= 0)
+    {
+        printf("Please specify either the bead radius (--radius) or "
+               "the volume quotient (--vq)\n");
+        return(EXIT_FAILURE);
+    }
+
+    if(p->mem_limit > 0)
+    {
+        if(limit_mem(p->mem_limit))
         {
-            if( eudist3(cc->X + 3*kk, cc->X + 3*ll) <= cDistance )
-            {
-                M[kk + ll*N]++;
-                M[ll + kk*N]++;
-            }
+            fprintf(stdout, "WARNING: Unable to limit RAM memory usage.\n");
         }
     }
-    return;
+
+    return EXIT_SUCCESS;
 }
 
 
-void struct_add_radius(fconf * fc, chrom * cc, double * R)
-{
-    /* Calculate radius for each point in structure */
-
-    size_t nBeads = (1+fc->diploid)*fc->nBeads;
-
-    /* For spherical geometry */
-    if(fc->E == NULL)   {
-        for(size_t pp = 0; pp<nBeads; pp++)
-        {
-            R[pp]+=norm3(cc->X+3*pp);
-        }
-    }
-
-    /* For ellipsoidal geometry */
-    if(fc->E != NULL) {
-        double XT[3];
-        for(size_t pp = 0; pp<nBeads; pp++)
-        {
-            XT[0] = (double) cc->X[3*pp + 0];
-            XT[1] = (double) cc->X[3*pp + 1];
-            XT[2] = (double) cc->X[3*pp + 2];
-
-            R[pp]+=elli_getScale(fc->E, XT);
-        }
-    }
-    return;
-}
-
-
-void set_bead_radius(fconf * fc)
+static void aflock_set_bead_radius(aflock * af)
 {
     double captureFactor = 4; /* TODO: deduce from dynamics program  */
 
-    if((fc->vq > 0) && (fc->r0 > 0)) {
+    if((af->vq > 0) && (af->r0 > 0)) {
         fprintf(stderr, "Either -R or -Q has to be specified, not both!\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
-    size_t nBeads = fc->nBeads;
-    if(fc->diploid == 1)
+    size_t nBeads = af->nBeads;
+    if(af->diploid == true)
     {   nBeads *= 2;    }
 
     double vDomain = 4.0/3.0*M_PI;
-    if(fc->E != NULL)
+    if(af->E != NULL)
     {
-        vDomain = elli_vol(fc->E);
+        vDomain = elli_vol(af->E);
     }
 
     int allSet = 0;
 
-    if(fc->vq > 0) {
+    if(af->vq > 0) {
         printf("Setting beads radius from volume quotient\n");
-        if( (fc->vq <= 0) || (fc->vq > 1)) {
+        if( (af->vq <= 0) || (af->vq > 1)) {
             fprintf(stderr, "The volume quotient has be be in ]0, 1], use .4 if unsure\n");
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
-        fc->r0 = cbrt(fc->vq*vDomain / (nBeads*4.0*M_PI/3.0));
-        fc->dContact = captureFactor*fc->r0;
+        af->r0 = cbrt(af->vq*vDomain / (nBeads*4.0*M_PI/3.0));
+        af->dContact = captureFactor*af->r0;
         allSet = 1;
     }
 
-    if(fc->r0 > 0 && allSet == 0) {
+    if(af->r0 > 0 && allSet == 0) {
         printf("Setting volume quotient from bead radius\n");
-        if(fc->r0 > 1) {
-            fprintf(stderr, "A radius of %f does not make sense\n", fc->r0);
-            exit(-1);
+        if(af->r0 > 1) {
+            fprintf(stderr, "A radius of %f does not make sense\n", af->r0);
+            exit(EXIT_FAILURE);
         }
         allSet = 1;
     }
 
-    assert(allSet == 1);
-    double vBeads = (double) nBeads*pow(fc->r0, 3)*4.0/3.0*M_PI;
-    fc->vq = vBeads/vDomain;
-    fc->dContact = captureFactor*fc->r0;
-    fprintf(stdout, "   Number of beads: %d*%zu = %zu\n", fc->diploid + 1, fc->nBeads, nBeads);
-    fprintf(stdout, "   Bead radius: %f\n", fc->r0);
+    if(allSet == 0)
+    {
+        fprintf(stderr, "Unable to set the bead radius. Please set either the volume quotient or the bead radius\n");
+        exit(EXIT_FAILURE);
+    }
+    double vBeads = (double) nBeads*powl(af->r0, 3)*4.0/3.0*M_PI;
+    af->vq = vBeads/vDomain;
+    af->dContact = captureFactor*af->r0;
+    fprintf(stdout, "   Number of beads: %d*%zu = %zu\n", af->diploid + 1, af->nBeads, nBeads);
+    fprintf(stdout, "   Bead radius: %f\n", af->r0);
     fprintf(stdout, "   Total bead volume: %f\n", vBeads);
     fprintf(stdout, "   Sphere volume: %f\n", vDomain);
     fprintf(stdout, "   Volume Quotient: %f\n", vBeads/vDomain);
-    fprintf(stdout, "   Contact distance (%.1f x bead radius): %f\n", captureFactor, fc->dContact);
-    assert(fabs(fc->vq - vBeads/vDomain)<1e-6);
+    fprintf(stdout, "   Contact distance (%.1f x bead radius): %f\n", captureFactor, af->dContact);
+    assert(fabs(af->vq - vBeads/vDomain)<1e-6);
     assert(vBeads/vDomain < 1);
     return;
 }
 
-double structQuality(fconf * fc, chrom * cc)
+/** @brief Calculate a distance threshold for each pair of beads
+ *
+ * This is done only for contact not already handed out. The idea is that
+ * the new contacts should be handed out to the structures where the distance
+ * is already the smallest under the assumption that it will be easiest for
+ * those structures to integrate the new constraint.
+ *
+ * For high number of beads, this leads to clustering, chromosomes
+ * with already many contacts get more, and those with relatively few
+ * keep loosing this allocation game.
+ *
+ */
+static void calc_activation_distance_th( adstruct * s)
 {
-
-    size_t W0S0 = 0;
-    size_t W0S1 = 0;
-    size_t W1S0 = 0;
-    size_t W1S1 = 0;
-
-    /* load W */
-    uint8_t * W = readw(cc->wfName, pow(fc->nBeads, 2));
-
-    size_t N = fc->nBeads;
-
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        for(size_t ll = kk+1; ll<N; ll++)
-        {
-            int contact = 0; /* if the beads are in contact */
-            int set = 0; /* if there should be a contact */
-
-            double d = eudist3(cc->X + 3*kk, cc->X + 3*ll);
-
-            if(d < fc->dContact)
-            {
-                contact = 1;
-            }
-
-            if(W[kk*N+ll] == 1)
-            {
-                set = 1;
-            }
-
-            if(set == 1)
-            {
-                if(contact == 1)
-                {
-                    W1S1++;
-                } else {
-                    W1S0++;
-                }
-            } else {
-                if(contact == 1)
-                {
-                    W0S1++;
-                } else
-                {
-                    W0S0++;
-                }
-            }
-        }
-
-    }
-
-    free(W);
-
-    printf("W==0,S==0, %zu, W==0,S==1, %zu, W==1, S==0, %zu, W==1, S==1 %zu\n", W0S0, W0S1, W1S0, W1S1);
-
-    //return ((double) W0S0 + (double) W1S1)/((double) W0S0 + (double) W0S1 + (double) W1S0 + (double) W1S1);
-    return (double) W1S1 / ( (double) W1S0 + (double) W1S1 ); // got / wanted
-}
-
-double getQuality(fconf * fc, chrom * flock)
-{
-
-    double * quality = malloc(fc->nStruct*sizeof(double));
-    assert(quality != NULL);
-    memset(quality, 0, fc->nStruct*sizeof(double));
-
-    double q = 0;
-
-    for(size_t cc = 0; cc < fc->nStruct; cc++)
-    {
-        quality[cc] = structQuality(fc, flock+cc);
-        q+=quality[cc];
-    }
-
-    free(quality);
-    return q / fc->nStruct;
-}
-
-void echo_args(int argc, char ** argv)
-{
-    for(int kk = 0; kk<argc; kk++)
-    {
-        printf("%s ", argv[kk]);
-    }
-    printf("\n");
-    return;
-}
-
-void calc_activation_distance_th( adstruct * s)
-{
-    fconf * fc = s->fc;
+    aflock * af = s->af;
     double * A = s->A;
     double * AD = s->AD;
     size_t thread = s->thread;
     size_t nThreads = s->nThreads;
-    double th_low = s->th_low;
-    double th_high = s->th_high;
-    chrom * flock = s->flock;
+    double th_low = s->af->th_low;
+    double th_high = s->af->th_high;
+    cf_structure * flock = s->flock;
 
-    size_t nDist = (1 + 3*fc->diploid)*fc->nStruct;
-    size_t B = fc->nBeads;
+    size_t nDist = (1 + 3*af->diploid)*af->nStruct;
+    size_t B = af->nBeads;
 
     /* temporary array for each bead pair */
     float * DS = malloc(nDist*sizeof(float));
     assert(DS != NULL);
 
-    for(size_t aa = thread; aa < fc->nBeads; aa = aa+nThreads)
+    for(size_t aa = thread; aa < af->nBeads; aa = aa+nThreads)
     {
 
-        for(size_t bb = aa+1; bb < fc->nBeads; bb++)
+        for(size_t bb = aa+1; bb < af->nBeads; bb++)
         {
-            size_t idx1 = aa+bb*fc->nBeads;
-            size_t idx2 = bb+aa*fc->nBeads;
+            size_t idx1 = aa+bb*af->nBeads;
+            size_t idx2 = bb+aa*af->nBeads;
 
             if((A[idx1] < th_high) & (A[idx1] >= th_low))
             {
                 /* Only difference between diploid and haploid is that we want twice
                  * as many contacts for the diploid */
-                size_t nAssign = (1+fc->diploid)*round(A[idx1]*(float) fc->nStruct);
+                size_t nAssign = (1+af->diploid)*round(A[idx1]*(float) af->nStruct);
 
                 if(nAssign>0)
                 {
                     /* Get distance between bead aa and bb in all structures */
-                    if(fc->diploid == 0) {
-                        for(size_t ss = 0; ss< fc->nStruct; ss++) {
-                            DS[ss] = eudist3(flock[ss].X+aa*3, flock[ss].X+bb*3);
+                    if(af->diploid == false) {
+                        for(size_t ss = 0; ss< af->nStruct; ss++) {
+                            DS[ss] = eudist3(flock[ss].X+aa*3,
+                                             flock[ss].X+bb*3);
                         }}
 
-                    if(fc->diploid == 1) {
-                        for(size_t ss = 0; ss< fc->nStruct; ss++) {
-                            DS[4*ss+0] = eudist3(flock[ss].X + (0+aa)*3, flock[ss].X + (0+bb)*3);
-                            DS[4*ss+1] = eudist3(flock[ss].X + (B+aa)*3, flock[ss].X + (0+bb)*3);
-                            DS[4*ss+2] = eudist3(flock[ss].X + (0+aa)*3, flock[ss].X + (B+bb)*3);
-                            DS[4*ss+3] = eudist3(flock[ss].X + (B+aa)*3, flock[ss].X + (B+bb)*3);
+                    if(af->diploid == true) {
+                        for(size_t ss = 0; ss< af->nStruct; ss++) {
+                            DS[4*ss+0] = eudist3(flock[ss].X + (0+aa)*3,
+                                                 flock[ss].X + (0+bb)*3);
+                            DS[4*ss+1] = eudist3(flock[ss].X + (B+aa)*3,
+                                                 flock[ss].X + (0+bb)*3);
+                            DS[4*ss+2] = eudist3(flock[ss].X + (0+aa)*3,
+                                                 flock[ss].X + (B+bb)*3);
+                            DS[4*ss+3] = eudist3(flock[ss].X + (B+aa)*3,
+                                                 flock[ss].X + (B+bb)*3);
                         }}
 
                     qsort(DS, nDist, sizeof(float), cmp_float);
@@ -1293,39 +694,28 @@ void calc_activation_distance_th( adstruct * s)
             }
         }
     }
-
     free(DS);
 }
 
 
-void * final_tfun(void * data)
+static void * final_tfun(void * data)
 {
     final_tdata * td = (final_tdata *) data;
     const size_t N = td->nBeads;
 
     /* This thread sums up all individual W to td->W */
-    td->W = malloc(pow(N, 2)*sizeof(double));
-    assert(td->W != NULL);
 
     if(td->thread == 0){
         printf("   Summing up wanted contacts ... \n");
     }
-    td->wFileName = malloc(1024*sizeof(char));
-    assert(td->wFileName != NULL);
+
 
     for(size_t pp = td->thread; pp < td->nStruct ; pp+=td->nThreads)
     {
-        sprintf(td->wFileName, "cf_%06zu/W.uint8.gz", pp+1); fflush(stdout);
-        size_t nRead = 0;
-        uint8_t * W = (uint8_t *) wio_read(td->wFileName, &nRead);
-        if(nRead != pow(N, 2))
-        {
-            printf("Error: Read %zu bytes from %s, expected %zu\n",
-                   nRead,
-                   td->wFileName,
-                   (size_t) pow(td->nBeads, 2));
-            exit(1);
-        }
+        uint64_t nCP;
+        uint32_t * CP = contact_pairs_read(td->flock[pp].contact_pairs_file, &nCP);
+        uint8_t * W = contact_pairs_to_matrix(CP, nCP, N);
+        free(CP);
         for(size_t kk = 0; kk<N*N; kk++)
         {
             td->W[kk] += W[kk];
@@ -1333,12 +723,13 @@ void * final_tfun(void * data)
         free(W);
     }
 
-    if(td->thread == 0)
-    {
-        printf("   Finding beads in contact ... \n");
-    }
-    /* TODO: dContact should be deduced from the dynamics program */
-    const double cDistance = td->fc->dContact;
+    /* TODO:
+     *
+     * - dContact should be deduced from the dynamics program
+     * -
+     */
+
+    const double cDistance = td->af->dContact;
     for(size_t pp = td->thread; pp < td->nStruct ; pp+=td->nThreads)
     {
         float * X = td->flock[pp].X;
@@ -1363,7 +754,7 @@ void * final_tfun(void * data)
     for(size_t pp = td->thread; pp < td->nStruct ; pp+=td->nThreads)
     {
         float * X = td->flock[pp].X;
-        if(td->fc->E == NULL)
+        if(td->af->E == NULL)
         {
             for(size_t kk = 0; kk<N; kk++)
             {
@@ -1372,37 +763,35 @@ void * final_tfun(void * data)
         }
 
         /* For ellipsoidal geometry */
-        if(td->fc->E != NULL) {
+        if(td->af->E != NULL) {
             double XT[3];
             for(size_t pp = 0; pp<N; pp++)
             {
                 XT[0] = (double) X[3*pp + 0];
                 XT[1] = (double) X[3*pp + 1];
                 XT[2] = (double) X[3*pp + 2];
-                td->rprof[pp]+=elli_getScale(td->fc->E, XT);
+                td->rprof[pp]+=elli_getScale(td->af->E, XT);
             }
         }
     }
 
-    free(td->wFileName);
-
     return NULL;
 }
 
 
-void * run_struct_write_W_AD(void * P)
+static void * run_cf_structure_assign_contacts(void * P)
 {
     adstruct * s = (adstruct *) P;
-    for(size_t kk = s->thread; kk < s->fc->nStruct ; kk += s->nThreads)
+    for(size_t kk = s->thread; kk < s->af->nStruct ; kk += s->nThreads)
     {
-        struct_write_W_AD(s->fc, &s->flock[kk], s->AD, s->th_high, s->th_low);
+        cf_structure_assign_contacts(&s->flock[kk], s->af, s->AD);
     }
 
     return NULL;
 }
 
-
-void * run_calc_activation_distance_th(void * P)
+/* Entry point for a thread */
+static void * run_calc_activation_distance_th(void * P)
 {
     fflush(stdout);
     adstruct * s = (adstruct *) P;
@@ -1411,37 +800,34 @@ void * run_calc_activation_distance_th(void * P)
 }
 
 
-void calc_activation_distance(fconf * fc, chrom * flock, double th_high, double th_low, double * AD)
+/* Consider all positions in PR where p<th_high and p>= th_low
+ * For each beads:
+ * hand the constrains to the structures that has the closest radii already
+ * similar to how the contact restraints are handled
+ */
+static void calc_activation_distance(aflock * af, cf_structure * flock,  double * AD)
 {
-    /* Consider all positions in PR where p<th_high and p>= th_low
-     * For each beads:
-     * hand the constrains to the structures that has the closest radii already
-     * similar to how the contact restraints are handled
-     */
-
     printf("%s\n", __func__);
-    double * A = fc->A;
+    double * A = af->A;
 
     /* Each thread will process elements thread+kk*nThreads, kk = 0, 1, ...
      */
 
-    pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
+    pthread_t * threads = malloc(af->nThreads*sizeof(pthread_t));
     assert(threads != NULL);
-    adstruct ** S = malloc(fc->nThreads*sizeof(adstruct * ));
+    adstruct ** S = malloc(af->nThreads*sizeof(adstruct * ));
     assert(S != NULL);
-    for(size_t kk = 0; kk<fc->nThreads; kk++)
+    for(size_t kk = 0; kk<af->nThreads; kk++)
     {
         S[kk] = malloc(sizeof(adstruct));
         assert(S[kk] != NULL);
         S[kk]->thread = kk;
-        S[kk]->nThreads = fc->nThreads;
+        S[kk]->nThreads = af->nThreads;
 
         S[kk]->AD = AD;
         S[kk]->A = A;
-        S[kk] -> th_high = th_high;
-        S[kk] -> th_low = th_low;
         S[kk]->flock = flock;
-        S[kk]->fc = fc;
+        S[kk]->af = af;
 
         pthread_create(&threads[kk],
                        NULL,
@@ -1449,7 +835,7 @@ void calc_activation_distance(fconf * fc, chrom * flock, double th_high, double 
                        (void *) S[kk]);
     }
 
-    for(size_t kk = 0; kk<fc->nThreads; kk++)
+    for(size_t kk = 0; kk<af->nThreads; kk++)
     {
         pthread_join(threads[kk], NULL);
         free(S[kk]);
@@ -1461,57 +847,44 @@ void calc_activation_distance(fconf * fc, chrom * flock, double th_high, double 
     fprintf(stdout, "\n\n");
     fprintf(stdout, "Writing activation distances to 'activationDistance.double'\n");
     wio_write("activationDistance.double",
-              fc->nBeads*fc->nBeads*sizeof(double),
+              af->nBeads*af->nBeads*sizeof(double),
               (void *) AD);
     fprintf(stdout, "Done\n"); fflush(stdout);
 
     return;
 }
 
-void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
+static void flock_updateR(aflock * af, cf_structure * flock, double th_high, double th_low)
 {
-    /* Consider all positions in PR where p<th_high and p>= th_low
-     * For each beads:
-     * hand the constrains to the structures that has the closest radii already
-     * similar to how the contact restraints are handled
-     */
-
-    /* To start with, all coordinates should already be available in flock. */
-
-    /* Load preferred radial positions R
-     * Load probability/proportion of structures having the constraint into PR */
-
-    printf("%s\n", __func__);
-
     /* Read R: radius per bead and PR: probability of use of each bead */
     size_t nbytes_r = 0;
     size_t nbytes_pr = 0;
-    double * R = (double *) wio_read(fc->rfname, &nbytes_r);
-    double * PR = (double *) wio_read(fc->prfname, &nbytes_pr);
+    double * R = (double *) wio_read(af->rfname, &nbytes_r);
+    double * PR = (double *) wio_read(af->prfname, &nbytes_pr);
 
     assert(nbytes_r == nbytes_pr);
-    assert(nbytes_r == fc->nBeads*sizeof(double));
+    assert(nbytes_r == af->nBeads*sizeof(double));
 
     /* Find a threshold for each positions */
-    double * TH = (double * ) malloc(fc->nBeads*sizeof(double));
+    double * TH = (double * ) malloc(af->nBeads*sizeof(double));
     assert(TH != NULL);
-    float * DS = malloc(fc->nStruct*sizeof(float));
+    float * DS = malloc(af->nStruct*sizeof(float));
     assert(DS != NULL);
-    for(size_t pp = 0; pp < fc->nBeads; pp++)
+    for(size_t pp = 0; pp < af->nBeads; pp++)
     {
         if((PR[pp] < th_high) & (PR[pp] >= th_low))
         {
-            size_t nAssign = round(PR[pp]*(float) fc->nStruct);
+            size_t nAssign = round(PR[pp]*(float) af->nStruct);
             if(nAssign>0)
             {
 
-                for(size_t ss = 0; ss< fc->nStruct; ss++)
+                for(size_t ss = 0; ss< af->nStruct; ss++)
                 {
                     DS[ss] = norm3(flock[ss].X+pp*3);
                     //printf("%f ", DS[ss]);
                 }
                 //printf("\n");
-                qsort(DS, fc->nStruct, sizeof(float), cmp_float);
+                qsort(DS, af->nStruct, sizeof(float), cmp_float);
                 TH[pp] = DS[nAssign-1];
                 if(0){
                     printf("PR[%zu]=%f, R[%zu]=%f. nassign: %zu. Th[%zu]=%f\n",
@@ -1521,7 +894,7 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
         }
     }
     /* Read/Write all individual R-files. */
-    for(size_t ss = 0; ss < fc->nStruct ; ss++)
+    for(size_t ss = 0; ss < af->nStruct ; ss++)
     {
         flock[ss].rfName = malloc(1024*sizeof(char));
         assert(flock[ss].rfName != NULL);
@@ -1529,15 +902,15 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
 
         size_t bytesRead = 0;
         double * SR = (double *) wio_read( flock[ss].rfName, &bytesRead );
-        if(bytesRead != sizeof(double)*fc->nBeads)
+        if(bytesRead != sizeof(double)*af->nBeads)
         {
             fprintf(stderr, "%d ERROR: Read %zu bytes from %s, expected %zu.\n", __LINE__,
-                    bytesRead, flock[ss].rfName, fc->nBeads*sizeof(double));
-            exit(-1);
+                    bytesRead, flock[ss].rfName, af->nBeads*sizeof(double));
+            exit(EXIT_FAILURE);
         }
 
         /* Go through all pp "beads" of structure ss */
-        for(size_t pp = 0 ; pp < fc->nBeads ; pp++)
+        for(size_t pp = 0 ; pp < af->nBeads ; pp++)
         {
             if((PR[pp] < th_high) & (PR[pp] >= th_low))
                 /* Don't change the values for the other beads */
@@ -1552,7 +925,7 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
             }
         }
         wio_write(flock[ss].rfName,
-                  fc->nBeads*sizeof(double),
+                  af->nBeads*sizeof(double),
                   (void *) SR);
         free(SR);
         free(flock[ss].rfName);
@@ -1565,39 +938,29 @@ void flock_updateR(fconf * fc, chrom * flock, double th_high, double th_low)
     return;
 }
 
-uint8_t * initial_W(fconf * fc)
+/** @brief Hand out the first set of contacts to the structures
+ *
+ * Uses the contact probability matrix.
+ * Any contact which has probability 1, i.e. that should appear in
+ * all structures is handed out.
+ */
+static uint8_t * initial_W(aflock * af)
 {
-    if(fc->diploid == 0)
+    if(af->diploid)
     {
-        uint8_t * W0 = malloc(pow(fc->nBeads, 2)*sizeof(uint8_t));
-        assert(W0 != NULL);
-        for(size_t kk = 0; kk<pow(fc->nBeads,2); kk++)
-        {
-            if(fc->A[kk] == 1)
-            {
-                W0[kk] = 1;
-            } else {
-                W0[kk] = 0;
-            }
-        }
-        return W0;
-    }
-
-    if(fc->diploid == 1)
-    {
-        uint8_t * W0 = calloc(pow(2*fc->nBeads, 2), sizeof(uint8_t));
+        uint8_t * W0 = calloc(powl(2*af->nBeads, 2), sizeof(uint8_t));
         assert(W0 != NULL);
         size_t Widx[4];
 
-        for(size_t kk = 0; kk<fc->nBeads; kk++)
+        for(size_t kk = 0; kk<af->nBeads; kk++)
         {
-            //      for(size_t ll = kk+1; ll<fc->nBeads; ll++)
+            //      for(size_t ll = kk+1; ll<af->nBeads; ll++)
             size_t ll = kk+1; /* Note, only for elements on the first off-diagonal */
             {
-                size_t idxA = kk + fc->nBeads*ll;
-                if(fc->A[idxA] == 1)
+                size_t idxA = kk + af->nBeads*ll;
+                if(af->A[idxA] == 1)
                 {
-                    size_t N = fc->nBeads;
+                    size_t N = af->nBeads;
                     Widx[0] = kk + 2*N*ll;
                     Widx[1] = ll + 2*N*kk;
 
@@ -1612,440 +975,429 @@ uint8_t * initial_W(fconf * fc)
             }
         }
         return W0;
+    } else
+    {
+        uint8_t * W0 = malloc(powl(af->nBeads, 2)*sizeof(uint8_t));
+        assert(W0 != NULL);
+        for(size_t kk = 0; kk<powl(af->nBeads,2); kk++)
+        {
+            if(af->A[kk] == 1)
+            {
+                W0[kk] = 1;
+            } else {
+                W0[kk] = 0;
+            }
+        }
+        return W0;
     }
-
-    assert(0);
-    return NULL;
 }
 
-int main(int argc, char ** argv)
+
+static void aflock_init_structures(aflock * af, cf_structure * flock)
 {
-    mtrace_init();
-
-    if(argc == 1)
+    fprintf(stdout, "Initialization mode.\n");
+    fprintf(stdout, "Creating `mflock_jobs' to run with GNU parallel\n");
+    FILE * jobFile = fopen("mflock_jobs", "w");
+    if(jobFile == NULL)
     {
-        usage();
-        exit(0);
-    }
-
-    echo_args(argc, argv);
-
-    fconf * fc = fconf_init();
-
-    int ok = argparsing(fc, argc, argv);
-
-    if(fc->mode == MODE_UNKNOWN)
-    {
-        printf("No MODE specified!\n");
+        fprintf(stderr, "Failed to create 'mflock_jobs'\n");
         exit(1);
     }
 
-    /* When argument == 0:
-     *    Limit the memory to the amount of free memory
-     *    right now
-     * When argument > 0
-     *     Limit memory to the number of bytes specified
-     * Only implemented for linux
-     */
-    limit_mem(0);
+    fprintf(stdout, "Creating initial contact indication matrices, W\n");
+    char * dir = malloc(32*sizeof(char));
+    assert(dir != NULL);
 
-    if(ok != 0)
+    for(size_t kk = 0; kk<af->nStruct; kk++)
     {
-        usage();
-        exit(1);
-    }
+        sprintf(dir, "cf_%06zu/", kk+1);
 
-    if(fc->diploid == 1) {
-        printf("Diploid\n");
-    } else {
-        printf("Haploid\n");
-    }
-
-    /* Load the contact probability map specified with -A
-     * and set fc->nBeads to size(A,1)
-     */
-
-    fconf_load_A(fc);
-
-    /* set r0(qc) or qc(r0)
-     * Can only be done when it is known how many beads
-     * that are in the structures */
-    set_bead_radius(fc);
-
-    chrom * flock = load_structures(fc);
-
-    if(fc->get_quality == 1)
-    {
-        if(fc->diploid == 1){ assert(0); }
-
-        double quality = getQuality(fc, flock);
-        printf("Quality: %f\n", quality);
-    }
-
-    if(fc->mode == MODE_INIT)
-    {
-        /* Creates initial W matrices for each structure
-         * using only the contacts with theta == 1
-         */
-        fprintf(stdout, "Initialization mode.\n");
-        fprintf(stdout, "Creating `mflock_jobs' to run with GNU parallel\n");
-        FILE * jobFile = fopen("mflock_jobs", "w");
-        if(jobFile == NULL)
+        if(af->rfname == NULL)
         {
-            fprintf(stderr, "Failed to create 'mflock_jobs'\n");
-            exit(1);
+            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.csv --vq %f",
+                    dir, dir, dir, af->vq);
+        } else {
+            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.csv -r %sradius.double.gz --volq %f",
+                    dir, dir, dir, dir, af->vq);
         }
 
-        fprintf(stdout, "Creating initial contact indication matrices, W\n");
-        char * dir = malloc(32*sizeof(char));
-        assert(dir != NULL);
-
-        for(size_t kk = 0; kk<fc->nStruct; kk++)
+        if(af->mflock_arguments != NULL)
         {
-            sprintf(dir, "cf_%06zu/", kk+1);
+            fprintf(jobFile, " %s", af->mflock_arguments);
+        }
 
-            if(fc->rfname == NULL)
+        fprintf(jobFile, "\n");
+
+        struct stat st;
+        memset(&st, 0, sizeof(struct stat));
+
+        if (stat(dir, &st) == -1)
+        {
+            mkdir(dir, 0700);
+        }
+    }
+    free(dir);
+    fclose(jobFile);
+
+    /* Create the common start contacts */
+    uint8_t * W0 = initial_W(af);
+    uint64_t nCP = 0;
+    uint32_t * CP = contact_pairs_from_matrix(W0, af->nBeads, &nCP);
+    free(W0);
+    contact_pairs_write(flock[0].contact_pairs_file, CP, nCP);
+    free(CP);
+
+    for(size_t pp = 1; pp < af->nStruct; pp++)
+    {
+        printf("\r%zu", pp); fflush(stdout);
+        oscp(flock[0].contact_pairs_file, flock[pp].contact_pairs_file);
+    }
+    printf("\r");
+
+    /* Create initial radial constraints */
+    if(af->rfname != NULL)
+    {
+        size_t nel_r = 0;
+        size_t nel_pr = 0;
+        double * R = (double * ) wio_read(af->rfname, &nel_r);
+        double * PR = (double * ) wio_read(af->prfname, &nel_pr);
+        if(nel_r != nel_pr)
+        {
+            fprintf(stderr,
+                    "ERROR: Number of elements in %s and %s does not match\n",
+                    af->rfname, af->prfname);
+            exit(EXIT_FAILURE);
+        }
+        if(nel_r != af->nBeads*sizeof(double))
+        {
+            fprintf(stderr,
+                    "Error: Number of elements in %s does not match the number of beads\n",
+                    af->rfname);
+            exit(EXIT_FAILURE);
+        }
+
+        size_t used_R = 0;
+        double * R0 = malloc(af->nBeads*sizeof(double));
+        assert(R0 != NULL);
+        for(size_t kk = 0; kk< af->nBeads; kk++)
+        {
+            R0[kk] = NAN;
+            if(PR[kk] == 1)
             {
-                fprintf(jobFile, "mflock -w %sW.uint8.gz -o %s -x %scoords.csv --vq %f",
-                        dir, dir, dir, fc->vq);
-            } else {
-                fprintf(jobFile, "mflock -w %sW.uint8.gz -o %s -x %scoords.csv -r %sradius.double.gz --volq %f",
-                        dir, dir, dir, dir, fc->vq);
-            }
-
-            if(fc->mflock_arguments != NULL)
-            {
-                fprintf(jobFile, " %s", fc->mflock_arguments);
-            }
-
-            fprintf(jobFile, "\n");
-
-            struct stat st;
-            memset(&st, 0, sizeof(struct stat));
-
-            if (stat(dir, &st) == -1)
-            {
-                mkdir(dir, 0700);
+                R0[kk] = R[kk];
+                used_R ++;
             }
         }
-        free(dir);
-        fclose(jobFile);
+        printf("Using %zu elements of %s initially\n", used_R, af->rfname);
 
-        /* Create the common start contacts */
-        uint8_t * W0 = initial_W(fc);
-
-        struct_write_W0(fc, &flock[0], W0);
-
-        for(size_t pp = 1; pp < fc->nStruct; pp++)
+        for(size_t pp = 0; pp < af->nStruct; pp++)
         {
             printf("\r%zu", pp); fflush(stdout);
-            oscp(flock[0].wfName, flock[pp].wfName);
+            sprintf(dir, "cf_%06zu/", pp+1);
+            flock[pp].rfName = malloc(128*sizeof(char));
+            assert(flock[pp].rfName != NULL);
+            sprintf(flock[pp].rfName, "%sradius.double.gz", dir);
+            struct_write_R0(af, &flock[pp], R0);
+            free(flock[pp].rfName);
+            flock[pp].rfName = NULL;
         }
+
         printf("\r");
+        free(R0);
+    }
 
-        /* Create initial radial constraints */
-        if(fc->rfname != NULL)
-        {
-            size_t nel_r = 0;
-            size_t nel_pr = 0;
-            double * R = (double * ) wio_read(fc->rfname, &nel_r);
-            double * PR = (double * ) wio_read(fc->prfname, &nel_pr);
-            if(nel_r != nel_pr)
-            {
-                fprintf(stderr,
-                        "ERROR: Number of elements in %s and %s does not match\n",
-                        fc->rfname, fc->prfname);
-                exit(-1);
-            }
-            if(nel_r != fc->nBeads*sizeof(double))
-            {
-                fprintf(stderr,
-                        "Error: Number of elements in %s does not match the number of beads\n",
-                        fc->rfname);
-                exit(-1);
-            }
+    for(size_t ff =0; ff< af->nStruct; ff++)
+        cf_structure_free(&flock[ff]);
 
-            size_t used_R = 0;
-            double * R0 = malloc(fc->nBeads*sizeof(double));
-            assert(R0 != NULL);
-            for(size_t kk = 0; kk< fc->nBeads; kk++)
-            {
-                R0[kk] = NAN;
-                if(PR[kk] == 1)
-                {
-                    R0[kk] = R[kk];
-                    used_R ++;
-                }
-            }
-            printf("Using %zu elements of %s initially\n", used_R, fc->rfname);
+    printf("Done!\n");
+}
 
-            for(size_t pp = 0; pp < fc->nStruct; pp++)
-            {
-                printf("\r%zu", pp); fflush(stdout);
-                sprintf(dir, "cf_%06zu/", pp+1);
-                flock[pp].rfName = malloc(128*sizeof(char));
-                assert(flock[pp].rfName != NULL);
-                sprintf(flock[pp].rfName, "%sradius.double.gz", dir);
-                struct_write_R0(fc, &flock[pp], R0);
-                free(flock[pp].rfName);
-                flock[pp].rfName = NULL;
-            }
 
-            printf("\r");
-            free(R0);
-        }
+static void aflock_update_structures(aflock * af, cf_structure * flock)
+{
+    fprintf(stdout, "-> Update/assignment mode.\n");
+    /* Adds new contact to W of each structure.
+     */
 
-        for(size_t ff =0; ff< fc->nStruct; ff++)
-            ch_free(&flock[ff]);
+    double th_high = af->th_high;
+    double th_low = af->th_low;
 
-        free(W0);
-        printf("Done!\n");
+    if(af->rfname != NULL)
+    {
+        flock_updateR(af, flock, th_high, th_low);
+    }
+
+    /* Activation distance initialize as NAN */
+    double * AD = malloc(af->nBeads*af->nBeads*sizeof(double));
+    assert(AD != NULL);
+    for(size_t kk = 0 ; kk<powl(af->nBeads,2) ; kk++)
+    {
+        AD[kk] = NAN;
+    }
+
+    fprintf(stdout, "Calculating the activation distances\n");
+    calc_activation_distance(af, flock, AD);
+
+    fprintf(stdout, "Writing to disk\n");
+    pthread_t * threads = malloc(af->nThreads*sizeof(pthread_t));
+    assert(threads != NULL);
+    adstruct ** S = malloc(af->nThreads*sizeof(adstruct * ));
+    assert(S != NULL);
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
+        S[kk] = malloc(sizeof(adstruct));
+        assert(S[kk] != NULL);
+        S[kk]->thread = kk;
+        S[kk]->nThreads = af->nThreads;
+        S[kk]->af = af;
+
+        S[kk]->AD = AD;
+        S[kk]->flock = flock;
+
+        pthread_create(&threads[kk],
+                       NULL,
+                       run_cf_structure_assign_contacts,
+                       (void *) S[kk]);
+    }
+
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
+        pthread_join(threads[kk], NULL);
+        free(S[kk]);
+    }
+
+    free(S);
+    free(threads);
+
+    printf("Done writing W-files\n");
+    for(size_t kk = 0; kk<af->nStruct; kk++)
+    {
+        cf_structure_free(&flock[kk]);
     }
 
 
-    if(fc->mode == MODE_UPDATE)
+    printf("\r");
+    printf("\n");
+    return;
+}
+
+
+static void aflock_finalize_structures(aflock * af, cf_structure * flock)
+{
+    fprintf(stdout, "Finalization mode.\n");
+
+    /* Will not work with more threads than structures */
+    af->nThreads > af->nStruct ? af->nThreads = af->nStruct : 0;
+
+    /* Generate contact probability matrix etc */
+
+    const size_t nBeads = (1+af->diploid)*af->nBeads;
+
+    pthread_t * threads = malloc(af->nThreads*sizeof(pthread_t));
+    assert(threads != NULL);
+    final_tdata ** wtd = malloc(af->nThreads*sizeof(final_tdata*));
+    assert(wtd != NULL);
+
+    for(size_t kk = 0; kk<af->nThreads; kk++)
     {
-        fprintf(stdout, "Update/assignment mode.\n");
-        /* Adds new contact to W of each structure.
-         */
+        wtd[kk] = calloc(1, sizeof(final_tdata));
+        assert(wtd[kk] != NULL);
+        wtd[kk]->thread = kk;
+        wtd[kk]->nThreads = af->nThreads;
+        wtd[kk]->nBeads = nBeads;
+        wtd[kk]->nStruct = af->nStruct;
+        wtd[kk]->M = calloc(nBeads*nBeads, sizeof(uint16_t));
+        assert(wtd[kk]->M != NULL);
+        wtd[kk]->W = calloc(nBeads*nBeads, sizeof(uint16_t));
+        assert(wtd[kk]->W != NULL);
+        wtd[kk]->flock = flock;
+        wtd[kk]->af = af;
 
-        double th_high = fc->th_high;
-        double th_low = fc->th_low;
-
-        if(fc->rfname != NULL)
-        {
-            flock_updateR(fc, flock, th_high, th_low);
-        }
-
-        /* Activation distance initialize as NAN */
-        double * AD = malloc(fc->nBeads*fc->nBeads*sizeof(double));
-        assert(AD != NULL);
-        for(size_t kk = 0 ; kk<pow(fc->nBeads,2) ; kk++)
-        {
-            AD[kk] = NAN;
-        }
-
-        fprintf(stdout, "Calculating the activation distances\n");
-        calc_activation_distance(fc, flock, th_high, th_low, AD);
-
-        fprintf(stdout, "Writing to disk\n");
-
-        pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
-        assert(threads != NULL);
-        adstruct ** S = malloc(fc->nThreads*sizeof(adstruct * ));
-        assert(S != NULL);
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            S[kk] = malloc(sizeof(adstruct));
-            assert(S[kk] != NULL);
-            S[kk]->thread = kk;
-            S[kk]->nThreads = fc->nThreads;
-            S[kk]->fc = fc;
-
-            S[kk]->AD = AD;
-            S[kk] -> th_high = th_high;
-            S[kk] -> th_low = th_low;
-            S[kk]->flock = flock;
-
-            pthread_create(&threads[kk],
-                           NULL,
-                           run_struct_write_W_AD,
-                           (void *) S[kk]);
-        }
-
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            pthread_join(threads[kk], NULL);
-            free(S[kk]);
-        }
-
-        free(S);
-        free(threads);
-
-        printf("Done writing W-files\n");
-        for(size_t kk = 0; kk<fc->nStruct; kk++)
-        {
-            ch_free(&flock[kk]);
-        }
-
-
-        printf("\r");
-        printf("\n");
+        pthread_create(&threads[kk],
+                       NULL,
+                       final_tfun,
+                       (void *) wtd[kk]);
     }
 
-
-    if(fc->mode == MODE_FINAL)
+    for(size_t kk = 0; kk<af->nThreads; kk++)
     {
-        /* Loops over all the structures and
-         * creates a joint contact map.
-         * Note that the capture distance, cDistance is calculated
-         * as a function of the bead radius. The bead radius
-         * in this step does not have to match the one used in the simulations.
-         */
+        pthread_join(threads[kk], NULL);
+    }
 
-        fprintf(stdout, ">  Finalization mode.\n");
+    /* Summarize what the threads calculated from wtd */
 
-        /* Generate contact probability matrix etc */
-
-        const size_t nBeads = (1+fc->diploid)*fc->nBeads;
-        const size_t msize = (size_t) powl(nBeads,2)*sizeof(double);
-        //printf("msize=%zu\n", msize);
-
-        pthread_t * threads = malloc(fc->nThreads*sizeof(pthread_t));
-        assert(threads != NULL);
-        final_tdata ** wtd = malloc(fc->nThreads*sizeof(final_tdata*));
-        assert(wtd != NULL);
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            wtd[kk] = malloc(sizeof(final_tdata));
-            assert(wtd[kk] != NULL);
-            wtd[kk]->thread = kk;
-            wtd[kk]->nThreads = fc->nThreads;
-            wtd[kk]->nBeads = (1+fc->diploid)*fc->nBeads;
-            wtd[kk]->nStruct = fc->nStruct;
-            wtd[kk]->M = malloc(msize);
-            assert(wtd[kk]->M != NULL);
-            wtd[kk]->flock = flock;
-            wtd[kk]->fc = fc;
-
-            memset(wtd[kk]->M, 0, msize);
-
-            pthread_create(&threads[kk],
-                           NULL,
-                           final_tfun,
-                           (void *) wtd[kk]);
-        }
-
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            pthread_join(threads[kk], NULL);
-        }
-
-        /* Summarize what the threads calculated from wtd */
-
-        /* Sum up all the wanted contacts */
-        double * Wtotal = malloc(pow(nBeads,2)*sizeof(double));
-        assert(Wtotal != NULL);
-        memset(Wtotal, 0, pow(nBeads,2)*sizeof(double));
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            for(size_t mm = 0; mm<nBeads; mm++) {
-                for(size_t nn = mm; nn<nBeads; nn++) {
-                    Wtotal[mm*nBeads + nn] += (double) wtd[kk]->W[mm*nBeads + nn];
-                }
+    /* Sum up assigned contacts */
+    uint16_t * Wtotal = calloc(powl(nBeads, 2), sizeof(uint16_t));
+    assert(Wtotal != NULL);
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
+        for(size_t mm = 0; mm<nBeads; mm++) {
+            for(size_t nn = mm; nn<nBeads; nn++) {
+                Wtotal[mm*nBeads + nn] += wtd[kk]->W[mm*nBeads + nn];
             }
         }
+        free( wtd[kk]->W );
+    }
 
-        /* Sum up all found contacts */
-        double * M = malloc(msize);
-        assert(M != NULL);
-        memset(M, 0, msize);
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            for(size_t mm = 0; mm < nBeads; mm++) {
-                for(size_t nn = mm; nn < nBeads; nn++) {
-                    size_t idx1 = nn*nBeads + mm;
-                    // size_t idx2 = mm*nBeads + nn;
-                    M[idx1] += wtd[kk]->M[idx1];
-                }
-            }
-
-            free(wtd[kk]->M);
+    /* Copy to second triangle */
+    for(size_t mm = 0; mm < nBeads; mm++) {
+        for(size_t nn = mm; nn < nBeads; nn++) {
+            Wtotal[nn*nBeads + mm] = Wtotal[mm*nBeads + nn];
         }
-        /* Copy to second triangle */
+    }
+
+    /* Write assigned contacts */
+    char Wtotal_name[] = "assigned_contacts.u16";
+    fprintf(stdout, "   Writing sum of assigned contacts to '%s'\n", Wtotal_name);
+    FILE * fid = fopen(Wtotal_name, "w");
+    if(fid == NULL)
+    {
+        fprintf(stderr, "Unable to open %s for writing\n", Wtotal_name);
+        exit(EXIT_FAILURE);
+    }
+    size_t nWritten = fwrite(Wtotal, sizeof(uint16_t), powl(nBeads,2), fid);
+    if(nWritten != powl(nBeads,2))
+    {
+        fprintf(stderr, "Failed to write to %s\n", Wtotal_name);
+        fprintf(stderr, "Wrote %zu elements. Intended to write %zu elements\n",
+                nWritten, (size_t) powl(nBeads,2));
+        exit(EXIT_FAILURE);
+    }
+    fclose(fid);
+    free(Wtotal);
+
+
+    /* Sum up all found contacts based on proximity */
+    uint16_t * M = calloc(nBeads*nBeads, sizeof(uint16_t));
+    assert(M != NULL);
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
         for(size_t mm = 0; mm < nBeads; mm++) {
             for(size_t nn = mm; nn < nBeads; nn++) {
                 size_t idx1 = nn*nBeads + mm;
-                size_t idx2 = mm*nBeads + nn;
-                M[idx2] = M[idx1];
+                M[idx1] += wtd[kk]->M[idx1];
             }
         }
+        free(wtd[kk]->M);
+    }
 
-        /* Sum up radial profile */
-        double * rprof = malloc(nBeads*sizeof(double));
-        assert(rprof != NULL);
-        memset(rprof, 0, nBeads*sizeof(double));
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            for(size_t idx = 0; idx<nBeads; idx++)
-            {
-                rprof[idx] += wtd[kk]->rprof[idx];
-            }
-            free(wtd[kk]->rprof);
-        }
-        /* And get average */
-        for(size_t idx = 0; idx<nBeads; idx++)
-        {
-            rprof[idx] /= fc->nStruct;
-        }
-
-        /* Free all threads and thread data remaining */
-        for(size_t kk = 0; kk<fc->nThreads; kk++)
-        {
-            free(wtd[kk]);
-        }
-        free(wtd);
-        free(threads);
-
-        {
-            size_t nBeads = (fc->diploid + 1)*fc->nBeads;
-            for(size_t mm = 0; mm < nBeads; mm++) {
-                for(size_t nn = mm; nn < nBeads; nn++) {
-                    Wtotal[nn*nBeads + mm] = Wtotal[mm*nBeads + nn];
-                }
-            }
-        }
-
-        /* Write radial profile */
-        char * rproffname = malloc(1024*sizeof(char));
-        assert(rproffname != NULL);
-        sprintf(rproffname, "radial_profile.csv");
-        fprintf(stdout, "   Writing radial profile to: %s\n", rproffname);
-        FILE * rproffile = fopen(rproffname, "w");
-        for(size_t pp = 0; pp < nBeads; pp++)
-        {
-            fprintf(rproffile, "%f\n", rprof[pp]);
-        }
-        free(rprof);
-        fclose(rproffile);
-
-
-        /* Write contact map */
-        char * mfilename = malloc(1024*sizeof(char));
-        assert(mfilename != NULL);
-        sprintf(mfilename, "all_contacts.double");
-        fprintf(stdout, "   Writing contact map to: %s\n", mfilename);
-        FILE * mout = fopen(mfilename, "w");
-
-        if(mout == NULL)
-        {
-            printf("Failed to open output file %s\n", mfilename);
-            exit(1);
-        }
-
-        size_t nwrite = fwrite(M, sizeof(double), (size_t) pow(nBeads,2), mout);
-        printf("Wrote %zu doubles \n", nwrite);
-        assert(nwrite == (size_t) pow(nBeads,2));
-        fclose(mout);
-
-        /* Write assigned contacts */
-        fprintf(stdout, "   Writing sum of assigned contacts to %s\n", "Wtotal.double");
-        wio_write("Wtotal.double", pow(nBeads,2)*sizeof(double), (uint8_t *) Wtotal);
-        free(Wtotal);
-
-        free(rproffname);
-        free(mfilename);
-
-        free(M);
-        for(size_t kk = 0; kk<fc->nStruct; kk++)
-        {
-            ch_free(&flock[kk]);
+    /* Copy to second triangle */
+    for(size_t mm = 0; mm < nBeads; mm++) {
+        for(size_t nn = mm; nn < nBeads; nn++) {
+            size_t idx1 = nn*nBeads + mm;
+            size_t idx2 = mm*nBeads + nn;
+            M[idx2] = M[idx1];
         }
     }
 
-    free(flock);
-    fconf_free(fc);
-    free(fc);
+    /* Write contact map */
+    char mfilename[] = "measured_contacts.u16";
+    fprintf(stdout, "   Writing contact map to '%s'\n", mfilename);
+    FILE * mout = fopen(mfilename, "w");
+    if(mout == NULL)
+    {
+        printf("Failed to open output file %s\n", mfilename);
+        exit(EXIT_FAILURE);
+    }
+    size_t nwrite = fwrite(M, sizeof(uint16_t), powl(nBeads,2), mout);
+    if(nwrite != (size_t) powl(nBeads,2))
+    {
+        fprintf(stderr, "Failed to write to %s\n", mfilename);
+        exit(EXIT_FAILURE);
+    }
+    fclose(mout);
+    free(M);
 
-    return 0;
+    /* Sum up radial profile */
+    double * rprof = malloc(nBeads*sizeof(double));
+    assert(rprof != NULL);
+    memset(rprof, 0, nBeads*sizeof(double));
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
+        for(size_t idx = 0; idx<nBeads; idx++)
+        {
+            rprof[idx] += wtd[kk]->rprof[idx];
+        }
+        free(wtd[kk]->rprof);
+    }
+    /* And get average */
+    for(size_t idx = 0; idx<nBeads; idx++)
+    {
+        rprof[idx] /= af->nStruct;
+    }
+
+    /* Free all threads and thread data remaining */
+    for(size_t kk = 0; kk<af->nThreads; kk++)
+    {
+        free(wtd[kk]);
+    }
+    free(wtd);
+    free(threads);
+
+    /* Write radial profile */
+    char rproffname[] = "radial_profile.csv";
+    fprintf(stdout, "   Writing radial profile to: %s\n", rproffname);
+    FILE * rproffile = fopen(rproffname, "w");
+    for(size_t pp = 0; pp < nBeads; pp++)
+    {
+        fprintf(rproffile, "%f\n", rprof[pp]);
+    }
+    free(rprof);
+    fclose(rproffile);
+
+    /* Free up remaining data */
+    for(size_t kk = 0; kk<af->nStruct; kk++)
+    {
+        cf_structure_free(&flock[kk]);
+    }
+
+    return;
+}
+
+
+int main(int argc, char ** argv)
+{
+    /* Initialize and get the default settings */
+    aflock * af = aflock_init();
+
+    /* Parse command line arguments */
+    if(aflock_parse_command_line(af, argc, argv))
+    {
+        printf("\n");
+        aflock_usage();
+        exit(EXIT_FAILURE);
+    }
+
+    /* Load the contact probability map specified with -A
+     * and set af->nBeads to size(A,1)
+     */
+    aflock_load_contact_probabilities(af);
+
+    /* Sets both the bead radius and the volume quotient based on one of them  */
+    aflock_set_bead_radius(af);
+
+    /* If the structures are not loaded, this just sets the names of
+     * the associates files. */
+    cf_structure * flock = aflock_load_structures(af);
+
+    switch(af->mode)
+    {
+    case MODE_INIT:
+        aflock_init_structures(af, flock);
+        break;
+    case MODE_UPDATE:
+        aflock_update_structures(af, flock);
+        break;
+    case MODE_FINAL:
+        aflock_finalize_structures(af, flock);
+        break;
+    default:
+        fprintf(stderr, "aflock does not know what to do. No mode selected\n");
+    }
+
+    free(flock);
+    aflock_free(af);
+    free(af);
+
+    return EXIT_SUCCESS;
 }

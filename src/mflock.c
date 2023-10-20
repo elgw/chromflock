@@ -1,8 +1,14 @@
+/**
+ * @file mflock.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #include "mflock.h"
 
 static volatile int run = 1;
 
-#define INLINED inline __attribute__((always_inline))
+#define INLINED static inline __attribute__((always_inline))
 
 static void luaerror (lua_State *L, const char *fmt, ...) {
     /* show lua error string */
@@ -52,7 +58,7 @@ static double clockdiff(struct timespec* start, struct timespec * finish)
     return elapsed;
 }
 
-static double norm3(double * X)
+static double norm3(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -173,40 +179,16 @@ INLINED double eudist3(const double * A, const double * B)
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-INLINED double chrpd(const double * X, const optparam * p)
-{
-    /* Monitor sum of pairwize distances of chr 1,
-     *  assuming it is correlated to compaction and volume
-     * it should give an indication of structure clustering */
 
-    if(p->L != NULL)
-    {
-
-        size_t last = 0;
-        for(size_t pp = 0; pp<p->N; pp++)
-        {
-            if(p->L[pp] == 1)
-            {
-                last = pp;
-            }
-        }
-
-        double pd = 0;
-        for(size_t kk = 0; kk<last; kk++)
-        {
-            for(size_t ll = kk+1; ll<last; ll++)
-            {
-                pd += eudist3(X+3*kk, X+3*ll);
-            }
-        }
-
-        return pd;
-    }
-    return -1;
-}
-
-/* Apply a force that attracts each bead to the centre of
-   mass of it's chromosome */
+/** @brief Per Chr Centre of mass compression
+ *
+ *Apply a force that attracts each bead to the centre of mass of it's
+ * chromosome This slows down the computations quite much because the
+ * beads get close to each other so the collision detection gets more to do.
+ *
+ * TODO: Unnecessary to allocate/free things here and to count the
+ * number of beads per chromosome.
+ */
 void comforce(optparam * restrict p,
               const double * restrict X,
               double * restrict G)
@@ -298,9 +280,9 @@ int dynamic(double * restrict X,
         /* add ellipse parameters otherwise sphere domain */
         fconf.E = p->E;
         fconf.Es = elli_new(
-            p->E->a - fconf.r0,
-            p->E->b - fconf.r0,
-            p->E->c - fconf.r0);
+                            p->E->a - fconf.r0,
+                            p->E->b - fconf.r0,
+                            p->E->c - fconf.r0);
     }
 
     fconf.nIPairs = p->NI; /* Only for err2 */
@@ -354,55 +336,35 @@ int dynamic(double * restrict X,
 
         if(p->luaDynamics == 0)
         {
-            /* Alber style heuristics */
-            double beta = 5.0;
-            /* WARNING: Assumes that 7 temperature cycles are used */
-            double n = (double) p->iter_final/ ((double) p->maxiter*7); // [0, 1]
-            assert(n<=1);
-            if(n>1)
-            {
-                n = 1;
-            }
+            fprintf(stderr, "luaDynamics == 0\n");
+            exit(EXIT_FAILURE);
+        }
 
-            fconf.kInt = p->kInt* 0.5*(1.0+erf((n-.5)*beta));
-            if(fconf.kInt<0.1*p->kInt)
-            {
-                fconf.kInt = 0.1*p->kInt;
-            }
-            /* Define the contact range between beads. When beads are further away than the contact range
-             * they will be attracted.
-             * On page 64 of supplementary materials of nbt2057 it is stated that it goes from 1.1 to 2 times (r0+r1)
-             * However, in PGS/alab/modeling.py the contact range is set to 2*(r0+r1) independent on iteration.
-             * n \in [0,1], proportion of steps taken */
-            fconf.dInteraction = (1+0.1+0.9*n)*2*fconf.r0;
-            //printf("fconf.dInteraction: %f (%f r0)\n", fconf.dInteraction , fconf.dInteraction/fconf.r0);
+        /* Settings from lua script */
+        //     printf("Getting settings from lua script: %s\n", p->luaDynamicsFile);
 
-        } else { /* Settings from lua script */
-            //     printf("Getting settings from lua script: %s\n", p->luaDynamicsFile);
+        lua_getglobal(L, "getConfig"); /* function to be called */
+        lua_pushnumber(L, iter); /* push arguments */
+        lua_pushnumber(L, p->newx);
 
-            lua_getglobal(L, "getConfig"); /* function to be called */
-            lua_pushnumber(L, iter); /* push arguments */
-            lua_pushnumber(L, p->newx);
+        /* do the call (2 arguments, 0 result) */
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+            luaerror(L, "error running function 'f': %s",
+                     lua_tostring(L, -1));
 
-            /* do the call (2 arguments, 0 result) */
-            if (lua_pcall(L, 2, 0, 0) != LUA_OK)
-                luaerror(L, "error running function 'f': %s",
-                         lua_tostring(L, -1));
-
-            /* retrieve result */
-            fconf.kDom = getglobfloat(L, "kDom");
-            fconf.kVol = getglobfloat(L, "kVol");
-            fconf.kInt = getglobfloat(L, "kInt");
-            fconf.kRad = getglobfloat(L, "kRad");
-            p->compress = getglobfloat(L, "kCom");
-            Fb = getglobfloat(L, "fBrown");
-            luaquit = getglobint(L, "quit");
-            fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
-            if(p->verbose > 10)
-            {
-                printf("kInteraction: %f\n", fconf.kInt);
-                printf("dInteraction: %f\n", fconf.dInteraction);
-            }
+        /* retrieve result */
+        fconf.kDom = getglobfloat(L, "kDom");
+        fconf.kVol = getglobfloat(L, "kVol");
+        fconf.kInt = getglobfloat(L, "kInt");
+        fconf.kRad = getglobfloat(L, "kRad");
+        p->compress = getglobfloat(L, "kCom");
+        Fb = getglobfloat(L, "fBrown");
+        luaquit = getglobint(L, "quit");
+        fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
+        if(p->verbose > 10)
+        {
+            printf("kInteraction: %f\n", fconf.kInt);
+            printf("dInteraction: %f\n", fconf.dInteraction);
         }
 
         /* Start of Molecular Dynamics
@@ -465,7 +427,7 @@ int dynamic(double * restrict X,
 
         for(size_t pp = 0 ; pp < 3*p->N ; pp++)
         {
-            v[pp] = (X[pp] - Xm[pp]) / (2 * dt);
+            v[pp] = (X[pp] - Xm[pp]) / (2.0 * dt);
         }
 
         for(size_t kk = 0; kk < 3*p->N; kk++)
@@ -473,20 +435,11 @@ int dynamic(double * restrict X,
             g[kk] = g[kk] + damp*v[kk];
         }
 
-        if(0){ // Average gradient norm per bead
-            double gavg = 0;
-            for(size_t kk = 0; kk < p->N; kk++)
-            {
-                gavg += norm3(g+3*kk);
-            }
-            printf("Average gradient: %f\n", gavg/p->N);
-        }
-
         /* 3. Update X */
         for(size_t pp = 0 ; pp < 3*p->N ; pp++)
         {
             double xt = X[pp];
-            X[pp] = 2*X[pp] - Xm[pp] - g[pp]*pow(dt,2);
+            X[pp] = 2.0*X[pp] - Xm[pp] - g[pp]*pow(dt,2);
             Xm[pp] = xt; // Update Xm to reflect the previous X-value
         }
         /* End of molecular dynamics */
@@ -504,17 +457,20 @@ int dynamic(double * restrict X,
             }
             gnorm = sqrt(gnorm);
 
-            //      double pd1 = chrpd(X, p);
-
             error = err3(X,
                          p->N,
                          p->R,
                          p->I,
                          &fconf);
-            logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n", iter, error, gnorm);
+            logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n",
+                     iter, error, gnorm);
+            fflush(p->logf);
         }
 
     } while( (iter < maxiter) && (run == 1) && (luaquit == 0));
+
+    // TODO this is already calculated at at end of the last iteration.
+    // also DRY.
 
     /* At final step, report back */
     double errorFinal = err3(X,
@@ -551,8 +507,11 @@ int dynamic(double * restrict X,
     return 0;
 }
 
-
-void param_summary(optparam * p, double * X)
+/** @brief Report on success to log and screen
+ *
+ * @todo Time in ISO format.
+ */
+void param_summary(optparam * p, const double * restrict X)
 {
     assert(p->N>0);
 
@@ -566,9 +525,9 @@ void param_summary(optparam * p, double * X)
     // X: mean, max, min
     double mex = 0, mey = 0, mez = 0;
     double md = 10e99;
-    double mix = md, miy = md, miz = md;
-    double max = -md, may = -md, maz = -md;
-    double mer = 0, mir = 10e99, mar = 0;
+    double mix = md, miy = md, miz = md;    /* min, x, y, z */
+    double max = -md, may = -md, maz = -md; /* max, x, y, z */
+    double mer = 0, mir = 10e99, mar = 0;   /* mean, min, max of radius */
 
     for(size_t kk = 0 ; kk<p->N; kk++)
     {
@@ -605,13 +564,47 @@ void param_summary(optparam * p, double * X)
 
 }
 
+/** @brief Read contact pairs from a binary file
+    Sets p->I (the contacts) and p->NI (number of contact pairs)
+    @return - Nothing, but aborts the program on failure.
+*/
+void param_read_contact_pairs(optparam * p)
+{
+    logwrite(p, 1, "Reading pairwise interactions from %s\n",
+             p->contact_pairs_file);
+    uint64_t nCP = 0;
+    p->I = contact_pairs_read(p->contact_pairs_file, &nCP);
+    if(p->I == NULL)
+    {
+        fprintf(stderr, "%s/%d Failed to read contact pairs from %s\n",
+                __FILE__, __LINE__, p->contact_pairs_file);
+        exit(EXIT_FAILURE);
+    }
+    p->NI = nCP;
+    logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
+    return;
+}
+
+/** @brief Read binary indication matrix.
+
+    Read the uint8 matrix, typically W.uint8, and set p->I to the
+    contact pairs that can be found,
+    p->I = [ a1, a2
+    b1, b2,
+    ...
+    ]
+    such that a1 < a2, b1 < b2 etc.
+    also set p->NI
+    also set p->N
+    depreciated. Use param_read_contact_pairs
+*/
 void param_readW(optparam * p)
 {
 
     logwrite(p, 1, "Reading pairwise interactions from %s\n", p->wfname);
 
     size_t fsize = 0;
-    p->W = wio_read(p->wfname, &fsize);
+    uint8_t * W = wio_read(p->wfname, &fsize);
     if(fsize == 0)
     {
         printf("%s/%d Failed reading %s!\n",
@@ -620,14 +613,14 @@ void param_readW(optparam * p)
     }
 
     logwrite(p, 1, " W = [ %d, %d, %d, %d, ..., %d, %d, %d, %d]\n",
-             (int) p->W[0],
-             (int) p->W[1],
-             (int) p->W[2],
-             (int) p->W[3],
-             p->W[fsize-4],
-             p->W[fsize-3],
-             p->W[fsize-2],
-             p->W[fsize-1]);
+             (int) W[0],
+             (int) W[1],
+             (int) W[2],
+             (int) W[3],
+             W[fsize-4],
+             W[fsize-3],
+             W[fsize-2],
+             W[fsize-1]);
 
     // Set the number of elements
     p->N = (size_t) sqrt(fsize);
@@ -643,7 +636,7 @@ void param_readW(optparam * p)
     {
         for(size_t ll = kk+1; ll<p->N; ll++)
         {
-            if(p->W[kk+ll*p->N] == 1)
+            if(W[kk+ll*p->N] == 1)
             {
                 nPairs++;
             }
@@ -666,13 +659,14 @@ void param_readW(optparam * p)
     for(size_t kk = 0; kk<p->N; kk++)
         for(size_t ll = kk+1; ll<p->N; ll++)
         {
-            if(p->W[kk+ll*p->N] == 1)
+            if(W[kk+ll*p->N] == 1)
             {
                 p->I[writepos++] = kk;
                 p->I[writepos++] = ll;
             }
         }
     printf(" ok\n");
+    free(W);
     return;
 }
 
@@ -736,12 +730,14 @@ int param_readL(optparam * p)
     }
 
     logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
-    int readAsText = 0;
-    p->L = malloc(p->N*sizeof(double));
-    assert(p->L != NULL);
 
     // Try to read as binary
     FILE * f = fopen(p->lfname, "rb");
+    if(f == NULL)
+    {
+        fprintf(stderr, "Unable to read %s\n", p->lfname);
+        exit(EXIT_FAILURE);
+    }
     fseek(f, 0, SEEK_END); // seek to end of file
     size_t fsize = ftell(f); // get current file pointer
     fseek(f, 0, SEEK_SET); // seek back to beginning of file
@@ -749,65 +745,16 @@ int param_readL(optparam * p)
     logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
              fsize/sizeof(uint8_t), fsize);
 
-    int gotL = 0;
-    if(fsize/sizeof(uint8_t) == p->N)
+    p->N = fsize/sizeof(uint8_t);
+    p->L = malloc(p->N*sizeof(double));
+    assert(p->L != NULL);
+    size_t nread = fread(p->L, sizeof(uint8_t), p->N, f);
+    if(nread != p->N)
     {
-        size_t status = fread(p->L, sizeof(uint8_t), p->N, f);
-        fclose(f);
-        if(status != p->N)
-        {
-            printf("Problems at %d\n", __LINE__);
-        }
-        gotL = 1;
+        fprintf(stderr, "Unable to read from %s\n", p->lfname);
+        exit(EXIT_FAILURE);
     }
-
-    if(fsize/sizeof(uint8_t)*2 == p->N)
-    {
-        size_t status = fread(p->L, sizeof(uint8_t), p->N/2, f);
-        fclose(f);
-        if(status != p->N/2)
-        {
-            printf("Problems at %d\n", __LINE__);
-        }
-        // Copy and add 32 for the second set of chromosomes
-        for(size_t pos = 0; pos < p->N/2; pos++)
-        {
-            p->L[pos+p->N/2] = 32 + p->L[pos];
-            //      printf("L[%zu] = %u L[%zu] = %u\n", pos, p->L[pos], pos+p->N/2, p->L[pos+p->N/2]);
-        }
-        gotL = 1;
-    }
-
-    if(gotL == 0)
-    {
-        fclose(f);
-        printf("! Wrong number if numbers in L!\n");
-        printf("! Trying to read as text\n");
-        readAsText = 1;
-    }
-
-    if(readAsText == 1)
-    {
-        logwrite(p, 0, "Reading %s as text, one float per line\n", p->lfname);
-        f = fopen(p->lfname, "r");
-        size_t nbuf = 1024;
-        char * buf = malloc(nbuf*sizeof(char));
-        assert(buf != NULL);
-
-        size_t pos = 0;
-        while (fgets(buf, nbuf, f) != NULL && (pos < p->N))
-        {
-            double label = atof(buf);
-            if(label < 1 || label > 64)
-            {
-                logwrite(p, 0, "Got label %f which does not seem to be right\n", label);
-                exit(-1);
-            }
-            p->L[pos++] = (int) label;
-        }
-        fclose(f);
-        free(buf);
-    }
+    fclose(f);
 
     logwrite(p, 2, "L = [%u, %u, ..., %u]\n", p->L[0], p->L[1], p->L[p->N-1]);
 
@@ -974,10 +921,17 @@ void param_show(optparam * p, FILE * f)
 
     if(p->wfname == NULL)
     {
-        fprintf(f, "    W file: -not specified-  REQUIRED\n");
+        fprintf(f, "    W file: -not specified\n");
     } else
     {
         fprintf(f, "    W file: %s\n", p->wfname);
+    }
+
+    if(p->contact_pairs_file == NULL)
+    {
+        fprintf(f, "   Contact Pairs file not specified (REQUIRED!)\n");
+    } else {
+        fprintf(f, "   Contacts Pairs File: %s\n", p->contact_pairs_file);
     }
 
     if(p->xfname == NULL)
@@ -1090,34 +1044,26 @@ void dump_lua_dynamics(char * luafile)
 
 void usage()
 {
-    printf("Note that mflock typically is run from a script,\n");
-    printf("see man mflock for more details\n");
-    printf("It is recommended that the forces are set by a lua script (with --dconf)\n");
-    printf("To set forces directly will be depreciated in a future version\n");
-    printf("\n");
-    printf("   Accepted arguments:\n");
-    printf("1. Required:\n");
-    printf(" -w <file>, --wFile <file>\n\tfile with contacts marked out (square)\n");
+    printf("Note that mflock typically is run via chromflock\n"
+           "see man chromflock for more details\n");
+    printf("1. Required arguments:\n");
+    printf(" --contact-pairs <file>\n\tFile with contact pairs (uint32).\n");
     printf(" -L <file>, --lFile <file>\b\tlabel matrix (uint8_t)\n");
-    printf("2. Optional:\n");
+    printf(" --dconf mflock.lua\n\tSpecify lua script to use for dynamics\n");
+    printf("2. Optional arguments:\n");
     printf(" -x <file>, --xFile <file>\n\tfile with initial coordinates\n");
     printf(" -s N, --seed N\n\tseed for random number generator (defaults to random)\n");
-    printf(" -r <file>, --rFile <file>\n\tfile with wanted radii (in conjunction with -G)\n");
-    printf("\tall files should be encoded as 64-bit floats\n");
+    printf(" -r <file>, --rFile <file>\n\tfile with wanted radii (in conjunction with -G)\n"
+           "\tall files should be encoded as 64-bit floats\n");
     printf(" -n N, --maxiter N\n\tmaximum number of iterations\n");
     printf(" -t N, --maxtime N\n\t time budget in seconds\n");
-    printf("2.1 Forces:\n");
-    printf(" -V kVol, --kVol kVol\n\tvolume exclusions spring constant\n");
-    printf(" -I kInt, --kInt kInt\n\tinteraction spring constant\n");
-    printf(" -S kDom, --kDom kDom\n\tdomain confinement spring constant\n");
-    printf(" -G kRad, --kRad kRad\n\tgenome positioning spring constant\n");
-    printf(" --dconf mflock.lua\n\tuse a lua file for the settings\n");
+    printf("2.1 Forces\n");
     printf(" --dconf-show mflock.lua\n\tPrint the dynamics as a table and quit.\n");
     printf("\tNo additional arguments required or used\n");
     printf("2.2 Geometry\n");
     printf(" -R r0, --radius r0\n\tbead radius (sphere has radius 1)\n");
-    printf(" -Q vq, --volq vq\n\tvolume quotient (beads/domain)\n");
-    printf("    For ellipsoidal geometry, set 1=ea>=eb>=ec>0\n");
+    printf(" -Q vq, --volq vq\n\tvolume quotient (beads/domain)\n"
+           "    For ellipsoidal geometry, set 1=ea>=eb>=ec>0\n");
     printf(" -A ea, --ea ea\n\tMajor axis of ellipsoid\n");
     printf(" -B eb, --eb eb\n\tSecond axis of ellipsoid\n");
     printf(" -C ec, --ec ec\n\tThird axis of ellipsoid\n");
@@ -1150,9 +1096,10 @@ int argparsing(optparam * p, int argc, char ** argv)
         { "help",         no_argument,       NULL,   'h' },
         // Data
         { "wFile",        required_argument, NULL,   'w' },
+        { "contact-pairs", required_argument, NULL,  'p' },
         { "xFile",        required_argument, NULL,   'x' },
         { "rFile",        required_argument, NULL,   'r' },
-        { "lFile",        required_argument, NULL,   'L' },
+        { "labels",        required_argument, NULL,   'L' },
         { "outFolder",    required_argument, NULL,   'o' },
         // Settings
         { "maxiter",      required_argument, NULL,   'n' },
@@ -1183,7 +1130,7 @@ int argparsing(optparam * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "A:B:C:w:x:r:n:t:V:I:S:R:G:v:o:hMs:L:zcadQ:l:",
+                            "A:B:C:w:x:r:n:t:V:I:S:R:G:v:o:p:hMs:L:zcadQ:l:",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1222,6 +1169,10 @@ int argparsing(optparam * p, int argc, char ** argv)
         case 'n':
             p->maxiter = atol(optarg);
             break;
+        case 'p':
+            free(p->contact_pairs_file);
+            p->contact_pairs_file = strdup(optarg);
+            break;
         case 't':
             p->maxtime = atol(optarg);
             break;
@@ -1250,7 +1201,8 @@ int argparsing(optparam * p, int argc, char ** argv)
             p->verbose = atoi(optarg);
             break;
         case 'o':
-            p->ofoldername = malloc(strlen(optarg)+1);
+            free(p->ofoldername);
+            p->ofoldername = malloc(strlen(optarg)+2);
             assert(p->ofoldername != NULL);
             strcpy(p->ofoldername, optarg);
             break;
@@ -1288,22 +1240,48 @@ int argparsing(optparam * p, int argc, char ** argv)
         }
     }
 
-    if(p->wfname == NULL)
+    if(p->luaDynamics == 0)
     {
-        printf("ERROR: 'W' file not set (-w) \n");
-        if(0){
-            printf("Generate one in MATLAB with:\n");
-            printf("A = zeros(150,150)\n");
-            printf("A(2:size(A,1)+1:end) = 1;\n");
-            printf("A = A + A';\n");
-            printf("A8 = uint8(A);\n");
-            printf("fout = fopen('A150.dat', 'wb');\n");
-            printf("fwrite(fout, A, 'uint8');\n");
-            printf("fclose(fout)\n");
-            printf("\n\n");
-        }
+        fprintf(stderr, "--dconf not specified\n");
+        exit(EXIT_FAILURE);
+    }
 
-        return ARGS_ERR;
+    /* Make sure that the outfolder ends with a path_separator.
+       Note: it should already be allocated to have room for it if missing */
+    if(p->ofoldername)
+    {
+#ifdef _WIN32
+        fprintf(stderr, "TODO: Non-portable section %s %s\n",
+                __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+#endif
+        if(p->ofoldername[strlen(p->ofoldername)] != '/' )
+        {
+            p->ofoldername[strlen(p->ofoldername)+1] = '\0';
+            p->ofoldername[strlen(p->ofoldername)] = '/';
+        }
+    }
+
+    if(p->contact_pairs_file == NULL)
+    {
+        fprintf(stderr, "WARNING: Contacts file not set\n");
+
+        if(p->wfname == NULL)
+        {
+            printf("ERROR: 'W' file not set (-w) \n");
+            if(0){
+                printf("Generate one in MATLAB with:\n");
+                printf("A = zeros(150,150)\n");
+                printf("A(2:size(A,1)+1:end) = 1;\n");
+                printf("A = A + A';\n");
+                printf("A8 = uint8(A);\n");
+                printf("fout = fopen('A150.dat', 'wb');\n");
+                printf("fwrite(fout, A, 'uint8');\n");
+                printf("fclose(fout)\n");
+                printf("\n\n");
+            }
+            return ARGS_ERR;
+        }
     }
 
     int efail = 0;
@@ -1330,7 +1308,7 @@ int argparsing(optparam * p, int argc, char ** argv)
 
 optparam *  param_alloc(void)
 {
-    optparam * p = malloc(sizeof(optparam));
+    optparam * p = calloc(1, sizeof(optparam));
     assert(p != NULL);
 
     struct timespec ts;
@@ -1354,7 +1332,6 @@ optparam *  param_alloc(void)
     p->volq = 0.2;
 
     p->N = 0;
-    p->W = NULL;
     p->I = NULL;
     p->NI = 0;
     p->R = NULL;
@@ -1364,16 +1341,6 @@ optparam *  param_alloc(void)
     p->liveView = 0;
 
     p->L = NULL;
-
-    p->rfname = NULL;
-    p->xfname = NULL;
-    p->wfname = NULL;
-    p->xoutfname = NULL;
-    p->ofoldername = NULL;
-    p->lfname = NULL;
-
-    p->logfname = NULL;
-    p->logf = NULL;
 
     p->E = NULL;
     p->newx = 1;
@@ -1400,14 +1367,11 @@ optparam *  param_alloc(void)
         }
     }
 
-    p->luaDynamics = 0;
-    p->luaDynamicsFile = NULL;
-
     fflush(stdout);
     return p;
 }
 
-int param_init(optparam * p)
+int param_init(optparam * p, int argc, char ** argv)
 {
 
     struct stat st;
@@ -1464,12 +1428,17 @@ int param_init(optparam * p)
         exit(1);
     }
 
-    time_t current_time;
-    char* c_time_string;
-    current_time = time(NULL);
-    c_time_string = ctime(&current_time);
-    fprintf(p->logf, "\n%s\n", c_time_string);
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock started: %s\n", time_str);
+    free(time_str);
 
+    fprintf(p->logf, "CMD: ");
+    for(int kk = 0; kk<argc; kk++)
+    {
+        fprintf(p->logf, "%s ", argv[kk]);
+    }
+    fprintf(p->logf, "\n");
+    fflush(p->logf);
 
     return 0;
 }
@@ -1477,45 +1446,19 @@ int param_init(optparam * p)
 
 void param_free(optparam * p)
 {
-
-    if(p->R != NULL)
-        free(p->R);
-
-    if(p->I != NULL)
-        free(p->I);
-
-    if(p->W != NULL)
-        free(p->W);
-
-    if(p->L != NULL)
-        free(p->L);
-
-    if(p->wfname != NULL)
-        free(p->wfname);
-
-    if(p->lfname != NULL)
-        free(p->lfname);
-
-    if(p->rfname != NULL)
-        free(p->rfname);
-
-    if(p->xfname != NULL)
-        free(p->xfname);
-
-    if(p->xoutfname != NULL)
-        free(p->xoutfname);
-
-    if(p->ofoldername != NULL)
-        free(p->ofoldername);
-
-    if(p->luaDynamicsFile != NULL)
-        free(p->luaDynamicsFile);
-
-    if(p->logfname != NULL)
-        free(p->logfname);
-
-    if(p->E != NULL)
-        free(p->E);
+    free(p->R);
+    free(p->I);
+    free(p->L);
+    free(p->wfname);
+    free(p->contact_pairs_file);
+    free(p->lfname);
+    free(p->rfname);
+    free(p->xfname);
+    free(p->xoutfname);
+    free(p->ofoldername);
+    free(p->luaDynamicsFile);
+    free(p->logfname);
+    free(p->E);
 
     free(p);
     return;
@@ -1524,13 +1467,6 @@ void param_free(optparam * p)
 
 void param_validate(optparam * p)
 {
-    if(p->W == NULL)
-    {
-        fprintf(stderr, "p->W == NULL\n");
-        fprintf(stderr, "This indicates that a W file wasn't specified or that it could not be read\n");
-        exit(1);
-    }
-
     if(p->N == 0)
     {
         fprintf(stderr, "p->N = 0\nCheck the size of the W-matrix\n");
@@ -1682,12 +1618,21 @@ int main(int argc, char ** argv)
         break;
     }
 
-    param_init(p);
+    param_init(p, argc, argv);
 
-    /* Read binary contact indication matrix */
-    param_readW(p);
-
-    logwrite(p, 2, "First value: %d, # values: %zu\n", (int) p->W[0], p->N);
+    if(p->contact_pairs_file != NULL)
+    {
+        param_read_contact_pairs(p);
+    } else {
+        if(p->wfname != NULL)
+        {
+            /* Read binary contact indication matrix */
+            param_readW(p);
+        } else {
+            fprintf(stderr, "No contact pairs specified\n");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     /* Read radial preferences, if rfname is set */
     param_readR(p);
@@ -1771,16 +1716,17 @@ int main(int argc, char ** argv)
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-
         cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
         free(cmmfile);
     }
 
     /* Write coordinates to disk */
+    // TODO: rename mflock_write_coords(mflock * m, double * X)
     param_dumpX(p, X);
 
-    /* Write radial profile to disk */
-    if(1) {
+    /* Write radial profile to disk ? */
+    // Just wastes space, can as well be calculated on the fly.
+    if(0) {
         char * rpfname = malloc(1024*sizeof(char));
         assert(rpfname != NULL);
         sprintf(rpfname, "%s/rad.csv", p->ofoldername);
@@ -1790,6 +1736,10 @@ int main(int argc, char ** argv)
         fclose(rpfile);
         free(rpfname);
     }
+
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
+    free(time_str);
 
     /* Close log file */
     fclose(p->logf);

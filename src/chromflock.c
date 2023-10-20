@@ -1,3 +1,9 @@
+/**
+ * @file chromflock.c
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -10,32 +16,13 @@
 #include "any2string.h"
 #include "sprite2cmap.h"
 
-#ifndef NDEBUG
-
-#define malloc(x) assert_malloc(x)
-static void * assert_malloc(size_t x)
-{
-    double * p = (malloc)(x);
-    assert(p!=NULL);
-    return p;
-}
-#if 0
-#define calloc(x,y) assert_calloc(x, y)
-static void * assert_calloc(size_t x, size_t y)
-{
-    double * p = (calloc)(x, y);
-    assert(p!=NULL);
-    return p;
-}
-#endif
-#endif
-
 
 static int show_version(void)
 {
     printf("chromflock v.%s\n", cf_version);
     return EXIT_SUCCESS;
 }
+
 
 static int usage(void)
 {
@@ -52,9 +39,9 @@ static int usage(void)
     printf("sprite2cpm\n\t"
            "convert sprite date (.cluster files) to contact probability maps\n");
     printf("any2string\n\t"
-           "convert raw uint8 and double to text\n");
+           "convert raw data dumps to text\n");
     printf("string2any\n\t"
-           "create small test data sets from strings to raw\n");
+           "write human readable to raw\n");
     printf("version\n\t"
            "show version information\n");
     printf("Each command has a separate help section\n");
@@ -94,59 +81,25 @@ int main(int argc, char ** argv)
 
     if(!strcmp(command, "hic2cpm"))
     {
-        char * cmd = malloc(strlen(argv[0]) + strlen(argv[1]) + 2);
-        sprintf(cmd, "%s %s", argv[0], argv[1]);
-        argv[0] = cmd;
-        for(int kk = 1; kk<argc; kk++)
-        {
-            argv[kk] = argv[kk+1];
-        }
-        int ret = cc2cpm(argc-1, argv);
-        free(cmd);
-        return ret;
+        return cc2cpm(argc-1, argv+1);
     }
 
     if(!strcmp(command, "string2any"))
     {
-        char * cmd = malloc(strlen(argv[0]) + strlen(argv[1]) + 2);
-        sprintf(cmd, "%s %s", argv[0], argv[1]);
-        argv[0] = cmd;
-        for(int kk = 1; kk<argc; kk++)
-        {
-            argv[kk] = argv[kk+1];
-        }
-        int ret = string2any(argc-1, argv);
-        free(cmd);
-        return ret;
+        return string2any(argc-1, argv+1);
     }
 
     if(!strcmp(command, "any2string"))
     {
-        char * cmd = malloc(strlen(argv[0]) + strlen(argv[1]) + 2);
-        sprintf(cmd, "%s %s", argv[0], argv[1]);
-        argv[0] = cmd;
-        for(int kk = 1; kk<argc; kk++)
-        {
-            argv[kk] = argv[kk+1];
-        }
-        int ret = any2string(argc-1, argv);
-        free(cmd);
-        return ret;
+        return any2string(argc-1, argv+1);
     }
 
     if(!strcmp(command, "sprite2cpm"))
     {
-        char * cmd = malloc(strlen(argv[0]) + strlen(argv[1]) + 2);
-        sprintf(cmd, "%s %s", argv[0], argv[1]);
-        argv[0] = cmd;
-        for(int kk = 1; kk<argc; kk++)
-        {
-            argv[kk] = argv[kk+1];
-        }
-        int ret = sprite2cmap(argc-1, argv);
-        free(cmd);
-        return ret;
+        return sprite2cmap(argc-1, argv+1);
     }
+
+    fprintf(stderr, "%s is an unknown command to me\n", command);
 
     usage();
     return EXIT_FAILURE;
