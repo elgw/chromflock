@@ -205,7 +205,7 @@ double errRepulsion(const double * restrict D,
 }
 
 
-static double gradRepulsion(double * restrict D,
+static double gradRepulsion(const double * restrict D,
                             double * restrict G,
                             const size_t N,
                             const double d,
@@ -355,8 +355,8 @@ static double gradRepulsion(double * restrict D,
 
 double err3(const double * restrict X,
             const size_t nX,
-            double * restrict R,
-            uint32_t * restrict P,
+            const double * restrict R,
+            const uint32_t * restrict P,
             const conf * restrict C )
 {
     /* Compared to err2 this is an alternative version with a list of pairs in contact instead of A */
@@ -740,20 +740,17 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C
     return;
 }
 
-void grad3(double * restrict X,
+void grad3(const double * restrict X,
            const size_t nX,
-           double * restrict R,
-           uint32_t * restrict I,
+           const double * restrict R,
+           const uint32_t * restrict I,
            double * restrict G,
            const conf * restrict C)
 {
 
     double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
 
-    // Reset G
-    for(size_t kk = 0; kk<nX*3; kk++)
-        G[kk] = 0;
-
+    memset(G, 0, nX*3*sizeof(double));
 
     /* Radial positioning */
     if(C->E == NULL) // Spherical domain

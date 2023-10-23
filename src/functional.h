@@ -14,26 +14,67 @@
 
 #include "ellipsoid.h"
 
+/**
+ * @brief Settings for the energy landscape
+*/
 typedef struct conf{
-    double r0;
-    double dInteraction; // Wanted interaction distance
-    double kVol;
-    double kDom;
-    double kInt;
-    double kRad; // For radial constraints, using R
-    size_t nIPairs; // Number of wanted interactions
-    elli * E;
-    elli * Es; // smaller ellipse defining "safe region"
+    double r0; /**< bead radius */
+    double dInteraction; /**<  Wanted interaction distance */
+    double kVol; /**< Force prohibiting volumetric overlap */
+    double kDom; /**< The force that keeps the beads in the domain */
+    double kInt; /**< Attraction force for bead pairs */
+    double kRad; /**< For radial constraints, using R */
+    double kWell; /**< Force that attract beads to specific locations */
+    elli * E; /**< Ellipsoidal geometry if non-NULL */
+    elli * Es; /**<  smaller ellipse defining a "safe region" */
+
+    size_t nIPairs; /**< Number of interaction pairs */
+    // TODO: add temporary buffers here
+    // TODO: add pointers to data here
+    // TODO: add nX as well (which should be called nbead )
 } conf;
 
-double err(
-    double * X,
-    size_t nX,
-    double * R,
-    uint8_t * A,
-    conf * C
+/**
+ * @breif The total "error" or energy for a certain configuration
+ * determined by X
+ *
+ * @param X the 3D coordinates of the beads
+ * @param nX number of beads
+ * @param R preferred radial positions
+ * @param P list of connected beads (pairs)
+ * @param C the settings
+*/
+double err3(
+    const double * restrict X,
+    const size_t nX,
+    const double * restrict R,
+    const uint32_t * restrict P, // list of pairs of interaction
+    const conf * restrict C
     );
 
+/**
+ * @brief The gradient of err3
+ *
+ * @param X the 3D coordinates of the beads
+ * @param nX number of beads
+ * @param R preferred radial positions
+ * @param P list of connected beads (pairs)
+ * @param C the settings
+ * @param[out] G Will be set to the gradient with nX elements.
+ */
+void grad3(
+    const double * restrict X,
+    const size_t nX,
+    const double * restrict R,
+    const uint32_t * restrict I, // List of interactions pairs
+    double * restrict G,
+    const conf * restrict C
+    );
+
+
+/**
+ * @brief Reference implementation for err3
+*/
 double err2(
     double * X,
     size_t nX,
@@ -42,15 +83,20 @@ double err2(
     conf * C
     );
 
-// With hash structure for collisions
-double err3(
-    const double * restrict X,
-    const size_t nX,
-    double * restrict R,
-    uint32_t * restrict P, // list of pairs of interaction
-    const conf * restrict C
+/**
+ * @brief Like err2 but using a matrix, A, to define the beads that
+ * should be in contact.
+*/
+double err(
+    double * X,
+    size_t nX,
+    double * R,
+    uint8_t * A,
+    conf * C
     );
 
+
+/** Older version of grad, kept for reference */
 void grad(
     double * X,
     size_t nX,
@@ -60,6 +106,10 @@ void grad(
     conf * C
     );
 
+/** @brief Older version of grad3, kept for reference.
+ *
+ * Does not know about ellipsoidal geometry.
+*/
 void grad2(
     double * X,
     size_t nX,
@@ -69,17 +119,8 @@ void grad2(
     conf * C
     );
 
-// hashed only one that works with elliptical geometry
-void grad3(
-    double * restrict X,
-    const size_t nX,
-    double * restrict R,
-    uint32_t * restrict I, // List of interactions pairs
-    double * restrict G,
-    const conf * restrict C
-    );
 
-// Experimental
+/** Experimental version of grad3 */
 void grad4(
     double * restrict X,
     const size_t nX,
