@@ -1,11 +1,11 @@
 #!/bin/env python
 
 import numpy as np
-import os
+import os, sys, stat
 import shutil
 
 resolution = 1e6;
-folder = f'haploid_{resolution:.1e}'
+folder = f'demo_haploid_{resolution:.1e}'
 
 print(f"Approximately {resolution} basepairs per bead")
 print(f"Generating folder: {folder}")
@@ -41,5 +41,7 @@ shutil.copyfile('../../src/mflock.lua', folder + '/mflock.lua')
 with open(folder + '/run_me.sh', 'w') as fid:
     fid.write('set -e\n')
     fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.u8 --dconf mflock.lua --outFolder ./\n');
+
+os.chmod(folder + '/run_me.sh', stat.S_IRWXU)
 
 print("Done")

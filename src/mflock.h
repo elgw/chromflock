@@ -39,6 +39,7 @@
 #include "wio.h"
 #include "contact_pairs_io.h"
 
+
 typedef struct {
     uint32_t * I; // List with pairwise distances
     size_t NI; // Number of pairs in I
@@ -104,24 +105,24 @@ typedef struct {
 /** @brief create a new default configuration
  * free with mflock_free
 */
-mflock_t *  mflock_new(void);
+static mflock_t * mflock_new(void);
 
 /** @brief free an mflock_t
  *
  * also frees everything that it points to
  */
-void mflock_free(mflock_t * p);
+static void mflock_free(mflock_t * p);
 
 /** @brief Print the settings to FILE
  *
  * f can of course be stdout.
  */
-void mflock_show(mflock_t * p, FILE * f);
+static void mflock_show(mflock_t * p, FILE * f);
 
 /** @brief Report status of mflock to log and screen
  *
  */
-void mflock_summary(mflock_t * p, const double * restrict X);
+static void mflock_summary(mflock_t * p, const double * restrict X);
 
 /** @brief Read contact pairs from a binary file
     Sets p->I (the contacts) and p->NI (number of contact pairs)
@@ -135,10 +136,7 @@ static void mflock_read_contact_pairs(mflock_t * p);
  * Read GPSeq radius values as binary double.
  * If that does not work, try as text, one value per line
  */
-int mflock_load_radial_constraints(mflock_t * p);
-
-
-double * init_X(mflock_t * p);
+static int mflock_load_radial_constraints(mflock_t * p);
 
 /** @brief Load or set new coordinates
  *
@@ -146,25 +144,25 @@ double * init_X(mflock_t * p);
  *
 */
 
-double * mflock_init_coordinates(mflock_t * p);
+static double * mflock_init_coordinates(mflock_t * p);
 
 
 /** @brief Load bead coordinates from csv file
  *
  */
-int mflock_load_coordinates(mflock_t * p, double * X);
+static int mflock_load_coordinates(mflock_t * p, double * X);
 
 
 /** @brief Write coordinates to disk, also write the column names
  * to the log file  */
-void mflock_save_coordinates(mflock_t * p, double * X);
+static void mflock_save_coordinates(mflock_t * p, double * X);
 
 /** @brief Read label matrix pointed to by p->lfname
  */
 static int mflock_load_bead_labels(mflock_t * p);
 
 /* For logging */
-void logwrite(mflock_t * p, int level, const char * fmt, ...);
+static void logwrite(mflock_t * p, int level, const char * fmt, ...);
 
 /**
  * @breif The beads dynamics main loop
@@ -187,3 +185,16 @@ static int mflock_init(mflock_t * p, int argc, char ** argv);
 
 /** @brief double check before running */
 static void mflock_validate(mflock_t * p);
+
+/** @brief Per Chr Centre of mass compression
+ *
+ *Apply a force that attracts each bead to the centre of mass of it's
+ * chromosome This slows down the computations quite much because the
+ * beads get close to each other so the collision detection gets more to do.
+ *
+ * TODO: Unnecessary to allocate/free things here and to count the
+ * number of beads per chromosome.
+ */
+static void comforce(mflock_t * restrict p,
+                     const double * restrict X,
+                     double * restrict G);

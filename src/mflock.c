@@ -107,7 +107,6 @@ static int usleep_lua(lua_State * L)
 
     /* return the number of results */
     return 0;
-
 }
 
 
@@ -118,18 +117,9 @@ static double eudist3p2(const double * A, const double * B)
 }
 
 
-/** @brief Per Chr Centre of mass compression
- *
- *Apply a force that attracts each bead to the centre of mass of it's
- * chromosome This slows down the computations quite much because the
- * beads get close to each other so the collision detection gets more to do.
- *
- * TODO: Unnecessary to allocate/free things here and to count the
- * number of beads per chromosome.
- */
-void comforce(mflock_t * restrict p,
-              const double * restrict X,
-              double * restrict G)
+static void comforce(mflock_t * restrict p,
+                     const double * restrict X,
+                     double * restrict G)
 {
     if(p->L == NULL)
     {
@@ -433,7 +423,7 @@ static int mflock_dynamics(double * restrict X,
 }
 
 
-void mflock_summary(mflock_t * p, const double * restrict X)
+static void mflock_summary(mflock_t * p, const double * restrict X)
 {
     assert(p->N>0);
 
@@ -508,7 +498,7 @@ static void mflock_read_contact_pairs(mflock_t * p)
     return;
 }
 
-double * mflock_init_coordinates(mflock_t * p)
+static double * mflock_init_coordinates(mflock_t * p)
 {
     double * X = NULL;
 
@@ -598,7 +588,7 @@ static int mflock_load_bead_labels(mflock_t * p)
 }
 
 
-int mflock_load_radial_constraints(mflock_t * p)
+static int mflock_load_radial_constraints(mflock_t * p)
 {
 
     if(p->rfname == NULL)
@@ -656,7 +646,7 @@ int mflock_load_radial_constraints(mflock_t * p)
 }
 
 
-void mflock_save_coordinates(mflock_t * p, double * X)
+static void mflock_save_coordinates(mflock_t * p, double * X)
 {
     size_t N = p->N;
 
@@ -702,7 +692,7 @@ void mflock_save_coordinates(mflock_t * p, double * X)
     return;
 }
 
-void mflock_show(mflock_t * p, FILE * f)
+static void mflock_show(mflock_t * p, FILE * f)
 {
     double volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
 
@@ -802,7 +792,7 @@ static int usleep_lua_NULL(lua_State * L)
 }
 
 /* Write out the behavior of the lua script as a table */
-void dump_lua_dynamics(char * luafile)
+static void dump_lua_dynamics(const char * luafile)
 {
     printf("newx, iter, kDom, kVol, kInt, dInt_rel, kRad, compress, Fb\n");
     for(int newx = 1; newx >= 0; newx--)
@@ -1110,7 +1100,7 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
     return ARGS_OK;
 }
 
-mflock_t *  mflock_new(void)
+static mflock_t *  mflock_new(void)
 {
     mflock_t * p = calloc(1, sizeof(mflock_t));
     assert(p != NULL);
@@ -1292,7 +1282,7 @@ static void mflock_validate(mflock_t * p)
     }
 }
 
-void logwrite(mflock_t * p, int level, const char *fmt, ...)
+static void logwrite(mflock_t * p, int level, const char *fmt, ...)
 {
 
     if(p->verbose >= level)
@@ -1317,7 +1307,7 @@ void logwrite(mflock_t * p, int level, const char *fmt, ...)
 }
 
 
-int mflock_load_coordinates(mflock_t * p, double * X)
+static int mflock_load_coordinates(mflock_t * p, double * X)
 {
 
     //  fprintf(stdout, "Reading X-data from %s\n", p->xfname);
@@ -1354,55 +1344,49 @@ int mflock_load_coordinates(mflock_t * p, double * X)
 }
 
 
-void * solve_t(void * args)
+static void * solve_t(void * args)
 {
     solve_t_args * sargs = (solve_t_args *) args;
     mflock_dynamics(sargs->X, sargs->p, 0);
     return NULL;
 }
 
+/* Write chimera file (for simple visualization) */
+static void mflock_write_cmm(const mflock_t * p, const double * X)
+{
+    if(p->cmmz == 1)
+    {
+        char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
+        sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-int main(int argc, char ** argv)
+        cmmwritez(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
+        free(cmmfile);
+    } else {
+        char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
+        sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
+        cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
+        free(cmmfile);
+    }
+    return;
+}
+
+static void mflock_close_log(mflock_t * p)
+{
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
+    free(time_str);
+
+    /* Close log file */
+    fclose(p->logf);
+    return;
+}
+
+static void mflock_run(mflock_t * p, double * X)
 {
     time_t starttime, nowtime;
     time(&starttime);
-
-    mflock_t * p = mflock_new();
-
-    switch(mflock_parse_cli(p, argc, argv))
-    {
-    case ARGS_OK:
-        break;
-    case ARGS_ERR:
-        usage();
-        mflock_free(p);
-        return EXIT_FAILURE;
-        break;
-    case ARGS_QUIT:
-        mflock_free(p);
-        return EXIT_SUCCESS;
-        break;
-    }
-
-    mflock_init(p, argc, argv);
-    mflock_read_contact_pairs(p);
-    mflock_load_radial_constraints(p);
-    mflock_load_bead_labels(p);
-
-    /* Read coordinates from previous iteration, or generate
-       random coordinates if not previous iteration is available
-    */
-    double * X = mflock_init_coordinates(p);
-
-    /* Double check that the parameters make sense and that
-       everything necessary could be loaded. */
-    mflock_validate(p);
-
-    if(p->verbose>0)
-    {
-        mflock_show(p, stdout);
-    }
-    mflock_show(p, p->logf);
 
     /* Set up capturing of Ctrl+C for graceful exit */
     struct sigaction act;
@@ -1417,6 +1401,9 @@ int main(int argc, char ** argv)
     if(p->liveView == 1)
     {
         int quit = 0;
+
+        /* SDL likes to be in the main thread so we run mflock
+           dynamics in a secondary.  */
 
         pthread_t th;
         solve_t_args solve_arg;
@@ -1449,37 +1436,68 @@ int main(int argc, char ** argv)
     /* resolution: 1 s, consider clockdiff  */
     time(&nowtime);
     p->time_final = difftime(nowtime, starttime);
+    return;
+}
 
-    mflock_summary(p, X);
+int main(int argc, char ** argv)
+{
+    mflock_t * mf = mflock_new();
 
-    /* Write chimera file (for simple visualization) */
-    if(p->cmmz == 1)
+    switch(mflock_parse_cli(mf, argc, argv))
     {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
-        sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
-
-        cmmwritez(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
-        free(cmmfile);
-    } else {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
-        sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
-        free(cmmfile);
+    case ARGS_OK:
+        break;
+    case ARGS_ERR:
+        usage();
+        mflock_free(mf);
+        return EXIT_FAILURE;
+        break;
+    case ARGS_QUIT:
+        mflock_free(mf);
+        return EXIT_SUCCESS;
+        break;
     }
 
+    mflock_init(mf, argc, argv);
+
+    mflock_load_bead_labels(mf);
+
+    mflock_read_contact_pairs(mf);
+    mflock_load_radial_constraints(mf);
+
+
+    /* Read coordinates from previous iteration, or generate
+       random coordinates if first iteration.
+    */
+    double * X = mflock_init_coordinates(mf);
+
+    /* Double check that the parameters make sense and that
+       everything necessary could be loaded. */
+    mflock_validate(mf);
+
+    if(mf->verbose>0)
+    {
+        mflock_show(mf, stdout);
+    }
+
+    mflock_show(mf, mf->logf);
+
+    mflock_run(mf, X);
+
+    mflock_summary(mf, X);
+
     /* Write coordinates to disk */
-    mflock_save_coordinates(p, X);
+    mflock_save_coordinates(mf, X);
 
-    char * time_str = cf_timestr();
-    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
-    free(time_str);
+    /* Write chimera cmm file (.gz) */
+    mflock_write_cmm(mf, X);
 
-    /* Close log file */
-    fclose(p->logf);
+    /* Write a few last things and close the log file */
+    mflock_close_log(mf);
+
     /* Free most data */
-    mflock_free(p);
+    mflock_free(mf);
+
     /* Free coordinates */
     free(X);
 

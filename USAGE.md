@@ -1,4 +1,4 @@
-# Usage:
+# Usage
 
 If you have installed chromflock there will be man pages for the
 binaries, as well a some short usage instructions via the **--help**
@@ -129,10 +129,8 @@ bash < (sed -n 'L,$p' chromflock_run)
 The columns are `x`, `y`, `z`, `radius`, and
 (if supplied) `preferred_radius`.
 
-### Visualizing the results?
-Each folder will have a `cmmdump.cmm.gz` which can be opened with
-chimera or nua once extracted, using a pre-defined color map per
-chromosome.
 
-An example of 100 kb beads for a Haploid cell-line can be found in
-[HAP1_100k.md](HAP1_100k.md).
+### Visualizing the results?
+Each folder will have a `cmmdump.cmm.gz` which, once extracted, can be
+opened with [UCFS chimera](https://www.cgl.ucsf.edu/chimera/) or A per
+chromosome color map, which can be found in `src/cmmdump.c` is used.
