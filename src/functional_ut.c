@@ -5,14 +5,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "cf_util.h"
 #include "functional.h"
-
-static double clockdiff(struct timespec* start, struct timespec * finish)
-{
-  double elapsed = (finish->tv_sec - start->tv_sec);
-  elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
-  return elapsed;
-}
 
 
 void test_ellipsoid(size_t N, // number of points
@@ -184,13 +178,9 @@ int main(int argc, char ** argv)
   assert(G3 != NULL);
 
   printf("Constructing contact matrix (TODO: use only pair list)\n");
-  uint8_t * A = malloc(N*N*sizeof(uint8_t));
+  uint8_t * A = calloc(N*N, sizeof(uint8_t));
   assert(A != NULL);
 
-  for(size_t kk = 0; kk<N*N; kk++)
-  {
-    A[kk] = 0;
-  }
   for(size_t kk = 1; kk<N*N; kk=kk+N+1)
   {
     A[kk] = 1;

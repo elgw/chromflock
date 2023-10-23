@@ -1,17 +1,6 @@
 #include "functional.h"
 
-#define INLINED inline __attribute__((always_inline))
-
-INLINED static void vec3_minus(const double * A,
-                               const double * B, double * C)
-{ // C = A-B
-    for(int kk = 0; kk<3; kk++)
-    {
-        C[kk] = A[kk] - B[kk];
-    }
-}
-
-INLINED static double norm3(const double * restrict X)
+static double norm3(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -19,7 +8,7 @@ INLINED static double norm3(const double * restrict X)
     return sqrt(n);
 }
 
-INLINED static void vec3_normalize(double * restrict X)
+static void vec3_normalize(double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -28,7 +17,7 @@ INLINED static void vec3_normalize(double * restrict X)
 }
 
 
-INLINED static double norm32(const double * restrict X)
+static double norm32(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -36,19 +25,19 @@ INLINED static double norm32(const double * restrict X)
     return n;
 }
 
-INLINED static double eudist3sq(const double * A, const double * B)
+static double eudist3sq(const double * A, const double * B)
 {
     /* SQUARED Euclidean distance between two 3D-vectors */
     return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
 }
 
-INLINED static double eudist3(const double * A, const double * B)
+static double eudist3(const double * A, const double * B)
 {
     /* Euclidean distance between two 3D-vectors */
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-INLINED static size_t hash_coord(const int nDiv, const double X)
+static size_t hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
@@ -62,7 +51,7 @@ INLINED static size_t hash_coord(const int nDiv, const double X)
 }
 
 
-INLINED static size_t hash(const size_t nDiv, double * restrict X)
+static size_t hash(const size_t nDiv, const double * restrict X)
 {
 
     size_t h = hash_coord(nDiv, X[0]) +
@@ -73,7 +62,7 @@ INLINED static size_t hash(const size_t nDiv, double * restrict X)
 }
 
 
-double errRepulsion(double * restrict D,
+double errRepulsion(const double * restrict D,
                     const size_t N,
                     const double d)
 {
@@ -113,7 +102,7 @@ double errRepulsion(double * restrict D,
 
     size_t nH = pow(nDiv, 3);
     uint32_t * S = calloc(nH, sizeof(uint32_t));
-    assert(S!=NULL);
+    assert(S != NULL);
 
     for(size_t kk = 0; kk<N; kk++)
     {
@@ -180,9 +169,9 @@ double errRepulsion(double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t aa = ha_min; aa <= ha_max; aa++)
+        for(size_t cc = hc_min; cc <= hc_max; cc++)
             for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t cc = hc_min; cc <= hc_max; cc++)
+                for(size_t aa = ha_min; aa <= ha_max; aa++)
                 {
 
                     // hash or index of the bucket to compare against
@@ -312,9 +301,9 @@ static double gradRepulsion(double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t aa = ha_min; aa <= ha_max; aa++)
+        for(size_t cc = hc_min; cc <= hc_max; cc++)
             for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t cc = hc_min; cc <= hc_max; cc++)
+                for(size_t aa = ha_min; aa <= ha_max; aa++)
                 {
 
                     size_t hash =
@@ -364,7 +353,7 @@ static double gradRepulsion(double * restrict D,
 }
 
 
-double err3(double * restrict X,
+double err3(const double * restrict X,
             const size_t nX,
             double * restrict R,
             uint32_t * restrict P,

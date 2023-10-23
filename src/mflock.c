@@ -6,6 +6,14 @@
 
 #include "mflock.h"
 
+/* Since mflock is a command line tool it typically fails by just
+ * returning with EXIT_FAILURE without freeing all memory.
+ *
+ * - The error free path should have no memory leaks.
+ */
+
+
+/* Used for communication with the optional visualization routines */
 static volatile int run = 1;
 
 /* show lua error string */
@@ -76,11 +84,6 @@ static double dmin(double a, double b)
     return b;
 }
 
-typedef struct {
-    double * X;
-    mflock_t * p;
-} solve_t_args;
-
 
 /* when usleep is called from the lua script
  * This is useful when visualizations are enabled
@@ -118,9 +121,9 @@ static double eudist3p2(const double * A, const double * B)
 
 
 static void comforce(mflock_t * restrict p,
-                     const double * restrict X,
                      double * restrict G)
 {
+    const double * restrict X = p->beads;
     if(p->L == NULL)
     {
         printf("No L, can't compute com-force!\n");
@@ -137,7 +140,7 @@ static void comforce(mflock_t * restrict p,
     memset(nL, 0, 256*sizeof(size_t));
 
     /* Get centroid for each chromosome/label */
-    for(size_t kk = 0 ; kk < p->N ; kk++)
+    for(size_t kk = 0 ; kk < p->n_beads ; kk++)
     {
         size_t label = p->L[kk];
         nL[label]++;
@@ -161,7 +164,7 @@ static void comforce(mflock_t * restrict p,
     }
 
     /* Attract to centroid */
-    for(size_t kk = 0; kk < p->N; kk++)
+    for(size_t kk = 0; kk < p->n_beads; kk++)
     {
         uint8_t label = p->L[kk];
         double dist2 = eudist3p2(X+3*kk, mX+3*label);
@@ -180,10 +183,10 @@ static void comforce(mflock_t * restrict p,
 }
 
 
-static int mflock_dynamics(double * restrict X,
-                           mflock_t * restrict p,
+static int mflock_dynamics(mflock_t * restrict p,
                            double Fb)
 {
+    double * X = p->beads;
     /* set up fast prng in normal.h before calling normal() */
     normal_setup();
 
@@ -208,22 +211,22 @@ static int mflock_dynamics(double * restrict X,
                             p->E->c - fconf.r0);
     }
 
-    fconf.nIPairs = p->NI; /* Only for err2 */
+    fconf.nIPairs = p->n_pairs; /* Only for err2 */
 
     /* Initialization */
     struct timespec ta, tb;
     clock_gettime(CLOCK_MONOTONIC, &ta);
 
     /* Gradient */
-    double * restrict g = calloc(p->N*3, sizeof(double));
+    double * restrict g = calloc(p->n_beads*3, sizeof(double));
 
     /* Velocity */
-    double * restrict v = calloc(p->N*3, sizeof(double));
+    double * restrict v = calloc(p->n_beads*3, sizeof(double));
 
     /* Set previous position, initially to be the current position,
        i.e. initial velocity will be 0 */
-    double * restrict Xm = malloc(3*p->N*sizeof(double));
-    memcpy(Xm, X, 3*p->N*sizeof(double));
+    double * restrict Xm = malloc(3*p->n_beads*sizeof(double));
+    memcpy(Xm, X, 3*p->n_beads*sizeof(double));
 
     double error = 9e99;
     double gnorm = 9e99;
@@ -285,14 +288,14 @@ static int mflock_dynamics(double * restrict X,
         /* Start of Molecular Dynamics
          * 2.1 Gradient of functional */
         grad3(X,
-              p->N,
+              p->n_beads,
               p->R,
               p->I,
               g,
               &fconf);
 
         /* Cap gradient for stability */
-        for(size_t kk = 0; kk<3*p->N; kk++)
+        for(size_t kk = 0; kk<3*p->n_beads; kk++)
         {
             if(fabs(g[kk]) > 1.0)
             {
@@ -302,7 +305,7 @@ static int mflock_dynamics(double * restrict X,
 
         if(p->compress > 0)
         {
-            comforce(p, X, g);
+            comforce(p, g);
         }
 
         /* 2.2 Brownian force */
@@ -311,7 +314,7 @@ static int mflock_dynamics(double * restrict X,
 
         if(Fb>0)
         {
-            for(size_t kk = 0; kk < p->N; kk++)
+            for(size_t kk = 0; kk < p->n_beads; kk++)
             {
                 double d[] = {0,0,0};
                 d[0] = normal();
@@ -340,18 +343,18 @@ static int mflock_dynamics(double * restrict X,
         /* 2.3 Dampening */
         /* Estimate velocities, note: per component */
 
-        for(size_t pp = 0 ; pp < 3*p->N ; pp++)
+        for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
         {
             v[pp] = (X[pp] - Xm[pp]) / (2.0 * dt);
         }
 
-        for(size_t kk = 0; kk < 3*p->N; kk++)
+        for(size_t kk = 0; kk < 3*p->n_beads; kk++)
         {
             g[kk] = g[kk] + damp*v[kk];
         }
 
         /* 3. Update X */
-        for(size_t pp = 0 ; pp < 3*p->N ; pp++)
+        for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
         {
             double xt = X[pp];
             X[pp] = 2.0*X[pp] - Xm[pp] - g[pp]*pow(dt,2);
@@ -366,14 +369,14 @@ static int mflock_dynamics(double * restrict X,
         {
             /* Calculate gradient 2-norm */
             gnorm = 0;
-            for(size_t kk = 0; kk < 3*p->N; kk++)
+            for(size_t kk = 0; kk < 3*p->n_beads; kk++)
             {
                 gnorm += pow(v[kk], 2);
             }
             gnorm = sqrt(gnorm);
 
             error = err3(X,
-                         p->N,
+                         p->n_beads,
                          p->R,
                          p->I,
                          &fconf);
@@ -389,15 +392,15 @@ static int mflock_dynamics(double * restrict X,
 
     /* At final step, report back */
     double errorFinal = err3(X,
-                             p->N,
+                             p->n_beads,
                              p->R,
                              p->I,
                              &fconf);
 
-    /* The gradient is a 3*p->N-dimensional vector, we return the 2-norm
+    /* The gradient is a 3*p->n_beads-dimensional vector, we return the 2-norm
        as the grad_final */
     double gradFinal = 0;
-    for(size_t kk = 0; kk < 3*p->N; kk++)
+    for(size_t kk = 0; kk < 3*p->n_beads; kk++)
     {
         gradFinal += pow(v[kk], 2);
     }
@@ -423,9 +426,10 @@ static int mflock_dynamics(double * restrict X,
 }
 
 
-static void mflock_summary(mflock_t * p, const double * restrict X)
+static void mflock_summary(mflock_t * p)
 {
-    assert(p->N>0);
+    const double * restrict X = p->beads;
+    assert(p->n_beads>0);
 
     logwrite(p, 1, "\n");
     logwrite(p, 1, " >> Optimization summary:\n");
@@ -441,7 +445,7 @@ static void mflock_summary(mflock_t * p, const double * restrict X)
     double max = -md, may = -md, maz = -md; /* max, x, y, z */
     double mer = 0, mir = 10e99, mar = 0;   /* mean, min, max of radius */
 
-    for(size_t kk = 0 ; kk<p->N; kk++)
+    for(size_t kk = 0 ; kk<p->n_beads; kk++)
     {
         mex += X[3*kk];
         mey += X[3*kk+1];
@@ -457,10 +461,10 @@ static void mflock_summary(mflock_t * p, const double * restrict X)
         mir = dmin(mir, pr);
         mer += pr;
     }
-    mex /= p->N;
-    mey /= p->N;
-    mez /= p->N;
-    mer /= p->N;
+    mex /= p->n_beads;
+    mey /= p->n_beads;
+    mez /= p->n_beads;
+    mer /= p->n_beads;
 
     logwrite(p, 2,  "\n");
     logwrite(p, 2,  ">> Structure summary:\n");
@@ -477,7 +481,7 @@ static void mflock_summary(mflock_t * p, const double * restrict X)
     char * timestr = cf_timestr();
     logwrite(p, 2, "Finished at: %s\n", timestr);
     free(timestr);
-
+    return;
 }
 
 
@@ -493,57 +497,55 @@ static void mflock_read_contact_pairs(mflock_t * p)
                 __FILE__, __LINE__, p->contact_pairs_file);
         exit(EXIT_FAILURE);
     }
-    p->NI = nCP;
+    p->n_pairs = nCP;
     logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
     return;
 }
 
-static double * mflock_init_coordinates(mflock_t * p)
+static void mflock_init_coordinates(mflock_t * p)
 {
-    double * X = NULL;
-
     p->newx = 0;
     if(p->xfname != NULL)
     {
-        X = malloc(3*p->N*sizeof(double));
-        assert(X != NULL);
-        if(mflock_load_coordinates(p, X) != 0)
+        p->beads = malloc(3*p->n_beads*sizeof(double));
+        assert(p->beads != NULL);
+        if(mflock_load_coordinates(p) != 0)
         {
             logwrite(p, 2, "Could not open x-file, starting from random\n");
-            free(X);
-            X = NULL;
+            free(p->beads);
+            p->beads = NULL;
         }
     }
 
-    if(X == NULL)
+    if(p->beads == NULL)
     {
         p->newx = 1;
         logwrite(p, 1, "Using random initialization for X\n");
         srand(p->rseed);
-        X = malloc(3*p->N*sizeof(double));
-        assert(X != NULL);
+        p->beads = calloc(3*p->n_beads, sizeof(double));
+        assert(p->beads != NULL);
         elli * E = p->E;
         if(E == NULL){
             E = elli_new(1, 1, 1);
         }
 
-        for(size_t kk = 0; kk< p->N; kk++)
+        for(size_t kk = 0; kk< p->n_beads; kk++)
         {
             int accepted = 0;
             while(accepted == 0)
             {
                 for(int idx =0; idx<3; idx++)
                 {
-                    X[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
+                    p->beads[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
                 }
-                if(elli_getScale(E, X+3*kk) <= 1)
+                if(elli_getScale(E, p->beads+3*kk) <= 1)
                 { accepted = 1;}
             }
         }
 
-        logwrite(p, 1, "X[0] = %f\n", X[0]);
+        logwrite(p, 1, "X[0] = %f\n", p->beads[0]);
     }
-    return X;
+    return;
 }
 
 
@@ -571,18 +573,18 @@ static int mflock_load_bead_labels(mflock_t * p)
     logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
              fsize/sizeof(uint8_t), fsize);
 
-    p->N = fsize/sizeof(uint8_t);
-    p->L = malloc(p->N*sizeof(double));
+    p->n_beads = fsize/sizeof(uint8_t);
+    p->L = malloc(p->n_beads*sizeof(double));
     assert(p->L != NULL);
-    size_t nread = fread(p->L, sizeof(uint8_t), p->N, f);
-    if(nread != p->N)
+    size_t nread = fread(p->L, sizeof(uint8_t), p->n_beads, f);
+    if(nread != p->n_beads)
     {
         fprintf(stderr, "Unable to read from %s\n", p->lfname);
         exit(EXIT_FAILURE);
     }
     fclose(f);
 
-    logwrite(p, 2, "L = [%u, %u, ..., %u]\n", p->L[0], p->L[1], p->L[p->N-1]);
+    logwrite(p, 2, "L = [%u, %u, ..., %u]\n", p->L[0], p->L[1], p->L[p->n_beads-1]);
 
     return 0;
 }
@@ -602,37 +604,37 @@ static int mflock_load_radial_constraints(mflock_t * p)
     p->R = (double *) wio_read(p->rfname, &nbytes);
     printf("Read %zu doubles from %s\n", nbytes/sizeof(double), p->rfname);
 
-    if(2*nbytes/sizeof(double) == p->N)
+    if(2*nbytes/sizeof(double) == p->n_beads)
     {
         printf("Found half as many values as beads, assuming diploid and duplicating data\n");
-        if(p->N%2 == 1)
+        if(p->n_beads%2 == 1)
         {
             printf("ERROR: N%%2 == 1\n");
             exit(-1);
         }
 
-        p->R = realloc(p->R, p->N*sizeof(double));
+        p->R = realloc(p->R, p->n_beads*sizeof(double));
         if(p->R == NULL)
         {
             printf("ERROR: out of memory\n");
             exit(-1);
         }
-        for(size_t pp = 0; pp < p->N/2; pp++)
+        for(size_t pp = 0; pp < p->n_beads/2; pp++)
         {
-            p->R[pp + p->N/2] = p->R[pp];
+            p->R[pp + p->n_beads/2] = p->R[pp];
         }
-        //memcpy(p->R+p->N/2*sizeof(double), p->R, p->N/2*sizeof(double));
+        //memcpy(p->R+p->n_beads/2*sizeof(double), p->R, p->n_beads/2*sizeof(double));
     }
 
 
-    if(!( (nbytes/sizeof(double) == p->N) || (nbytes/sizeof(double) == p->N/2) ))
+    if(!( (nbytes/sizeof(double) == p->n_beads) || (nbytes/sizeof(double) == p->n_beads/2) ))
     {
-        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n", p->rfname, 4*p->N, 2*p->N, nbytes);
+        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n", p->rfname, 4*p->n_beads, 2*p->n_beads, nbytes);
         exit(-1);
     }
 
     size_t nInf = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
+    for(size_t kk = 0; kk<p->n_beads; kk++)
     {
         if(!isfinite(p->R[kk]))
         {
@@ -646,9 +648,10 @@ static int mflock_load_radial_constraints(mflock_t * p)
 }
 
 
-static void mflock_save_coordinates(mflock_t * p, double * X)
+static void mflock_save_coordinates(mflock_t * p)
 {
-    size_t N = p->N;
+    const double * restrict X = p->beads;
+    size_t N = p->n_beads;
 
     if(run == 1)
     {
@@ -694,17 +697,17 @@ static void mflock_save_coordinates(mflock_t * p, double * X)
 
 static void mflock_show(mflock_t * p, FILE * f)
 {
-    double volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
+    double volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
 
     if(p->E != NULL)
     {
-        volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
+        volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
     }
 
 
     fprintf(f, "\n");
     fprintf(f, " >> Parameters:\n");
-    fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->N, 3*p->N);
+    fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->n_beads, 3*p->n_beads);
     fprintf(f, "    - Model parameters\n");
     fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
     fprintf(f, "    Bead radius %f (vol. occ. %f)\n", p->r0, volocc);
@@ -1147,17 +1150,17 @@ static mflock_t *  mflock_new(void)
     return p;
 }
 
-static int mflock_init(mflock_t * p, int argc, char ** argv)
+static void mflock_set_and_create_output_folder(mflock_t * mf)
 {
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
 
-    if(stat(p->ofoldername, &st) == -1)
+    if(stat(mf->ofoldername, &st) == -1)
     {
-        if(p->verbose >= 1){
-            printf("Creating output folder: %s\n", p->ofoldername);
+        if(mf->verbose >= 1){
+            printf("Creating output folder: %s\n", mf->ofoldername);
         }
-        int folderok = mkdir(p->ofoldername, 0770);
+        int folderok = mkdir(mf->ofoldername, 0770);
         if(folderok != 0)
         {
             printf("Could not create output folder\n");
@@ -1165,57 +1168,79 @@ static int mflock_init(mflock_t * p, int argc, char ** argv)
         }
 
     } else {
-        if(p->verbose >= 2){
+        if(mf->verbose >= 2){
             printf("Output folder did already exist.\n");
         }
     }
 
-    char * fullofolder = realpath(p->ofoldername, NULL);
+    char * fullofolder = realpath(mf->ofoldername, NULL);
     if(fullofolder == NULL)
     {
-        printf("Error: The output folder '%s' can't be understood by realpath\n", p->ofoldername);
+        printf("Error: The output folder '%s' can't be understood by realpath\n", mf->ofoldername);
         exit(-1);
     }
 
     // Create output folder
-    if(p->verbose >= 1) {
+    if(mf->verbose >= 1) {
         printf("Output folder: %s\n", fullofolder);
     }
     free(fullofolder);
+    return;
+}
+static void mflock_init(mflock_t * mf, int argc, char ** argv)
+{
+    mflock_set_and_create_output_folder(mf);
 
+    /* Set names of output files */
+    mf->xoutfname = malloc(1024*sizeof(char));
+    assert(mf->xoutfname != NULL);
+    sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.csv");
 
-    // Set names of output files
-    p->xoutfname = malloc(1024*sizeof(char));
-    assert(p->xoutfname != NULL);
-    sprintf(p->xoutfname, "%s%s", p->ofoldername, "coords.csv");
+    mf->logfname = malloc(1024*sizeof(char));
+    assert(mf->logfname != NULL);
+    sprintf(mf->logfname, "%s%s", mf->ofoldername, "log.txt");
 
-    p->logfname = malloc(1024*sizeof(char));
-    assert(p->logfname != NULL);
-    sprintf(p->logfname, "%s%s", p->ofoldername, "log.txt");
+    /* Open log */
+    mf->logf = fopen(mf->logfname, "a");
+    assert(mf->logf != NULL);
 
-    // Open log
-    p->logf = fopen(p->logfname, "a");
-    assert(p->logf != NULL);
-
-    if(p->logf== NULL)
+    if(mf->logf== NULL)
     {
-        printf("Failed to open log file\n");
+        fprintf(stderr, "mflock: Failed to open log file for writing (%s)\n",
+                mf->logfname);
         exit(EXIT_FAILURE);
     }
 
     char * time_str = cf_timestr();
-    fprintf(p->logf, "\nmflock started: %s\n", time_str);
+    fprintf(mf->logf, "\nmflock started: %s\n", time_str);
     free(time_str);
 
-    fprintf(p->logf, "CMD: ");
+    fprintf(mf->logf, "CMD: ");
     for(int kk = 0; kk<argc; kk++)
     {
-        fprintf(p->logf, "%s ", argv[kk]);
+        fprintf(mf->logf, "'%s' ", argv[kk]);
     }
-    fprintf(p->logf, "\n");
-    fflush(p->logf);
+    fprintf(mf->logf, "\n");
+    fflush(mf->logf);
 
-    return 0;
+    /* We load the labels first to determine how many beads there
+     * are */
+    mflock_load_bead_labels(mf);
+
+    /* Read coordinates from previous iteration, or generate
+       random coordinates if first iteration.
+    */
+    mflock_init_coordinates(mf);
+
+    mflock_read_contact_pairs(mf);
+
+    mflock_load_radial_constraints(mf);
+
+    /* Double check that the parameters make sense and that
+       everything necessary could be loaded. */
+    mflock_validate(mf);
+
+    return;
 }
 
 
@@ -1234,6 +1259,7 @@ void mflock_free(mflock_t * p)
     free(p->luaDynamicsFile);
     free(p->logfname);
     free(p->E);
+    free(p->beads);
 
     free(p);
     return;
@@ -1243,7 +1269,7 @@ void mflock_free(mflock_t * p)
 static void mflock_validate(mflock_t * p)
 {
     int quit = 0;
-    if(p->N == 0)
+    if(p->n_beads == 0)
     {
         fprintf(stderr, "mflock error: No beads!\n\n");
         quit = 1;
@@ -1267,10 +1293,10 @@ static void mflock_validate(mflock_t * p)
         {
             Vd = elli_vol(p->E);
         }
-        p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->N*M_PI) );
+        p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->n_beads*M_PI) );
 
 #ifndef NDEBUG
-        double Vbeads = p->N*pow(p->r0,3)*M_PI*4.0/3.0;
+        double Vbeads = p->n_beads*pow(p->r0,3)*M_PI*4.0/3.0;
         printf("Vd: %f, Vbeads: %f, Vbeads/Vd = %f\n", Vd, Vbeads, Vbeads/Vd);
         assert(fabs(Vbeads/Vd - vq)<1e-5);
 #endif
@@ -1307,7 +1333,7 @@ static void logwrite(mflock_t * p, int level, const char *fmt, ...)
 }
 
 
-static int mflock_load_coordinates(mflock_t * p, double * X)
+static int mflock_load_coordinates(mflock_t * p)
 {
 
     //  fprintf(stdout, "Reading X-data from %s\n", p->xfname);
@@ -1323,7 +1349,7 @@ static int mflock_load_coordinates(mflock_t * p, double * X)
     size_t len = 0;
 
     char delim[] = ",";
-    for(size_t ll = 0; ll<p->N; ll++)
+    for(size_t ll = 0; ll<p->n_beads; ll++)
     {
         int read = getline(&line, &len, f);
         if(read == -1)
@@ -1332,41 +1358,40 @@ static int mflock_load_coordinates(mflock_t * p, double * X)
             return -1;
         }
         char *ptr = strtok(line, delim);
-        X[3*ll] = atof(ptr);
+        p->beads[3*ll] = atof(ptr);
         ptr = strtok(NULL, delim);
-        X[3*ll+1] = atof(ptr);
+        p->beads[3*ll+1] = atof(ptr);
         ptr = strtok(NULL, delim);
-        X[3*ll+2] = atof(ptr);
+        p->beads[3*ll+2] = atof(ptr);
     }
 
     free(line);
     return 0;
 }
 
-
 static void * solve_t(void * args)
 {
-    solve_t_args * sargs = (solve_t_args *) args;
-    mflock_dynamics(sargs->X, sargs->p, 0);
+    mflock_dynamics((mflock_t *) args, 0);
     return NULL;
 }
 
 /* Write chimera file (for simple visualization) */
-static void mflock_write_cmm(const mflock_t * p, const double * X)
+static void mflock_write_cmm(const mflock_t * p)
 {
+    const double * restrict X = p->beads;
     if(p->cmmz == 1)
     {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-        cmmwritez(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
         free(cmmfile);
     }
     return;
@@ -1383,7 +1408,7 @@ static void mflock_close_log(mflock_t * p)
     return;
 }
 
-static void mflock_run(mflock_t * p, double * X)
+static void mflock_run(mflock_t * p)
 {
     time_t starttime, nowtime;
     time(&starttime);
@@ -1406,14 +1431,11 @@ static void mflock_run(mflock_t * p, double * X)
            dynamics in a secondary.  */
 
         pthread_t th;
-        solve_t_args solve_arg;
-        solve_arg.X = X;
-        solve_arg.p = p;
 
         pthread_create(&th, // thread
                        NULL, // pthread_attrib_t
                        solve_t, // function
-                       &solve_arg); // arg
+                       p); // arg
 
         elli * E;
         if(p->E == NULL)
@@ -1423,13 +1445,13 @@ static void mflock_run(mflock_t * p, double * X)
             E = p->E;
         }
 
-        liveview(X, p->L, p->N, &quit, p->r0, E);
+        liveview(p->beads, p->L, p->n_beads, &quit, p->r0, E);
         pthread_join(th, NULL);
     } else {
-        mflock_dynamics(X,p, 0);
+        mflock_dynamics(p, 0);
     }
 #else
-    mflock_dynamics(X, p, 0);
+    mflock_dynamics(p, 0);
 #endif
 
 
@@ -1460,46 +1482,27 @@ int main(int argc, char ** argv)
 
     mflock_init(mf, argc, argv);
 
-    mflock_load_bead_labels(mf);
-
-    mflock_read_contact_pairs(mf);
-    mflock_load_radial_constraints(mf);
-
-
-    /* Read coordinates from previous iteration, or generate
-       random coordinates if first iteration.
-    */
-    double * X = mflock_init_coordinates(mf);
-
-    /* Double check that the parameters make sense and that
-       everything necessary could be loaded. */
-    mflock_validate(mf);
-
     if(mf->verbose>0)
     {
         mflock_show(mf, stdout);
     }
-
     mflock_show(mf, mf->logf);
 
-    mflock_run(mf, X);
+    mflock_run(mf);
 
-    mflock_summary(mf, X);
+    mflock_summary(mf);
 
     /* Write coordinates to disk */
-    mflock_save_coordinates(mf, X);
+    mflock_save_coordinates(mf);
 
     /* Write chimera cmm file (.gz) */
-    mflock_write_cmm(mf, X);
+    mflock_write_cmm(mf);
 
     /* Write a few last things and close the log file */
     mflock_close_log(mf);
 
     /* Free most data */
     mflock_free(mf);
-
-    /* Free coordinates */
-    free(X);
 
     return EXIT_SUCCESS;
 }

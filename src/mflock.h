@@ -4,6 +4,8 @@
  * @date 2020-2023
  */
 
+// Only forward declarations here that should be moved to the .c file
+
 #pragma once
 
 #include <assert.h>
@@ -23,6 +25,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+// TODO: Offer alternative for non x86-systems
 #include "fast_prng/normal.h"
 
 #ifdef SDL
@@ -42,8 +45,9 @@
 
 typedef struct {
     uint32_t * I; // List with pairwise distances
-    size_t NI; // Number of pairs in I
-    size_t N; // number of points
+    size_t n_pairs; // Number of pairs in I
+    double * beads; /* Bead coordinates */
+    size_t n_beads; // number of points
 
     uint8_t * L; // chr labels per bead
     double * R; // wanted radii together with kRad
@@ -98,8 +102,9 @@ typedef struct {
 
     /* Name of lua script to handle the beads dynamics */
     char * luaDynamicsFile;
-
 } mflock_t;
+
+
 
 
 /** @brief create a new default configuration
@@ -122,7 +127,7 @@ static void mflock_show(mflock_t * p, FILE * f);
 /** @brief Report status of mflock to log and screen
  *
  */
-static void mflock_summary(mflock_t * p, const double * restrict X);
+static void mflock_summary(mflock_t * p);
 
 /** @brief Read contact pairs from a binary file
     Sets p->I (the contacts) and p->NI (number of contact pairs)
@@ -144,18 +149,18 @@ static int mflock_load_radial_constraints(mflock_t * p);
  *
 */
 
-static double * mflock_init_coordinates(mflock_t * p);
+static void mflock_init_coordinates(mflock_t * p);
 
 
 /** @brief Load bead coordinates from csv file
  *
  */
-static int mflock_load_coordinates(mflock_t * p, double * X);
+static int mflock_load_coordinates(mflock_t * p);
 
 
 /** @brief Write coordinates to disk, also write the column names
  * to the log file  */
-static void mflock_save_coordinates(mflock_t * p, double * X);
+static void mflock_save_coordinates(mflock_t * p);
 
 /** @brief Read label matrix pointed to by p->lfname
  */
@@ -167,12 +172,10 @@ static void logwrite(mflock_t * p, int level, const char * fmt, ...);
 /**
  * @breif The beads dynamics main loop
  *
- * @param X the coordinates of each bead
  * @param p the settings
  * @param Fb: the Brownian force
  */
-static int mflock_dynamics(double * restrict X,
-                   mflock_t * restrict p,
+static int mflock_dynamics(mflock_t * restrict p,
                    double Fb);
 
 /** @brief parse command line arguments */
@@ -180,7 +183,7 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv);
 
 /** @brief initialization from valid command line arguments
 */
-static int mflock_init(mflock_t * p, int argc, char ** argv);
+static void mflock_init(mflock_t * p, int argc, char ** argv);
 
 
 /** @brief double check before running */
@@ -196,5 +199,4 @@ static void mflock_validate(mflock_t * p);
  * number of beads per chromosome.
  */
 static void comforce(mflock_t * restrict p,
-                     const double * restrict X,
                      double * restrict G);

@@ -44,7 +44,7 @@ double err2(
 
 // With hash structure for collisions
 double err3(
-    double * restrict X,
+    const double * restrict X,
     const size_t nX,
     double * restrict R,
     uint32_t * restrict P, // list of pairs of interaction
@@ -90,7 +90,7 @@ void grad4(
     );
 
 // For testing only, not really public
-double errRepulsion(double * restrict D,
+double errRepulsion(const double * restrict D,
                     const size_t N,
                     const double d);
 

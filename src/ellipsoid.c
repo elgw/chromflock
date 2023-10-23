@@ -1,6 +1,6 @@
 #include "ellipsoid.h"
 
-static double eudist3(double * a, double * b)
+static double eudist3(const double * a, const double * b)
 {
     return sqrt(
         pow(a[0]-b[0], 2) +
@@ -18,7 +18,7 @@ static double eudist3(double * a, double * b)
   }
 */
 
-static double norm3(double * a)
+static double norm3(const double * a)
 {
     return sqrt(
         pow(a[0],2) +
@@ -96,12 +96,12 @@ double elli_pdist(elli * E, double * p)
     return eudist3(p, ip);
 }
 
-double elli_getScale(elli * E, double * X)
+double elli_getScale(const elli * restrict E, const double * restrict X)
 {
     return sqrt(elli_getScale2(E, X));
 }
 
-double elli_getScale2(elli * E, double * X)
+double elli_getScale2(const elli * restrict E, const double * restrict X)
 {
     return pow(X[0]/E->a,2) + pow(X[1]/E->b,2) + pow(X[2]/E->c,2);
 }
@@ -153,7 +153,9 @@ void elli_normal(elli * E, double * X, double * N)
     N[2] = 2.0*X[2]/pow(E->c,2);
 }
 
-static double f_div_df(const double l, double * restrict E, double * restrict P)
+static double f_div_df(const double l,
+                       const double * restrict E,
+                       const double * restrict P)
 {
     double f = 0;
     double df = 0;
@@ -226,7 +228,9 @@ double elli_gdistR(elli * restrict ellipse, double * restrict P, double * restri
     return 0;
 }
 
-double elli_gdistL(elli * restrict ellipse, double * restrict P, double * restrict Y)
+double elli_gdistL(elli * restrict ellipse,
+                   const double * restrict P,
+                   double * restrict Y)
 {
 
     const double eps = ellipse->eps;
