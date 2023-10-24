@@ -4,8 +4,7 @@
  * @date 2020-2023
  */
 
-#ifndef cf_util_h_
-#define cf_util_h_
+#pragma once
 
 #include <assert.h>
 #include <errno.h>
@@ -22,28 +21,6 @@
 #include <sys/types.h>
 #endif
 
-
-#ifndef NDEBUG
-#if 0
-#define malloc(x) assert_malloc(x)
-static void * assert_malloc(size_t x)
-{
-    double * p = (malloc)(x);
-    assert(p!=NULL);
-    return p;
-}
-
-#define calloc(x,y) assert_calloc(x, y)
-static void * assert_calloc(size_t x, size_t y)
-{
-    double * p = (calloc)(x, y);
-    assert(p!=NULL);
-    return p;
-}
-#endif
-#endif
-
-
 /** @brief returns the time at the moment
  *
  * @return A string with the current time in the format
@@ -52,7 +29,7 @@ static void * assert_calloc(size_t x, size_t y)
  */
 char * cf_timestr();
 
-/* @brief Limit the memory available to chromflock
+/** @brief Limit the memory available to chromflock
  *
  * So that malloc, calloc, etc actually returns NULL at some point
  *
@@ -68,11 +45,14 @@ char * cf_timestr();
 int limit_mem(size_t max_bytes);
 
 
-/* @brief delta t
+/** @brief delta t
  *
  * Returns the difference in time (s)
  */
 double clockdiff(struct timespec* start,
                  struct timespec * finish);
 
-#endif
+/** @brief get file size in bytes
+ * @return -1 on failure;
+ */
+int64_t cf_file_size(const char * filename);

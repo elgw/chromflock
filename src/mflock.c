@@ -192,13 +192,8 @@ static int mflock_dynamics(mflock_t * restrict p,
 
     /* Prepare settings */
     size_t maxiter = p->maxiter;
-    conf fconf;
+    mflock_func_t fconf = {0};
     fconf.r0 = p->r0;
-    fconf.kVol = p->kVol;
-    fconf.kDom = p->kDom;
-    fconf.kInt = p->kInt; /* Function of current iteration, see below */
-    fconf.kRad = p->kRad;
-    fconf.dInteraction = 2.1*fconf.r0; /* Function of current iteration, see below */
     fconf.E = NULL;
     fconf.Es = NULL;
     if(p->E != NULL)
@@ -252,14 +247,7 @@ static int mflock_dynamics(mflock_t * restrict p,
         iter++;
         p->iter_final++;
 
-
-        /* S -- Settings for this iteration
-         *
-         * Theses schemes typically includes some heuristics to avoid local minima
-         */
-
-        /* Settings from lua script */
-        //     printf("Getting settings from lua script: %s\n", p->luaDynamicsFile);
+        /* Get settings from the lua script */
 
         lua_getglobal(L, "getConfig"); /* function to be called */
         lua_pushnumber(L, iter); /* push arguments */
@@ -267,7 +255,8 @@ static int mflock_dynamics(mflock_t * restrict p,
 
         /* do the call (2 arguments, 0 result) */
         if (lua_pcall(L, 2, 0, 0) != LUA_OK)
-            luaerror(L, "error running function 'f': %s",
+            luaerror(L, "error running function 'getConfig' in %s : %s",
+                     p->luaDynamicsFile,
                      lua_tostring(L, -1));
 
         /* retrieve result */
@@ -275,10 +264,13 @@ static int mflock_dynamics(mflock_t * restrict p,
         fconf.kVol = lua_get_float(L, "kVol");
         fconf.kInt = lua_get_float(L, "kInt");
         fconf.kRad = lua_get_float(L, "kRad");
+        fconf.kBeadWell = lua_get_float(L, "kBeadWell");
+        fconf.kChrWell = lua_get_float(L, "kChrWell");
         p->compress = lua_get_float(L, "kCom");
         Fb = lua_get_float(L, "fBrown");
         luaquit = lua_get_int(L, "quit");
         fconf.dInteraction = fconf.r0 * lua_get_float(L, "dInteraction");
+
         if(p->verbose > 10)
         {
             printf("kInteraction: %f\n", fconf.kInt);
@@ -309,35 +301,26 @@ static int mflock_dynamics(mflock_t * restrict p,
         }
 
         /* 2.2 Brownian force */
-        if(Fb<0)
-            Fb = 0;
-
         if(Fb>0)
         {
             for(size_t kk = 0; kk < p->n_beads; kk++)
             {
                 double d[] = {0,0,0};
-                d[0] = normal();
+                d[0] = normal(); /* From normal distribution */
                 d[1] = normal();
                 d[2] = normal();
-#ifndef NDEBUG
-                if(norm3(d)>10)
+
+                for(size_t idx = 0 ; idx<3; idx++)
                 {
-                    printf("Unusual high norm of brownian: %f\n", norm3(d));
-                    exit(-1);
-                }
-#endif
-                //rand3d(&d[0]); // A unit length 3D direction
-                //And give it a magnitude
-                //double Frnd = 0.5*((double) rand() / (double) RAND_MAX - 0.5);
-                for(size_t idx =0 ; idx<3; idx++)
-                {
-                    //              printf("%f -- ", norm3(g+3*kk));
                     g[3*kk+idx] += Fb*Frnd*d[idx];
-                    //            printf("%f\n", norm3(g+3*kk));
-                    // g[3*kk+idx] = (1-Fb)*g[3*kk+idx] + Fb*Frnd*d[idx];
                 }
             }
+        }
+
+        /* Bead wells */
+        if( p->n_bead_wells > 0 )
+        {
+            bead_wells_gradient(&fconf, p->bead_wells, p->n_bead_wells, X, g);
         }
 
         /* 2.3 Dampening */
@@ -758,6 +741,15 @@ static void mflock_show(mflock_t * p, FILE * f)
         fprintf(f, "    R file: %s\n", p->rfname);
     }
 
+    if(p->fname_bead_wells == NULL)
+    {
+        fprintf(f, "    Bead wells: -not specified-\n");
+    }
+    else
+    {
+        fprintf(f, "    Bead wells: %s\n", p->fname_bead_wells);
+    }
+
     if(p->ofoldername == NULL)
     {
         fprintf(f, "    output folder not specified\n");
@@ -855,6 +847,8 @@ static void usage()
            "\tall files should be encoded as 64-bit floats\n");
     printf(" -n N, --maxiter N\n\tmaximum number of iterations\n");
     printf(" -t N, --maxtime N\n\t time budget in seconds\n");
+    printf(" --bead-wells <file\n\t"
+           "specify a file containing preferred bead locations (bead wells)\n");
     printf("2.1 Forces\n");
     printf(" --dconf-show mflock.lua\n\tPrint the dynamics as a table and quit.\n");
     printf("\tNo additional arguments required or used\n");
@@ -891,13 +885,17 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
     struct option longopts[] = {
         { "version",      no_argument,       NULL,   'i' },
         { "help",         no_argument,       NULL,   'h' },
+
         // Data
         { "wFile",        required_argument, NULL,   'w' },
         { "contact-pairs", required_argument, NULL,  'p' },
         { "xFile",        required_argument, NULL,   'x' },
         { "rFile",        required_argument, NULL,   'r' },
-        { "labels",        required_argument, NULL,   'L' },
+        { "labels",       required_argument, NULL,   'L' },
+        { "lFile",        required_argument, NULL,   'L' },
         { "outFolder",    required_argument, NULL,   'o' },
+        { "bead-wells",   required_argument, NULL,   'W' },
+
         // Settings
         { "maxiter",      required_argument, NULL,   'n' },
         { "maxtime",      required_argument, NULL,   't' },
@@ -905,11 +903,7 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "verbose",      required_argument, NULL,   'v' },
         { "live",         no_argument, NULL,   'a' },
         { "cmmz",         no_argument, NULL,   'z' },
-        // Settings / Forces
-        { "kVol",        required_argument, NULL,   'V' },
-        { "kDom",        required_argument, NULL,   'D' },
-        { "kInt",        required_argument, NULL,   'I' },
-        { "kRad",        required_argument, NULL,   'G' },
+
         // Settings / Geometry
         { "radius",        required_argument, NULL,   'R' },
         { "vq",          required_argument, NULL,   'Q' },
@@ -927,7 +921,7 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "A:B:C:w:x:r:n:t:V:I:S:R:G:v:o:p:hMs:L:zcadQ:l:",
+                            "A:B:C:w:x:r:n:t:R:v:o:p:hMs:L:zcadQ:l:W:",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -942,26 +936,29 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             mflock_show(p, stdout);
             return ARGS_QUIT;
         case 'w':
-            if(p->wfname != NULL)
-            {free(p->wfname);}
-            p->wfname = malloc(strlen(optarg)+1);
+            free(p->wfname);
+            p->wfname = strdup(optarg);
             assert(p->wfname != NULL);
-            strcpy(p->wfname, optarg);
+            break;
+        case 'W':
+            free(p->fname_bead_wells);
+            p->fname_bead_wells = strdup(optarg);
+            assert(p->fname_bead_wells != NULL);
             break;
         case 'x':
-            p->xfname = malloc(strlen(optarg)+1);
+            free(p->xfname);
+            p->xfname = strdup(optarg);
             assert(p->xfname != NULL);
-            strcpy(p->xfname, optarg);
             break;
         case 'r':
-            p->rfname = malloc(strlen(optarg)+1);
+            free(p->rfname);
+            p->rfname = strdup(optarg);
             assert(p->rfname != NULL);
-            strcpy(p->rfname, optarg);
             break;
         case 'L':
-            p->lfname = malloc(strlen(optarg)+1);
+            free(p->lfname);
+            p->lfname = strdup(optarg);
             assert(p->lfname != NULL);
-            strcpy(p->lfname, optarg);
             break;
         case 'n':
             p->maxiter = atol(optarg);
@@ -969,21 +966,10 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         case 'p':
             free(p->contact_pairs_file);
             p->contact_pairs_file = strdup(optarg);
+            assert(p->contact_pairs_file != NULL);
             break;
         case 't':
             p->maxtime = atol(optarg);
-            break;
-        case 'V':
-            p->kVol = atof(optarg);
-            break;
-        case 'S':
-            p->kDom = atol(optarg);
-            break;
-        case 'I':
-            p->kInt = atof(optarg);
-            break;
-        case 'G':
-            p->kRad = atof(optarg);
             break;
         case 'R':
             p->r0 = atof(optarg);
@@ -999,9 +985,8 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             break;
         case 'o':
             free(p->ofoldername);
-            p->ofoldername = malloc(strlen(optarg)+2);
+            p->ofoldername = strdup(optarg);
             assert(p->ofoldername != NULL);
-            strcpy(p->ofoldername, optarg);
             break;
         case 'l':
             free(p->luaDynamicsFile);
@@ -1053,6 +1038,7 @@ static int mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 #endif
         if(p->ofoldername[strlen(p->ofoldername)] != '/' )
         {
+            p->ofoldername = realloc(p->ofoldername, strlen(p->ofoldername)+1);
             p->ofoldername[strlen(p->ofoldername)+1] = '\0';
             p->ofoldername[strlen(p->ofoldername)] = '/';
         }
@@ -1111,14 +1097,12 @@ static mflock_t *  mflock_new(void)
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
 
+    // TODO: overflows
     p->rseed = time(NULL)*getpid()*ts.tv_nsec;
 
     p->maxiter = 1000000; // iterations
     p->maxtime = 60*60*10; // seconds
 
-    p->kVol = 1;
-    p->kInt = 1;
-    p->kDom = 1;
     p->r0 = -1;
     p->volq = 0.2;
 
@@ -1187,6 +1171,68 @@ static void mflock_set_and_create_output_folder(mflock_t * mf)
     free(fullofolder);
     return;
 }
+
+static void mflock_load_bead_wells(mflock_t * mf)
+{
+    if(mf->fname_bead_wells == NULL)
+    {
+        if(mf->verbose > 1)
+        {
+            printf("no bead wells to load\n");
+        }
+        return;
+    }
+
+    if(mf->verbose > 1)
+    {
+        printf("loading bead wells from %s\n", mf->fname_bead_wells);
+    }
+
+    size_t fsize = cf_file_size(mf->fname_bead_wells);
+    if(fsize % sizeof(double) != 0)
+    {
+        fprintf(stderr, "%s seems corrupt, The file size (%zu) can not be divided by %zu",
+                mf->fname_bead_wells, fsize, sizeof(double));
+        exit(EXIT_FAILURE);
+    }
+
+    size_t n_elements = fsize / sizeof(double);
+    mf->bead_wells = calloc(n_elements, sizeof(double));
+    FILE * fid = fopen(mf->fname_bead_wells, "r");
+    if(fid == NULL)
+    {
+        fprintf(stderr, "Error while reading %s\n", mf->fname_bead_wells);
+        exit(EXIT_FAILURE);
+    }
+    size_t n_read = fread(mf->bead_wells, sizeof(double), n_elements, fid);
+    if(n_read != n_elements)
+    {
+        fprintf(stderr, "Error while reading %s\n", mf->fname_bead_wells);
+        exit(EXIT_FAILURE);
+    }
+    fclose(fid);
+
+    size_t n_constraints = n_elements / 4;
+    for(size_t kk = 0; kk < n_constraints ; kk++)
+    {
+        size_t bead1 = mf->bead_wells[4*kk]+1;
+        if(bead1 > mf->n_beads)
+        {
+            fprintf(stderr, "Error: Got a bead well for bead %zu, but there are only %zu beads\n",
+                    bead1, mf->n_beads);
+            exit(EXIT_FAILURE);
+        }
+    }
+    mf->n_bead_wells = n_constraints;
+    if(mf->verbose > 1)
+    {
+        printf("Successfully read %u beads wells from %s\n",
+               mf->n_bead_wells,
+               mf->fname_bead_wells);
+    }
+    return;
+}
+
 static void mflock_init(mflock_t * mf, int argc, char ** argv)
 {
     mflock_set_and_create_output_folder(mf);
@@ -1236,6 +1282,7 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     mflock_load_radial_constraints(mf);
 
+    mflock_load_bead_wells(mf);
     /* Double check that the parameters make sense and that
        everything necessary could be loaded. */
     mflock_validate(mf);

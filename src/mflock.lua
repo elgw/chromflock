@@ -1,6 +1,7 @@
 -- Lua 5.3.5
 
 function getConfig(iter, newx)
+  -- Parameters:
   -- iter is current iteration
   -- newx is 1: if points were placed randomly or,
   --         0: if points were loaded from a file
@@ -9,6 +10,9 @@ function getConfig(iter, newx)
 
   ---- proportion of steps taken
   q = iter/maxiter
+
+  ---- Interaction distance
+  dInteraction = (1.1 + 0.9*q)*2 -- from 1.8 to 4 diameters radi
 
   ---- Compression force, kCom
   -- Compacts chromosomes towards their centre of mass
@@ -43,8 +47,14 @@ function getConfig(iter, newx)
   -- attracts beads that should be in contact (according to W)
   kInt = 0.5*(1.0 + math.sin( (q - .5)*math.pi )) -- from 0 to 1
 
-  ---- Interaction distance, dInteraction
-  dInteraction = (1.1 + 0.9*q)*2 -- from 1.8 to 4 diameters radi
+  ---- Bead specific wells
+  -- attracts specific beads to specific 3D coordinates (wells).
+  kBeadWell = 0.1;
+
+  --- Chromosome specific wells
+  -- attracts any bead from a specific chromosome to a chromosome
+  -- specific well.
+  kChrWell = 0.1;
 
   ---- Exit condition
   quit = 0
@@ -54,6 +64,5 @@ function getConfig(iter, newx)
 
   -- To slow down the simulations:
   -- usleep(1000000/60)
-
 
 end

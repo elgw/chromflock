@@ -19,7 +19,7 @@ void test_ellipsoid(size_t N, // number of points
   printf("--> Testing _ellipsoidal_ geometry\n");
   printf("  --> Spherical ellipsoid vs sphere\n");
 
-  conf fconf;
+  mflock_func_t fconf;
   fconf.r0 = 0.03;
   fconf.kVol = 0; // volume exclusion -- repulsion
   fconf.kDom = 0;
@@ -143,17 +143,85 @@ void test_ellipsoid(size_t N, // number of points
   }
 
   printf("/// Testing ellipsoidal geometry\n");
+}
 
+static double norm3(const double * X)
+{
+    return sqrt( pow(X[0], 2)
+                 + pow(X[1], 2)
+                 + pow(X[2], 2));
+}
+
+static void test_bead_wells_gradient()
+{
+    printf("-> Testing bead_wells_gradient\n");
+    double g[3] = {0};
+    double X[3] = {0};
+    double W[4] = {0};
+    mflock_func_t fconf = {0};
+    fconf.r0 = 1.0;
+    fconf.kBeadWell = 1.0;
+
+    /* Bead and well overlap perfectly hence the gradient should be 0 */
+    bead_wells_gradient(&fconf, W, 1, X, g);
+    if( norm3(g) > 1e-6 )
+    {
+        fprintf(stderr, "bead_wells_gradient gets it wrong :(\n");
+        exit(EXIT_FAILURE);
+    }
+
+    double E = bead_wells_error(&fconf, W, 1, X);
+
+    if( fabs(E) > 1e-6 )
+    {
+        fprintf(stderr, "bead_wells_error gets it wrong\n");
+        exit(EXIT_FAILURE);
+    }
+
+    X[0] = 1;
+    bead_wells_gradient(&fconf, W, 1, X, g);
+
+    E = bead_wells_error(&fconf, W, 1, X);
+    double delta = 1e-7;
+    X[0] += delta;
+    double E1 = bead_wells_error(&fconf, W, 1, X);
+    double dEdX  = (E1-E)/delta;
+    double rel_error = (g[0]-dEdX) / g[0];
+
+    if(fabs(rel_error) > 1e-7)
+    {
+        fprintf(stderr, "Relative error is too large");
+        exit(EXIT_FAILURE);
+    }
+
+    if(dEdX*g[0] < 0)
+    {
+        fprintf(stderr, "Wrong sign\n");
+        exit(EXIT_FAILURE);
+    }
+
+    X[0] = 1000;
+    E = bead_wells_error(&fconf, W, 1, X);
+    if(fabs(E - fconf.kBeadWell) > 1e-8)
+    {
+        fprintf(stderr, "bead_wells_error: Wrong asymptotic behaviour\n");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("   ok\n");
+    return;
 }
 
 int main(int argc, char ** argv)
 {
-  /* Unit test.
-   * Compare gradient to numerical gradient */
+    /* Unit tests */
 
+    test_bead_wells_gradient();
 
-  size_t N = 600;
-  int rep = 10000;
+   /* Compare gradient to numerical gradient */
+
+    size_t N = 600; // number of beads
+    int rep = 10000; // number if repetitions
 
   if(argc > 1)
   {
@@ -220,11 +288,9 @@ int main(int argc, char ** argv)
 
   double delta = 1e-8;
   struct timespec ta, tb;
-  conf fconf;
+  mflock_func_t fconf;
 
   /* TESTS */
-
-
 
   printf("--> Timing the fastest versions using %d repetitions\n", rep);
   {
@@ -236,8 +302,6 @@ int main(int argc, char ** argv)
     fconf.dInteraction = 2.1*fconf.r0;
     fconf.nIPairs = nPairs;
     fconf.E = NULL;
-
-
 
     clock_gettime(CLOCK_MONOTONIC, &ta);
     for(int kk = 0; kk<rep; kk++)

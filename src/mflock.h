@@ -58,13 +58,6 @@ typedef struct {
     double volq;
     elli * E; // Ellipse
 
-    // Forces
-    double kVol; // Volume exclusion/repulsion of beads
-    double kDom; // Spherical confinement
-    double kInt; // Interaction of pairs
-    double kRad; // Radial force (GPSeq)
-
-
     // Initialization
     size_t rseed;
 
@@ -84,6 +77,11 @@ typedef struct {
     char * rfname; // Wanted radius (GPSeq)
     char * xfname; // Initial X
     char * lfname; // Chromosome labels
+
+/* one well per bead data */
+    char * fname_bead_wells;
+    uint32_t n_bead_wells;
+    double * bead_wells;
 
     int newx;
 

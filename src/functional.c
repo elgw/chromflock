@@ -357,7 +357,7 @@ double err3(const double * restrict X,
             const size_t nX,
             const double * restrict R,
             const uint32_t * restrict P,
-            const conf * restrict C )
+            const mflock_func_t * restrict C )
 {
     /* Compared to err2 this is an alternative version with a list of pairs in contact instead of A */
 
@@ -453,7 +453,7 @@ double err3(const double * restrict X,
     return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
-double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
+double err2(double * X, size_t nX, double * R, uint32_t * P, mflock_func_t * C )
 {
     /* Alternative version with a list of pairs in contact instead of A */
 
@@ -520,7 +520,7 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
 }
 
 
-double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
+double err(double * X, size_t nX, double * R, uint8_t * A, mflock_func_t * C )
 {
 
     // Wanted radii
@@ -583,7 +583,7 @@ double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
     return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
-void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
+void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, mflock_func_t * C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -662,7 +662,7 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
     return;
 }
 
-void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C)
+void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, mflock_func_t * C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -745,7 +745,7 @@ void grad3(const double * restrict X,
            const double * restrict R,
            const uint32_t * restrict I,
            double * restrict G,
-           const conf * restrict C)
+           const mflock_func_t * restrict C)
 {
 
     double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
@@ -882,7 +882,7 @@ void grad4(double * restrict X,
            double * restrict R,
            uint32_t * restrict I,
            double * restrict G,
-           const conf * restrict C)
+           const mflock_func_t * restrict C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -952,4 +952,69 @@ void grad4(double * restrict X,
     gradRepulsion(X, G, nX, 2*C->r0, C->kVol);
 
     return;
+}
+
+
+void bead_wells_gradient(const mflock_func_t * restrict fconf,
+                         const double * restrict W,
+                         const size_t nW,
+                         const double * restrict X,
+                         double * restrict G)
+{
+    double sigma = fconf->r0;
+    double K1 = 1.0 / sigma; // 1.0 / pow(sigma, 3) / sqrt(2.0*M_PI);
+    K1 *= fconf->kBeadWell;
+    double K2 = -0.5/pow(sigma, 2);
+
+    for(size_t kk = 0; kk < nW; kk++)
+    {
+        size_t bead = (size_t )W[4*kk];
+        const double * well = W + 4*kk + 1;
+        const double * pos = X + 3*bead;
+
+        double r2 = pow(pos[0]-well[0], 2) +
+            pow(pos[1]-well[1], 2) +
+            pow(pos[2]-well[2], 2);
+
+        double K3 = K1*exp(K2*r2);
+
+        for(size_t ii = 0; ii< 3; ii++)
+        {
+            double delta_i = pos[ii]-well[ii];
+            G[3*bead+ii] += delta_i*K3;
+        }
+    }
+    return;
+}
+
+double
+bead_wells_error(const mflock_func_t * restrict fconf,
+                 const double * restrict W,
+                 const size_t nW,
+                 const double * restrict X)
+{
+
+    double E = 0;
+    double sigma = fconf->r0;
+
+    const double c0 = fconf->kBeadWell; // / sigma / sqrt(2.0*M_PI);
+
+    double K1 = 1.0; // 1.0 / sigma / sqrt(2.0*M_PI);
+
+    K1 *= fconf->kBeadWell;
+    double K2 = -0.5/pow(sigma, 2);
+
+    for(size_t kk = 0; kk < nW; kk++)
+    {
+        size_t bead = (size_t )W[4*kk];
+        const double * well = W + 4*kk + 1;
+        const double * pos = X + 3*bead;
+
+        double r2 = pow(pos[0]-well[0], 2) +
+            pow(pos[1]-well[1], 2) +
+            pow(pos[2]-well[2], 2);
+
+        E += (c0 - K1*exp(K2*r2));
+    }
+    return E;
 }

@@ -60,3 +60,16 @@ double clockdiff(struct timespec* start,
     elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
     return elapsed;
 }
+
+int64_t cf_file_size(const char * filename)
+{
+    FILE * fid = fopen(filename, "r");
+    if(fid == NULL)
+    {
+        return -1;
+    }
+    fseek(fid, -0L, SEEK_END);
+    size_t size = ftell(fid);
+    fclose(fid);
+    return (int64_t) size;
+}
