@@ -5,6 +5,8 @@
 - Added `--diploid` to **mflock** to explicitly inform that the labels
   should be duplicated (since diploid structures are generated from a
   Hi-C matrix which does not differentiate between the two copies).
+- Added some toy examples under `/examples`
+- Added the color map under `/doc`
 
 Broken:
 - `make SDL=0`.

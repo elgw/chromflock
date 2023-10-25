@@ -133,4 +133,7 @@ The columns are `x`, `y`, `z`, `radius`, and
 ### Visualizing the results?
 Each folder will have a `cmmdump.cmm.gz` which, once extracted, can be
 opened with [UCFS chimera](https://www.cgl.ucsf.edu/chimera/) or A per
-chromosome color map, which can be found in `src/cmmdump.c` is used.
+chromosome color map, which can be found in `src/cmmdump.c` is
+used. Which look like this:
+
+<img src="doc/cmm_cmap.svg" width="100%" />

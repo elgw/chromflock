@@ -10,3 +10,5 @@ wio_ut
 *.uint8
 *.gz
 contact_pairs_io_ut
+*.o
+*.cmm

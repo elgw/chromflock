@@ -1,7 +1,8 @@
+bead_wells.f64
 cmmdump.cmm
 contact_pairs.u32
 coords.csv
+coords.csv.0
 labels.u8
 log.txt
 mflock.lua
-
