@@ -1,5 +1,4 @@
-#ifndef contact_pairs_h_
-#define contact_pairs_h_
+#pragma once
 
 /**
  * @file contact_pairs_io.h
@@ -86,5 +85,3 @@ uint8_t * contact_pairs_to_matrix(const uint32_t * CP, uint64_t nPairs, uint64_t
 
 /* Unit tests */
 int contact_pairs_io_ut(int argc, char ** argv);
-
-#endif

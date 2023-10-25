@@ -1,5 +1,4 @@
-#ifndef string2any_h
-#define string2any_h
+#pragma once
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,5 +8,3 @@
 
 /** @short command line interface */
 int string2any(int argc, char ** argv);
-
-#endif

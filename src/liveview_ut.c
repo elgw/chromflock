@@ -17,7 +17,9 @@ int main(int argc, char ** argv)
   size_t N = 3030;
 
   double *X = malloc(3*N*sizeof(double));
+  assert(X != NULL);
   uint8_t * L = malloc(N*sizeof(uint8_t));
+  assert(L != NULL);
 
 
   for(size_t kk = 0; kk<3*N ; kk++)

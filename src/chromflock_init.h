@@ -1,5 +1,4 @@
-#ifndef chromflock_init_h
-#define chromflock_init_h
+#pragma once
 
 #include <assert.h>
 #include <errno.h>
@@ -14,5 +13,3 @@
 #include "oscp.h"
 
 int chromflock_init(void);
-
-#endif

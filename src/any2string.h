@@ -1,5 +1,4 @@
-#ifndef any2str_h_
-#define any2str_h_
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,5 +12,3 @@
 
 /* Command line interface */
 int any2string(int argc, char ** argv);
-
-#endif

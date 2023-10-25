@@ -5,11 +5,10 @@ import os, sys, stat
 import shutil
 
 resolution = 1e6;
-folder = f'demo_haploid_{resolution:.1e}'
+folder = f'./'
 
 print(f"Approximately {resolution} basepairs per bead")
-print(f"Generating folder: {folder}")
-os.mkdir(folder)
+
 
 chr_sizes = np.array([247249719, 242951149, 199501827, 191273063, 180857866, 170899992, 158821424, 146274826, 140273252, 135374737, 134452384, 132349534, 114142980, 106368585, 100338915, 88827254, 78774742, 76117153, 63811651, 62435964, 46944323, 49691432, 154913754])
 nchr = len(chr_sizes)
@@ -36,11 +35,11 @@ for bead in range(0, len(labels)-1):
 
 P.astype('uint32').tofile(folder + '/contact_pairs.u32')
 
-shutil.copyfile('../../src/mflock.lua', folder + '/mflock.lua')
+shutil.copyfile('../../..//src/mflock.lua', folder + '/mflock.lua')
 
 with open(folder + '/run_me.sh', 'w') as fid:
     fid.write('set -e\n')
-    fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.u8 --dconf mflock.lua --outFolder ./\n');
+    fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.u8 --dconf mflock.lua --outFolder ./ --live\n');
 
 os.chmod(folder + '/run_me.sh', stat.S_IRWXU)
 

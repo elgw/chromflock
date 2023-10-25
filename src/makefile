@@ -16,8 +16,8 @@ CFLAGS+=-DGIT_VERSION='"..."'
 CFLAGSdbg = -g3 -Wall -DNOMATLAB -DMAIN
 
 
-CFLAGSlv = -std=gnu99 -march=native -Wall -g `pkg-config sdl2 --cflags`
-LDFLAGSlv = -lm -lpthread `pkg-config sdl2 --libs` -Wall -lpthread
+CFLAGSlv = $(CFLAGS) `pkg-config sdl2 --cflags`
+LDFLAGSlv = $(LDFLAGS) `pkg-config sdl2 --libs` -lpthread
 
 CFLAGScmm = $(CFLAGS) `pkg-config cairo --cflags`
 LDFLAGScmm += -lz `pkg-config --libs cairo`

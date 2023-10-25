@@ -41,7 +41,14 @@ static size_t hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
-    assert(isfinite(v) == 1);
+    #ifndef NDEBUG
+    if(isfinite(v) != 1)
+    {
+        fprintf(stderr, "ERROR in %s, line %d\n", __FILE__, __LINE__);
+        fprintf(stderr, "X=%f, v = %f\n", X, v);
+        exit(EXIT_FAILURE);
+    }
+    #endif
 
     if(v<=0)
         return 0;
@@ -205,12 +212,24 @@ double errRepulsion(const double * restrict D,
 }
 
 
-static double gradRepulsion(const double * restrict D,
+/** @brief Repulsion gradient (volumetric overlap)
+ *
+ * @param D The dots [3 X N]
+ * @param G The gradient
+ * @param N the number of dots
+ * @param d ???
+ * @param kVol The force magnitude
+*/
+
+static double
+gradRepulsion(const double * restrict D,
                             double * restrict G,
                             const size_t N,
                             const double d,
                             const double kVol)
 {
+
+    assert(isfinite(d));
 
 #ifndef NDEBUG
     // Verify that D was actually allocated
@@ -262,7 +281,7 @@ static double gradRepulsion(const double * restrict D,
 
     // Dots sorted according to their bucket
     double * E = malloc(3*N*sizeof(double));
-    assert(E!=NULL);
+    assert(E != NULL);
     size_t * P = malloc(N*sizeof(double)); // Keep also bead numbers
     assert(P!=NULL);
 
@@ -773,6 +792,7 @@ void grad3(const double * restrict X,
             }
         }
     }
+
     if(C->E != NULL) // Ellipsoidal domain
     {
         if(C->kRad > 0)

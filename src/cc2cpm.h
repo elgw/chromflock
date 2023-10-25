@@ -1,5 +1,4 @@
-#ifndef __cc2cpm_h__
-#define __cc2cpm_h__
+#pragma once
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,5 +17,3 @@
 
 /* Command line interface */
 int cc2cpm(int argc, char ** argv);
-
-#endif

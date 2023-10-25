@@ -1,10 +1,10 @@
+#pragma once
+
 /**
  * @file cf_util.h
  * @author Erik Wernersson
  * @date 2020-2023
  */
-
-#pragma once
 
 #include <assert.h>
 #include <errno.h>

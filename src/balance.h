@@ -1,7 +1,14 @@
-#ifndef __balance_h__
-#define __balance_h__
+#pragma once
 
-/* Matrix balancing of A so that sum(M,1) = sum(M,2)' = 1
+#include <assert.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <math.h>
+
+/** @brief Matrix balancing
+ *
+ * Matrix balancing of A so that sum(M,1) = sum(M,2)' = 1
  * Columns/rows that sum to 0 are ignored.
  * Assumes that M^T=M
  * Assumes that all values of M are normal/finite.
@@ -10,13 +17,5 @@
  * Returns -1 in the case that M is 0
  */
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <math.h>
-
 
 double balance(double * M, size_t N);
-
-#endif

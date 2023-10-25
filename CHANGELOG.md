@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.4.1
+- Added `--bead-wells` to **mflock** to add bead-specific attractors.
+- Added `--diploid` to **mflock** to explicitly inform that the labels
+  should be duplicated (since diploid structures are generated from a
+  Hi-C matrix which does not differentiate between the two copies).
+
+Broken:
+- `make SDL=0`.
+
 ## 0.4.0
 
 - Sparse representation of contact restraints Lists of contact pairs,

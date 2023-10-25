@@ -1,10 +1,10 @@
+#pragma once
+
 /**
  * @file functional.h
  * @author Erik Wernersson
  * @date 2020-2023
  */
-
-#pragma once
 
 #include <assert.h>
 #include <math.h>

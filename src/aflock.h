@@ -1,11 +1,11 @@
+#pragma once
+
 /**
  * @file aflock.h
  * @author Erik Wernersson
  * @date 2020-2023
  */
 
-#ifndef _aflock_h_
-#define _aflock_h_
 
 #define _GNU_SOURCE
 
@@ -267,7 +267,3 @@ int cmp_float(const void * A, const void * B);
 
 static float eudist3(const float * A, const float * B);
 static float norm3(const float * X);
-
-
-
-#endif
