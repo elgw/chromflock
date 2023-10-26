@@ -1021,6 +1021,11 @@ static void aflock_init_structures(aflock * af, cf_structure * flock)
                     dir, dir, dir, dir, af->vq);
         }
 
+        if(af->diploid)
+        {
+            fprintf(jobFile, " --diploid");
+        }
+
         if(af->mflock_arguments != NULL)
         {
             fprintf(jobFile, " %s", af->mflock_arguments);

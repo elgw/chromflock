@@ -7,7 +7,7 @@ CFLAGS += -g3 \
 -DNOMATLAB \
 -fanalyzer
 else
-CFLAGS += -O3 -flto
+CFLAGS += -O3 -flto -DNDEBUG
 endif
 
 CFLAGS+=-DCC_VERSION='"..."'
@@ -16,8 +16,8 @@ CFLAGS+=-DGIT_VERSION='"..."'
 CFLAGSdbg = -g3 -Wall -DNOMATLAB -DMAIN
 
 
-CFLAGSlv = -std=gnu99 -march=native -Wall -g `pkg-config sdl2 --cflags`
-LDFLAGSlv = -lm -lpthread `pkg-config sdl2 --libs` -Wall -lpthread
+CFLAGSlv = $(CFLAGS) `pkg-config sdl2 --cflags`
+LDFLAGSlv = $(LDFLAGS) `pkg-config sdl2 --libs` -lpthread
 
 CFLAGScmm = $(CFLAGS) `pkg-config cairo --cflags`
 LDFLAGScmm += -lz `pkg-config --libs cairo`
@@ -32,8 +32,9 @@ wio_ut: wio.c wio.h makefile
 ellipsoid:
 	$(CC) $(CFLAGS) ellipsoid.c -lm -o ellipsoid_ut -Dstandalone
 
-functional_ut:
-	$(CC) $(CFLAGS) ellipsoid.c functional_ut.c functional.c -lm -o functional_ut
+FILESfu = ellipsoid.c functional_ut.c functional.c cf_util.o
+functional_ut: $(FILESfu)
+	$(CC) $(CFLAGS) $(FILESfu) -lm -o functional_ut
 
 functional_optimal_nDiv:
 	$(CC) $(CFLAGS) functional_optimal_nDiv.c functional.c ellipsoid.c  -lm -o functional_optimal_nDiv

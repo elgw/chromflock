@@ -95,14 +95,16 @@ bin/chromflock: $(chromflock_files)
 bin/cmmfilter:
 	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` $(LDFLAGS) -o bin/cmmfilter
 
-mflock_files = src/mflock.c \
-src/functional.c \
-src/cmmwrite.c \
-src/wio.c \
-src/hsvrgb.c \
+mflock_files = src/mflock_cli.c \
+src/mflock.o \
+src/functional.o \
+src/cmmwrite.o \
+src/wio.o \
+src/hsvrgb.o \
+src/liveview.o \
 obj/ellipsoid.o \
 obj/contact_pairs_io.o \
-obj/cf_util.o
+obj/cf_util.o \
 
 
 bin/mflock: $(mflock_files) makefile

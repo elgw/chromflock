@@ -1,5 +1,4 @@
-#ifndef __view_h_
-#define __view_h_
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +10,17 @@
 #include "hsvrgb.h"
 #include "ellipsoid.h"
 
-
-/* Example:
+/* Idea:
+ * Create a light weight renderer that can be plugged in anywhere to monitor the status of some
+ * matrix
+ *
+ *  - Use pthreads to run separately
+ *  - Update window whenever the appointed data is changed
+ *    or use some kind of signalling.
+ *    Also add a blocking command to destroy the window (before the data is removed).
+ *
+ *
+ * Example:
 
 #include <liveview.h>
 ...
@@ -42,12 +50,16 @@ typedef struct {
   double * X; // Coordinates, 3XN
   uint8_t * L; // N Labels
   double r0; // bead radius
-  int quit; // Closes when quit = 1;
+  volatile int quit; // Closes when quit = 1;
   elli * E;
 } liveXLview;
 
 void * liveview_t(void * conf);
 
-int liveview(double * X, uint8_t * L, size_t N, int * quit, double radius, elli * E);
-
-#endif
+int
+liveview(double * X,
+         uint8_t * L,
+         size_t N,
+         volatile int * quit,
+         double radius,
+         elli * E);

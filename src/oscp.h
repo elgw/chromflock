@@ -1,5 +1,4 @@
-#ifndef __oscp_h__
-#define __oscp_h__
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,5 +24,3 @@
 */
 
 int oscp(const char * source, const char * destination);
-
-#endif

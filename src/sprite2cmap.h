@@ -1,5 +1,4 @@
-#ifndef _sprite2cmap_h_
-#define _sprite2cmap_h_
+#pragma once
 
 
 /* Read .cluster files associated with SPRITE
@@ -25,5 +24,3 @@
 
 /* Command line interface */
 int sprite2cmap(int argc, char ** argv);
-
-#endif

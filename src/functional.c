@@ -1,16 +1,6 @@
 #include "functional.h"
 
-#define INLINED inline __attribute__((always_inline))
-
-INLINED static void vec3_minus(const double * A, const double * B, double * C)
-{ // C = A-B
-    for(int kk = 0; kk<3; kk++)
-    {
-        C[kk] = A[kk] - B[kk];
-    }
-}
-
-INLINED static double norm3(const double * restrict X)
+static double norm3(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -18,7 +8,7 @@ INLINED static double norm3(const double * restrict X)
     return sqrt(n);
 }
 
-INLINED static void vec3_normalize(double * restrict X)
+static void vec3_normalize(double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -27,7 +17,7 @@ INLINED static void vec3_normalize(double * restrict X)
 }
 
 
-INLINED static double norm32(const double * restrict X)
+static double norm32(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
@@ -35,23 +25,30 @@ INLINED static double norm32(const double * restrict X)
     return n;
 }
 
-INLINED static double eudist3sq(const double * A, const double * B)
+static double eudist3sq(const double * A, const double * B)
 {
     /* SQUARED Euclidean distance between two 3D-vectors */
     return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
 }
 
-INLINED static double eudist3(const double * A, const double * B)
+static double eudist3(const double * A, const double * B)
 {
     /* Euclidean distance between two 3D-vectors */
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-INLINED static size_t hash_coord(const int nDiv, const double X)
+static size_t hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
-    assert(isfinite(v) == 1);
+    #ifndef NDEBUG
+    if(isfinite(v) != 1)
+    {
+        fprintf(stderr, "ERROR in %s, line %d\n", __FILE__, __LINE__);
+        fprintf(stderr, "X=%f, v = %f\n", X, v);
+        exit(EXIT_FAILURE);
+    }
+    #endif
 
     if(v<=0)
         return 0;
@@ -61,7 +58,7 @@ INLINED static size_t hash_coord(const int nDiv, const double X)
 }
 
 
-INLINED static size_t hash(const size_t nDiv, double * restrict X)
+static size_t hash(const size_t nDiv, const double * restrict X)
 {
 
     size_t h = hash_coord(nDiv, X[0]) +
@@ -72,7 +69,7 @@ INLINED static size_t hash(const size_t nDiv, double * restrict X)
 }
 
 
-double errRepulsion(double * restrict D,
+double errRepulsion(const double * restrict D,
                     const size_t N,
                     const double d)
 {
@@ -111,13 +108,8 @@ double errRepulsion(double * restrict D,
     // For 33000 points: 15 about 30% faster than using 9
 
     size_t nH = pow(nDiv, 3);
-    uint32_t * S = malloc(nH*sizeof(uint32_t));
-    assert(S!=NULL);
-
-    for(size_t kk = 0; kk<nH; kk++)
-    {
-        S[kk] = 0;
-    }
+    uint32_t * S = calloc(nH, sizeof(uint32_t));
+    assert(S != NULL);
 
     for(size_t kk = 0; kk<N; kk++)
     {
@@ -184,9 +176,9 @@ double errRepulsion(double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t aa = ha_min; aa <= ha_max; aa++)
+        for(size_t cc = hc_min; cc <= hc_max; cc++)
             for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t cc = hc_min; cc <= hc_max; cc++)
+                for(size_t aa = ha_min; aa <= ha_max; aa++)
                 {
 
                     // hash or index of the bucket to compare against
@@ -220,12 +212,24 @@ double errRepulsion(double * restrict D,
 }
 
 
-static double gradRepulsion(double * restrict D,
+/** @brief Repulsion gradient (volumetric overlap)
+ *
+ * @param D The dots [3 X N]
+ * @param G The gradient
+ * @param N the number of dots
+ * @param d ???
+ * @param kVol The force magnitude
+*/
+
+static double
+gradRepulsion(const double * restrict D,
                             double * restrict G,
                             const size_t N,
                             const double d,
                             const double kVol)
 {
+
+    assert(isfinite(d));
 
 #ifndef NDEBUG
     // Verify that D was actually allocated
@@ -246,13 +250,8 @@ static double gradRepulsion(double * restrict D,
         nDiv = 15;
     }
     size_t nH = pow(nDiv, 3);
-    uint32_t * S = malloc(nH*sizeof(uint32_t));
+    uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);
-
-    for(size_t kk = 0; kk<nH; kk++)
-    {
-        S[kk] = 0;
-    }
 
     for(size_t kk = 0; kk<N; kk++)
     {
@@ -282,7 +281,7 @@ static double gradRepulsion(double * restrict D,
 
     // Dots sorted according to their bucket
     double * E = malloc(3*N*sizeof(double));
-    assert(E!=NULL);
+    assert(E != NULL);
     size_t * P = malloc(N*sizeof(double)); // Keep also bead numbers
     assert(P!=NULL);
 
@@ -321,9 +320,9 @@ static double gradRepulsion(double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t aa = ha_min; aa <= ha_max; aa++)
+        for(size_t cc = hc_min; cc <= hc_max; cc++)
             for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t cc = hc_min; cc <= hc_max; cc++)
+                for(size_t aa = ha_min; aa <= ha_max; aa++)
                 {
 
                     size_t hash =
@@ -373,11 +372,11 @@ static double gradRepulsion(double * restrict D,
 }
 
 
-double err3(double * restrict X,
+double err3(const double * restrict X,
             const size_t nX,
-            double * restrict R,
-            uint32_t * restrict P,
-            const conf * restrict C )
+            const double * restrict R,
+            const uint32_t * restrict P,
+            const mflock_func_t * restrict C )
 {
     /* Compared to err2 this is an alternative version with a list of pairs in contact instead of A */
 
@@ -473,7 +472,7 @@ double err3(double * restrict X,
     return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
-double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
+double err2(double * X, size_t nX, double * R, uint32_t * P, mflock_func_t * C )
 {
     /* Alternative version with a list of pairs in contact instead of A */
 
@@ -540,7 +539,7 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, conf * C )
 }
 
 
-double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
+double err(double * X, size_t nX, double * R, uint8_t * A, mflock_func_t * C )
 {
 
     // Wanted radii
@@ -603,7 +602,7 @@ double err(double * X, size_t nX, double * R, uint8_t * A, conf * C )
     return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
 
-void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
+void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, mflock_func_t * C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -682,7 +681,7 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, conf * C)
     return;
 }
 
-void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C)
+void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, mflock_func_t * C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -760,20 +759,17 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, conf * C
     return;
 }
 
-void grad3(double * restrict X,
+void grad3(const double * restrict X,
            const size_t nX,
-           double * restrict R,
-           uint32_t * restrict I,
+           const double * restrict R,
+           const uint32_t * restrict I,
            double * restrict G,
-           const conf * restrict C)
+           const mflock_func_t * restrict C)
 {
 
     double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
 
-    // Reset G
-    for(size_t kk = 0; kk<nX*3; kk++)
-        G[kk] = 0;
-
+    memset(G, 0, nX*3*sizeof(double));
 
     /* Radial positioning */
     if(C->E == NULL) // Spherical domain
@@ -796,6 +792,7 @@ void grad3(double * restrict X,
             }
         }
     }
+
     if(C->E != NULL) // Ellipsoidal domain
     {
         if(C->kRad > 0)
@@ -905,7 +902,7 @@ void grad4(double * restrict X,
            double * restrict R,
            uint32_t * restrict I,
            double * restrict G,
-           const conf * restrict C)
+           const mflock_func_t * restrict C)
 {
     // Reset G
     for(size_t kk = 0; kk<nX*3; kk++)
@@ -975,4 +972,69 @@ void grad4(double * restrict X,
     gradRepulsion(X, G, nX, 2*C->r0, C->kVol);
 
     return;
+}
+
+
+void bead_wells_gradient(const mflock_func_t * restrict fconf,
+                         const double * restrict W,
+                         const size_t nW,
+                         const double * restrict X,
+                         double * restrict G)
+{
+    double sigma = fconf->r0;
+    double K1 = 1.0 / sigma; // 1.0 / pow(sigma, 3) / sqrt(2.0*M_PI);
+    K1 *= fconf->kBeadWell;
+    double K2 = -0.5/pow(sigma, 2);
+
+    for(size_t kk = 0; kk < nW; kk++)
+    {
+        size_t bead = (size_t )W[4*kk];
+        const double * well = W + 4*kk + 1;
+        const double * pos = X + 3*bead;
+
+        double r2 = pow(pos[0]-well[0], 2) +
+            pow(pos[1]-well[1], 2) +
+            pow(pos[2]-well[2], 2);
+
+        double K3 = K1*exp(K2*r2);
+
+        for(size_t ii = 0; ii< 3; ii++)
+        {
+            double delta_i = pos[ii]-well[ii];
+            G[3*bead+ii] += delta_i*K3;
+        }
+    }
+    return;
+}
+
+double
+bead_wells_error(const mflock_func_t * restrict fconf,
+                 const double * restrict W,
+                 const size_t nW,
+                 const double * restrict X)
+{
+
+    double E = 0;
+    double sigma = fconf->r0;
+
+    const double c0 = fconf->kBeadWell; // / sigma / sqrt(2.0*M_PI);
+
+    double K1 = 1.0; // 1.0 / sigma / sqrt(2.0*M_PI);
+
+    K1 *= fconf->kBeadWell;
+    double K2 = -0.5/pow(sigma, 2);
+
+    for(size_t kk = 0; kk < nW; kk++)
+    {
+        size_t bead = (size_t )W[4*kk];
+        const double * well = W + 4*kk + 1;
+        const double * pos = X + 3*bead;
+
+        double r2 = pow(pos[0]-well[0], 2) +
+            pow(pos[1]-well[1], 2) +
+            pow(pos[2]-well[2], 2);
+
+        E += (c0 - K1*exp(K2*r2));
+    }
+    return E;
 }

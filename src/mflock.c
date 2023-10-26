@@ -6,12 +6,187 @@
 
 #include "mflock.h"
 
+// TODO: Offer alternative for non x86-systems
+#include "fast_prng/normal.h"
+
+
+/* Since mflock is a command line tool it typically fails by just
+ * returning with EXIT_FAILURE without freeing all memory.
+ *
+ * - The error free path should have no memory leaks.
+ */
+
+/* Forward declarations */
+typedef struct {
+    uint32_t * I; // List with pairwise distances
+    size_t n_pairs; // Number of pairs in I
+    double * beads; /* Bead coordinates */
+    size_t n_beads; // number of points
+    int diploid; /* Cast the labels to diploid format */
+    uint8_t * L; // chr labels per bead
+    double * R; // wanted radii together with kRad
+
+    // Geometry
+    // Sphere if E isn't set.
+    double r0; // bead radius
+    double volq;
+    elli * E; // Ellipse
+
+    // Initialization
+    size_t rseed;
+
+    // For the optimizer
+    size_t maxiter;
+    size_t maxtime;
+
+    // From the optimizer
+    double grad_final;
+    size_t iter_final;
+    size_t time_final;
+    double err_final;
+
+    // Input file names
+    char * wfname; // File with contact indications (depreciated)
+    char * contact_pairs_file; /* File with contact pairs */
+    char * rfname; // Wanted radius (GPSeq)
+    char * xfname; // Initial X
+    char * lfname; // Chromosome labels
+
+/* one well per bead data */
+    char * fname_bead_wells;
+    uint32_t n_bead_wells;
+    double * bead_wells;
+
+    int newx;
+
+    // Output file names
+    char * xoutfname;
+    char * ofoldername; // Outfolder
+    char * logfname; // log file name
+    int cmmz;
+
+    FILE * logf;
+
+    // general
+    int verbose;
+    double compress; // compress chromosomes by attracting them to their COMs
+    int liveView;
+
+    /* Name of lua script to handle the beads dynamics */
+    char * luaDynamicsFile;
+} mflock_t;
+
+
+
+
+/** @brief create a new default configuration
+ * free with mflock_free
+*/
+static mflock_t * mflock_new(void);
+
+/** @brief free an mflock_t
+ *
+ * also frees everything that it points to
+ */
+static void mflock_free(mflock_t * p);
+
+/** @brief Print the settings to FILE
+ *
+ * f can of course be stdout.
+ */
+static void mflock_show(mflock_t * p, FILE * f);
+
+/** @brief Report status of mflock to log and screen
+ *
+ */
+static void mflock_summary(mflock_t * p);
+
+/** @brief Read contact pairs from a binary file
+    Sets p->I (the contacts) and p->NI (number of contact pairs)
+    @return - Nothing, but aborts the program on failure.
+*/
+static void mflock_read_contact_pairs(mflock_t * p);
+
+/** @brief Load radial constraints
+ *
+ * only if rfname is set
+ * Read GPSeq radius values as binary double.
+ * If that does not work, try as text, one value per line
+ */
+static int mflock_load_radial_constraints(mflock_t * p);
+
+/** @brief Load or set new coordinates
+ *
+ * Tries to call mflock_init_coordinates
+ *
+*/
+
+static void mflock_init_coordinates(mflock_t * p);
+
+
+/** @brief Load bead coordinates from csv file
+ *
+ */
+static int mflock_load_coordinates(mflock_t * p);
+
+
+/** @brief Write coordinates to disk, also write the column names
+ * to the log file  */
+static void mflock_save_coordinates(mflock_t * p);
+
+/** @brief Read label matrix pointed to by p->lfname
+ */
+static int mflock_load_bead_labels(mflock_t * p);
+
+/* For logging */
+static void mflock_logwrite(const mflock_t * p, int level, const char * fmt, ...);
+
+/**
+ * @breif The beads dynamics main loop
+ *
+ * @param p the settings
+ * @param Fb: the Brownian force
+ */
+static int mflock_dynamics(mflock_t * restrict p,
+                   double Fb);
+
+typedef enum {
+    MFLOCK_ARGS_OK,
+    MFLOCK_ARGS_ERR,
+    MFLOCK_ARGS_QUIT
+} mflock_cli_status;
+
+/** @brief parse command line arguments */
+static mflock_cli_status mflock_parse_cli(mflock_t * p, int argc, char ** argv);
+
+/** @brief initialization from valid command line arguments
+*/
+static void mflock_init(mflock_t * p, int argc, char ** argv);
+
+
+/** @brief set the bead size from the volume quotient */
+static void mflock_set_bead_size(mflock_t * p);
+
+/** @brief Per Chr Centre of mass compression
+ *
+ *Apply a force that attracts each bead to the centre of mass of it's
+ * chromosome This slows down the computations quite much because the
+ * beads get close to each other so the collision detection gets more to do.
+ *
+ * TODO: Unnecessary to allocate/free things here and to count the
+ * number of beads per chromosome.
+ */
+static void comforce(mflock_t * restrict p,
+                     double * restrict G);
+
+/* END OF FORWARD DECLARATIONS */
+
+/* Used for communication with the optional visualization routines */
 static volatile int run = 1;
 
-#define INLINED static inline __attribute__((always_inline))
-
-static void luaerror (lua_State *L, const char *fmt, ...) {
-    /* show lua error string */
+/* show lua error string */
+static void luaerror(lua_State *L, const char *fmt, ...)
+{
     va_list argp;
     va_start(argp, fmt);
     vfprintf(stderr, fmt, argp);
@@ -21,8 +196,10 @@ static void luaerror (lua_State *L, const char *fmt, ...) {
     exit(EXIT_FAILURE);
 }
 
-static double getglobfloat (lua_State *L, const char *var) {
-    /* get global variable by name */
+/* get global variable by name from lua */
+static double lua_get_float (lua_State *L,
+                             const char *var)
+{
     int isnum;
     double result;
     lua_getglobal(L, var);
@@ -34,7 +211,8 @@ static double getglobfloat (lua_State *L, const char *var) {
     return result;
 }
 
-static int getglobint (lua_State *L, const char *var) {
+/* get an integer from lua */
+static int lua_get_int (lua_State *L, const char *var) {
     /* get global variable by name */
     int isnum, result;
     lua_getglobal(L, var);
@@ -51,12 +229,6 @@ static void stoprun(int ignore)
     run = 0 + 0*ignore;
 }
 
-static double clockdiff(struct timespec* start, struct timespec * finish)
-{
-    double elapsed = (finish->tv_sec - start->tv_sec);
-    elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
-    return elapsed;
-}
 
 static double norm3(const double * restrict X)
 {
@@ -66,78 +238,20 @@ static double norm3(const double * restrict X)
     return sqrt(n);
 }
 
-INLINED double dmax(double a, double b)
+static double dmax(double a, double b)
 {
     if(a>b)
         return a;
     return b;
 }
 
-INLINED double dmin(double a, double b)
+static double dmin(double a, double b)
 {
     if(a<b)
         return a;
     return b;
 }
 
-typedef struct {
-    double * X;
-    optparam * p;
-} solve_t_args;
-
-void radpos(double * X, optparam * p, FILE * f)
-{
-    /* Show radial positions of each chromosome, using centre of mass
-     * an alternative would be to show mean radius. */
-
-    if(p->L == NULL)
-    {
-        printf("No L!\n");
-        return;
-    }
-    // mX mean X positions
-    size_t size_mX = 3*256*sizeof(double);
-    double * mX = malloc(size_mX);
-    assert(mX != NULL);
-    memset(mX, 0, size_mX);
-    // Number of points per label
-    size_t * nL = malloc(256*sizeof(size_t));
-    assert(nL != NULL);
-    memset(nL, 0, 256*sizeof(size_t));
-
-    // Get centroid for each chromosome/label
-    for(size_t kk = 0 ; kk < p->N ; kk++)
-    {
-        size_t label = p->L[kk];
-        nL[label]++;
-        for(size_t idx = 0; idx < 3 ; idx ++)
-        {
-            mX[3*label+idx] += X[3*kk+idx];
-        }
-    }
-
-    // Print the results
-    fprintf(f, "chr, com_x, com_y, com_z, r\n");
-    for(size_t ll = 0; ll < 256; ll++)
-    {
-        if(nL[ll] > 0)
-        {
-            for(size_t idx = 0; idx<3; idx++)
-            {
-                mX[3*ll+idx]/=nL[ll];
-            }
-            fprintf(f, "%3zu,% 2.3f, % 2.3f, % 2.3f, %.3f\n", ll,
-                    mX[3*ll],
-                    mX[3*ll+1],
-                    mX[3*ll+2],
-                    norm3(mX+3*ll));
-        }
-    }
-
-    free(mX);
-    free(nL);
-    return;
-}
 
 /* when usleep is called from the lua script
  * This is useful when visualizations are enabled
@@ -164,35 +278,20 @@ static int usleep_lua(lua_State * L)
 
     /* return the number of results */
     return 0;
-
 }
 
-INLINED double eudist3p2(const double * A, const double * B)
+
+/* Euclidean distance between two 3D-vectors */
+static double eudist3p2(const double * A, const double * B)
 {
-    /* Euclidean distance between two 3D-vectors */
     return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
 }
 
-INLINED double eudist3(const double * A, const double * B)
-{
-    /* Euclidean distance between two 3D-vectors */
-    return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
-}
 
-
-/** @brief Per Chr Centre of mass compression
- *
- *Apply a force that attracts each bead to the centre of mass of it's
- * chromosome This slows down the computations quite much because the
- * beads get close to each other so the collision detection gets more to do.
- *
- * TODO: Unnecessary to allocate/free things here and to count the
- * number of beads per chromosome.
- */
-void comforce(optparam * restrict p,
-              const double * restrict X,
-              double * restrict G)
+static void comforce(mflock_t * restrict p,
+                     double * restrict G)
 {
+    const double * restrict X = p->beads;
     if(p->L == NULL)
     {
         printf("No L, can't compute com-force!\n");
@@ -209,7 +308,7 @@ void comforce(optparam * restrict p,
     memset(nL, 0, 256*sizeof(size_t));
 
     /* Get centroid for each chromosome/label */
-    for(size_t kk = 0 ; kk < p->N ; kk++)
+    for(size_t kk = 0 ; kk < p->n_beads ; kk++)
     {
         size_t label = p->L[kk];
         nL[label]++;
@@ -233,7 +332,7 @@ void comforce(optparam * restrict p,
     }
 
     /* Attract to centroid */
-    for(size_t kk = 0; kk < p->N; kk++)
+    for(size_t kk = 0; kk < p->n_beads; kk++)
     {
         uint8_t label = p->L[kk];
         double dist2 = eudist3p2(X+3*kk, mX+3*label);
@@ -251,28 +350,18 @@ void comforce(optparam * restrict p,
     return;
 }
 
-/**
- * @breif The beads dynamics main loop
- * @param X the coordinates of each bead
- * @param p the settings
- * @param Fb: the Brownian force
- */
-int dynamic(double * restrict X,
-            optparam * restrict p,
-            double Fb)
-{
 
-    normal_setup();  /* set up fast prng */
+static int mflock_dynamics(mflock_t * restrict p,
+                           double Fb)
+{
+    double * X = p->beads;
+    /* set up fast prng in normal.h before calling normal() */
+    normal_setup();
 
     /* Prepare settings */
     size_t maxiter = p->maxiter;
-    conf fconf;
+    mflock_func_t fconf = {0};
     fconf.r0 = p->r0;
-    fconf.kVol = p->kVol;
-    fconf.kDom = p->kDom;
-    fconf.kInt = p->kInt; /* Function of current iteration, see below */
-    fconf.kRad = p->kRad;
-    fconf.dInteraction = 2.1*fconf.r0; /* Function of current iteration, see below */
     fconf.E = NULL;
     fconf.Es = NULL;
     if(p->E != NULL)
@@ -285,22 +374,22 @@ int dynamic(double * restrict X,
                             p->E->c - fconf.r0);
     }
 
-    fconf.nIPairs = p->NI; /* Only for err2 */
+    fconf.nIPairs = p->n_pairs; /* Only for err2 */
 
     /* Initialization */
     struct timespec ta, tb;
     clock_gettime(CLOCK_MONOTONIC, &ta);
 
     /* Gradient */
-    double * restrict g = malloc(p->N*3*sizeof(double));
-    memset(g, 0, p->N*3*sizeof(double)); /* zero initial velocity */
-    // Velocity
-    double * restrict v = malloc(p->N*3*sizeof(double));
-    memset(v, 0, p->N*3*sizeof(double)); /* zero initial velocity */
-    double * restrict Xm = malloc(3*p->N*sizeof(double));
-    /* Set last position to be the current position, i.e. initial velocity will be 0 */
-    for(size_t pp = 0; pp< 3*p->N ; pp++)
-    { Xm[pp] = X[pp]; }
+    double * restrict g = calloc(p->n_beads*3, sizeof(double));
+
+    /* Velocity */
+    double * restrict v = calloc(p->n_beads*3, sizeof(double));
+
+    /* Set previous position, initially to be the current position,
+       i.e. initial velocity will be 0 */
+    double * restrict Xm = malloc(3*p->n_beads*sizeof(double));
+    memcpy(Xm, X, 3*p->n_beads*sizeof(double));
 
     double error = 9e99;
     double gnorm = 9e99;
@@ -311,37 +400,22 @@ int dynamic(double * restrict X,
 
     lua_State *L = NULL;
 
-    if(p->luaDynamics)
-    {
-        L = luaL_newstate();
-        luaL_openlibs(L); // might not be needed, performance penalty?
-        lua_register(L, "usleep", usleep_lua);
 
-        if (luaL_dofile(L, p->luaDynamicsFile))
-            luaerror(L, "cannot run config. file: %s", lua_tostring(L, -1));
-    }
+    L = luaL_newstate();
+    luaL_openlibs(L); // might not be needed, performance penalty?
+    lua_register(L, "usleep", usleep_lua);
+
+    if (luaL_dofile(L, p->luaDynamicsFile))
+        luaerror(L, "cannot run config. file: %s", lua_tostring(L, -1));
+
 
     int luaquit = 0;
-
     size_t iter = 0;
     do{
         iter++;
         p->iter_final++;
 
-
-        /* S -- Settings for this iteration
-         *
-         * Theses schemes typically includes some heuristics to avoid local minima
-         */
-
-        if(p->luaDynamics == 0)
-        {
-            fprintf(stderr, "luaDynamics == 0\n");
-            exit(EXIT_FAILURE);
-        }
-
-        /* Settings from lua script */
-        //     printf("Getting settings from lua script: %s\n", p->luaDynamicsFile);
+        /* Get settings from the lua script */
 
         lua_getglobal(L, "getConfig"); /* function to be called */
         lua_pushnumber(L, iter); /* push arguments */
@@ -349,18 +423,22 @@ int dynamic(double * restrict X,
 
         /* do the call (2 arguments, 0 result) */
         if (lua_pcall(L, 2, 0, 0) != LUA_OK)
-            luaerror(L, "error running function 'f': %s",
+            luaerror(L, "error running function 'getConfig' in %s : %s",
+                     p->luaDynamicsFile,
                      lua_tostring(L, -1));
 
         /* retrieve result */
-        fconf.kDom = getglobfloat(L, "kDom");
-        fconf.kVol = getglobfloat(L, "kVol");
-        fconf.kInt = getglobfloat(L, "kInt");
-        fconf.kRad = getglobfloat(L, "kRad");
-        p->compress = getglobfloat(L, "kCom");
-        Fb = getglobfloat(L, "fBrown");
-        luaquit = getglobint(L, "quit");
-        fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
+        fconf.kDom = lua_get_float(L, "kDom");
+        fconf.kVol = lua_get_float(L, "kVol");
+        fconf.kInt = lua_get_float(L, "kInt");
+        fconf.kRad = lua_get_float(L, "kRad");
+        fconf.kBeadWell = lua_get_float(L, "kBeadWell");
+        fconf.kChrWell = lua_get_float(L, "kChrWell");
+        p->compress = lua_get_float(L, "kCom");
+        Fb = lua_get_float(L, "fBrown");
+        luaquit = lua_get_int(L, "quit");
+        fconf.dInteraction = fconf.r0 * lua_get_float(L, "dInteraction");
+
         if(p->verbose > 10)
         {
             printf("kInteraction: %f\n", fconf.kInt);
@@ -370,14 +448,14 @@ int dynamic(double * restrict X,
         /* Start of Molecular Dynamics
          * 2.1 Gradient of functional */
         grad3(X,
-              p->N,
+              p->n_beads,
               p->R,
               p->I,
               g,
               &fconf);
 
         /* Cap gradient for stability */
-        for(size_t kk = 0; kk<3*p->N; kk++)
+        for(size_t kk = 0; kk<3*p->n_beads; kk++)
         {
             if(fabs(g[kk]) > 1.0)
             {
@@ -387,56 +465,47 @@ int dynamic(double * restrict X,
 
         if(p->compress > 0)
         {
-            comforce(p, X, g);
+            comforce(p, g);
         }
 
         /* 2.2 Brownian force */
-        if(Fb<0)
-            Fb = 0;
-
         if(Fb>0)
         {
-            for(size_t kk = 0; kk < p->N; kk++)
+            for(size_t kk = 0; kk < p->n_beads; kk++)
             {
                 double d[] = {0,0,0};
-                d[0] = normal();
+                d[0] = normal(); /* From normal distribution */
                 d[1] = normal();
                 d[2] = normal();
-#ifndef NDEBUG
-                if(norm3(d)>10)
+
+                for(size_t idx = 0 ; idx<3; idx++)
                 {
-                    printf("Unusual high norm of brownian: %f\n", norm3(d));
-                    exit(-1);
-                }
-#endif
-                //rand3d(&d[0]); // A unit length 3D direction
-                //And give it a magnitude
-                //double Frnd = 0.5*((double) rand() / (double) RAND_MAX - 0.5);
-                for(size_t idx =0 ; idx<3; idx++)
-                {
-                    //              printf("%f -- ", norm3(g+3*kk));
                     g[3*kk+idx] += Fb*Frnd*d[idx];
-                    //            printf("%f\n", norm3(g+3*kk));
-                    // g[3*kk+idx] = (1-Fb)*g[3*kk+idx] + Fb*Frnd*d[idx];
                 }
             }
+        }
+
+        /* Bead wells */
+        if( p->n_bead_wells > 0 )
+        {
+            bead_wells_gradient(&fconf, p->bead_wells, p->n_bead_wells, X, g);
         }
 
         /* 2.3 Dampening */
         /* Estimate velocities, note: per component */
 
-        for(size_t pp = 0 ; pp < 3*p->N ; pp++)
+        for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
         {
             v[pp] = (X[pp] - Xm[pp]) / (2.0 * dt);
         }
 
-        for(size_t kk = 0; kk < 3*p->N; kk++)
+        for(size_t kk = 0; kk < 3*p->n_beads; kk++)
         {
             g[kk] = g[kk] + damp*v[kk];
         }
 
         /* 3. Update X */
-        for(size_t pp = 0 ; pp < 3*p->N ; pp++)
+        for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
         {
             double xt = X[pp];
             X[pp] = 2.0*X[pp] - Xm[pp] - g[pp]*pow(dt,2);
@@ -451,18 +520,18 @@ int dynamic(double * restrict X,
         {
             /* Calculate gradient 2-norm */
             gnorm = 0;
-            for(size_t kk = 0; kk < 3*p->N; kk++)
+            for(size_t kk = 0; kk < 3*p->n_beads; kk++)
             {
                 gnorm += pow(v[kk], 2);
             }
             gnorm = sqrt(gnorm);
 
             error = err3(X,
-                         p->N,
+                         p->n_beads,
                          p->R,
                          p->I,
                          &fconf);
-            logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n",
+            mflock_logwrite(p, 2, "    Iter: %6zu, E: %e, ||G||: %e\n",
                      iter, error, gnorm);
             fflush(p->logf);
         }
@@ -474,15 +543,15 @@ int dynamic(double * restrict X,
 
     /* At final step, report back */
     double errorFinal = err3(X,
-                             p->N,
+                             p->n_beads,
                              p->R,
                              p->I,
                              &fconf);
 
-    /* The gradient is a 3*p->N-dimensional vector, we return the 2-norm
+    /* The gradient is a 3*p->n_beads-dimensional vector, we return the 2-norm
        as the grad_final */
     double gradFinal = 0;
-    for(size_t kk = 0; kk < 3*p->N; kk++)
+    for(size_t kk = 0; kk < 3*p->n_beads; kk++)
     {
         gradFinal += pow(v[kk], 2);
     }
@@ -503,24 +572,22 @@ int dynamic(double * restrict X,
     {
         free(fconf.Es);
     }
+    lua_close(L);
 
     return 0;
 }
 
-/** @brief Report on success to log and screen
- *
- * @todo Time in ISO format.
- */
-void param_summary(optparam * p, const double * restrict X)
+static void mflock_summary(mflock_t * p)
 {
-    assert(p->N>0);
+    const double * restrict X = p->beads;
+    assert(p->n_beads>0);
 
-    logwrite(p, 1, "\n");
-    logwrite(p, 1, " >> Optimization summary:\n");
-    logwrite(p, 1, "    Final iterations: %zu\n", p->iter_final);
-    logwrite(p, 1, "    Total time: %zu s\n", p->time_final);
-    logwrite(p, 1, "    Final gradient norm: %e\n", p->grad_final);
-    logwrite(p, 1, "    Final total error: %e\n", p->err_final);
+    mflock_logwrite(p, 1, "\n");
+    mflock_logwrite(p, 1, " >> Optimization summary:\n");
+    mflock_logwrite(p, 1, "    Final iterations: %zu\n", p->iter_final);
+    mflock_logwrite(p, 1, "    Total time: %zu s\n", p->time_final);
+    mflock_logwrite(p, 1, "    Final gradient norm: %e\n", p->grad_final);
+    mflock_logwrite(p, 1, "    Final total error: %e\n", p->err_final);
 
     // X: mean, max, min
     double mex = 0, mey = 0, mez = 0;
@@ -529,7 +596,7 @@ void param_summary(optparam * p, const double * restrict X)
     double max = -md, may = -md, maz = -md; /* max, x, y, z */
     double mer = 0, mir = 10e99, mar = 0;   /* mean, min, max of radius */
 
-    for(size_t kk = 0 ; kk<p->N; kk++)
+    for(size_t kk = 0 ; kk<p->n_beads; kk++)
     {
         mex += X[3*kk];
         mey += X[3*kk+1];
@@ -545,32 +612,33 @@ void param_summary(optparam * p, const double * restrict X)
         mir = dmin(mir, pr);
         mer += pr;
     }
-    mex /= p->N;
-    mey /= p->N;
-    mez /= p->N;
-    mer /= p->N;
+    mex /= p->n_beads;
+    mey /= p->n_beads;
+    mez /= p->n_beads;
+    mer /= p->n_beads;
 
-    logwrite(p, 2,  "\n");
-    logwrite(p, 2,  ">> Structure summary:\n");
-    logwrite(p, 2,  "              X       Y       Z       R\n");
-    logwrite(p, 2,  "   Max:  % .3f, % .3f, % .3f, % .3f\n", max, may, maz, mar);
-    logwrite(p, 2,  "   Mean: % .3f, % .3f, % .3f, % .3f\n", mex, mey, mez, mer);
-    logwrite(p, 2,  "   Min:  % .3f, % .3f, % .3f, % .3f\n", mix, miy, miz, mir);
+    mflock_logwrite(p, 2,  "\n");
+    mflock_logwrite(p, 2,  ">> Structure summary:\n");
+    mflock_logwrite(p, 2,  "              X       Y       Z       R\n");
+    mflock_logwrite(p, 2,  "   Max:  % .3f, % .3f, % .3f, % .3f\n", max, may, maz, mar);
+    mflock_logwrite(p, 2,  "   Mean: % .3f, % .3f, % .3f, % .3f\n", mex, mey, mez, mer);
+    mflock_logwrite(p, 2,  "   Min:  % .3f, % .3f, % .3f, % .3f\n", mix, miy, miz, mir);
 
     if(run == 0)
     {
-        logwrite(p, 0, "abnormal exit (Ctrl+c was pressed?)\n");
+        mflock_logwrite(p, 0, "abnormal exit (Ctrl+c was pressed?)\n");
     }
 
+    char * timestr = cf_timestr();
+    mflock_logwrite(p, 2, "Finished at: %s\n", timestr);
+    free(timestr);
+    return;
 }
 
-/** @brief Read contact pairs from a binary file
-    Sets p->I (the contacts) and p->NI (number of contact pairs)
-    @return - Nothing, but aborts the program on failure.
-*/
-void param_read_contact_pairs(optparam * p)
+
+static void mflock_read_contact_pairs(mflock_t * p)
 {
-    logwrite(p, 1, "Reading pairwise interactions from %s\n",
+    mflock_logwrite(p, 1, "Reading pairwise interactions from %s\n",
              p->contact_pairs_file);
     uint64_t nCP = 0;
     p->I = contact_pairs_read(p->contact_pairs_file, &nCP);
@@ -580,156 +648,95 @@ void param_read_contact_pairs(optparam * p)
                 __FILE__, __LINE__, p->contact_pairs_file);
         exit(EXIT_FAILURE);
     }
-    p->NI = nCP;
-    logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
+    p->n_pairs = nCP;
+    mflock_logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
     return;
 }
 
-/** @brief Read binary indication matrix.
-
-    Read the uint8 matrix, typically W.uint8, and set p->I to the
-    contact pairs that can be found,
-    p->I = [ a1, a2
-    b1, b2,
-    ...
-    ]
-    such that a1 < a2, b1 < b2 etc.
-    also set p->NI
-    also set p->N
-    depreciated. Use param_read_contact_pairs
-*/
-void param_readW(optparam * p)
+static void mflock_init_coordinates(mflock_t * p)
 {
-
-    logwrite(p, 1, "Reading pairwise interactions from %s\n", p->wfname);
-
-    size_t fsize = 0;
-    uint8_t * W = wio_read(p->wfname, &fsize);
-    if(fsize == 0)
-    {
-        printf("%s/%d Failed reading %s!\n",
-               __FILE__,  __LINE__, p->wfname);
-        exit(EXIT_FAILURE);
-    }
-
-    logwrite(p, 1, " W = [ %d, %d, %d, %d, ..., %d, %d, %d, %d]\n",
-             (int) W[0],
-             (int) W[1],
-             (int) W[2],
-             (int) W[3],
-             W[fsize-4],
-             W[fsize-3],
-             W[fsize-2],
-             W[fsize-1]);
-
-    // Set the number of elements
-    p->N = (size_t) sqrt(fsize);
-    assert(p->N*p->N == fsize);
-    logwrite(p, 1, " %zu points\n", p->N);
-
-    // Initiate the list with pairs in contact
-    // I.e. p->I and p->NI
-
-    // Count them
-    size_t nPairs = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
-    {
-        for(size_t ll = kk+1; ll<p->N; ll++)
-        {
-            if(W[kk+ll*p->N] == 1)
-            {
-                nPairs++;
-            }
-        }
-    }
-
-    logwrite(p, 1, " Found %zu interaction pairs\n", nPairs);
-
-    if(nPairs > 12*p->N)
-    {
-        logwrite(p, 0, "more than 12 pairs per bead in average!\n");
-    }
-
-    p->NI = nPairs;
-    p->I = malloc(nPairs*2*sizeof(uint32_t));
-    assert(p->I != NULL);
-
-    // Construct the list
-    size_t writepos = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
-        for(size_t ll = kk+1; ll<p->N; ll++)
-        {
-            if(W[kk+ll*p->N] == 1)
-            {
-                p->I[writepos++] = kk;
-                p->I[writepos++] = ll;
-            }
-        }
-    printf(" ok\n");
-    free(W);
-    return;
-}
-
-double * init_X(optparam * p)
-{
-    double * X = NULL;
-
     p->newx = 0;
     if(p->xfname != NULL)
     {
-        X = malloc(3*p->N*sizeof(double));
-        assert(X != NULL);
-        if(param_readX(p, X) != 0)
+        p->beads = malloc(3*p->n_beads*sizeof(double));
+        assert(p->beads != NULL);
+        if(mflock_load_coordinates(p) != 0)
         {
-            logwrite(p, 2, "Could not open x-file, starting from random\n");
-            free(X);
-            X=NULL;
+            mflock_logwrite(p, 2, "Could not open x-file, starting from random\n");
+            free(p->beads);
+            p->beads = NULL;
         }
+        mflock_logwrite(p, 2, "Using coordinates from %s\n", p->xfname);
     }
 
-    if(X==NULL)
+    if(p->beads == NULL)
     {
         p->newx = 1;
-        logwrite(p, 1, "Using random initialization for X\n");
+        mflock_logwrite(p, 1, "Using random initialization for X\n");
         srand(p->rseed);
-        X = malloc(3*p->N*sizeof(double));
-        assert(X != NULL);
+        p->beads = calloc(3*p->n_beads, sizeof(double));
+        assert(p->beads != NULL);
         elli * E = p->E;
         if(E == NULL){
             E = elli_new(1, 1, 1);
         }
 
-        for(size_t kk = 0; kk< p->N; kk++)
+        for(size_t kk = 0; kk< p->n_beads; kk++)
         {
             int accepted = 0;
             while(accepted == 0)
             {
                 for(int idx =0; idx<3; idx++)
                 {
-                    X[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
+                    p->beads[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
                 }
-                if(elli_getScale(E, X+3*kk) <= 1)
+                if(elli_getScale(E, p->beads+3*kk) <= 1)
                 { accepted = 1;}
             }
         }
 
-        logwrite(p, 1, "X[0] = %f\n", X[0]);
+        if(p->E == NULL)
+        {
+            free(E);
+        }
+        mflock_logwrite(p, 1, "X[0] = %f\n", p->beads[0]);
     }
-    return X;
+    return;
 }
 
-int param_readL(optparam * p)
+static void mflock_validate_labels(const mflock_t * p)
 {
-    /* Read label matrix pointed to by p->lfname
-     */
+    int ok = 1;
+    for(size_t kk = 0; kk< p->n_beads; kk++)
+    {
+        if(p->L[kk] > 31 || p->L[kk] == 0)
+        {
+            ok = 0;
+        }
+    }
+    if( ! ok )
+    {
+        mflock_logwrite(p, 0,
+                 "The labels are not as expected. Any label l "
+                 "should satisfy 0 < L < 32\n");
+    }
+    return;
+}
 
+static int mflock_load_bead_labels(mflock_t * p)
+{
     if(p->lfname == NULL)
     {
-        logwrite(p, 1, "No L-file specified\n");
+        mflock_logwrite(p, 1, "No L-file specified\n");
         return EXIT_FAILURE;
     }
 
-    logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
+    mflock_logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
+
+    size_t fsize = cf_file_size(p->lfname);
+
+    mflock_logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
+             fsize/sizeof(uint8_t), fsize);
 
     // Try to read as binary
     FILE * f = fopen(p->lfname, "rb");
@@ -738,76 +745,91 @@ int param_readL(optparam * p)
         fprintf(stderr, "Unable to read %s\n", p->lfname);
         exit(EXIT_FAILURE);
     }
-    fseek(f, 0, SEEK_END); // seek to end of file
-    size_t fsize = ftell(f); // get current file pointer
-    fseek(f, 0, SEEK_SET); // seek back to beginning of file
 
-    logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
-             fsize/sizeof(uint8_t), fsize);
+    p->n_beads = fsize/sizeof(uint8_t);
+    if(p->n_beads == 0)
+    {
+        fprintf(stderr, "No beads desribed in %s\n", p->lfname);
+        exit(EXIT_FAILURE);
+    }
 
-    p->N = fsize/sizeof(uint8_t);
-    p->L = malloc(p->N*sizeof(double));
+    p->L = malloc(p->n_beads*sizeof(double));
     assert(p->L != NULL);
-    size_t nread = fread(p->L, sizeof(uint8_t), p->N, f);
-    if(nread != p->N)
+    size_t nread = fread(p->L, sizeof(uint8_t), p->n_beads, f);
+    if(nread != p->n_beads)
     {
         fprintf(stderr, "Unable to read from %s\n", p->lfname);
         exit(EXIT_FAILURE);
     }
     fclose(f);
 
-    logwrite(p, 2, "L = [%u, %u, ..., %u]\n", p->L[0], p->L[1], p->L[p->N-1]);
+    mflock_validate_labels(p);
+
+    if(p->diploid)
+    {
+        mflock_logwrite(p, 2, "Duplicating the beads for diploid structures\n");
+
+        p->L = realloc(p->L, 2*p->n_beads*sizeof(uint8_t));
+        assert(p->L != NULL);
+
+        for(size_t kk = 0; kk < p->n_beads; kk++)
+        {
+            p->L[kk+p->n_beads] = p->L[kk] + 32;
+        }
+        p->n_beads = 2*p->n_beads;
+    }
+
+    mflock_logwrite(p, 2, "L = [%u, %u, ..., %u]\n", p->L[0], p->L[1], p->L[p->n_beads-1]);
 
     return 0;
 }
 
-int param_readR(optparam * p)
+
+static int mflock_load_radial_constraints(mflock_t * p)
 {
-    /* Read GPSeq radius values as binary double.
-     * If that does not work, try as text, one value per line
-     */
+
     if(p->rfname == NULL)
     {
-        logwrite(p, 1, "No radial preferences to read\n");
+        mflock_logwrite(p, 1, "No radial preferences to read\n");
         return EXIT_FAILURE;
     }
 
-    logwrite(p, 1, "Reading R-values from %s\n", p->rfname);
+    mflock_logwrite(p, 1, "Reading R-values from %s\n", p->rfname);
     size_t nbytes = 0;
     p->R = (double *) wio_read(p->rfname, &nbytes);
     printf("Read %zu doubles from %s\n", nbytes/sizeof(double), p->rfname);
 
-    if(2*nbytes/sizeof(double) == p->N)
+    if(2*nbytes/sizeof(double) == p->n_beads)
     {
         printf("Found half as many values as beads, assuming diploid and duplicating data\n");
-        if(p->N%2 == 1)
+        if(p->n_beads%2 == 1)
         {
             printf("ERROR: N%%2 == 1\n");
             exit(-1);
         }
 
-        p->R = realloc(p->R, p->N*sizeof(double));
+        p->R = realloc(p->R, p->n_beads*sizeof(double));
         if(p->R == NULL)
         {
             printf("ERROR: out of memory\n");
             exit(-1);
         }
-        for(size_t pp = 0; pp < p->N/2; pp++)
+        for(size_t pp = 0; pp < p->n_beads/2; pp++)
         {
-            p->R[pp + p->N/2] = p->R[pp];
+            p->R[pp + p->n_beads/2] = p->R[pp];
         }
-        //memcpy(p->R+p->N/2*sizeof(double), p->R, p->N/2*sizeof(double));
+        //memcpy(p->R+p->n_beads/2*sizeof(double), p->R, p->n_beads/2*sizeof(double));
     }
 
 
-    if(!( (nbytes/sizeof(double) == p->N) || (nbytes/sizeof(double) == p->N/2) ))
+    if(!( (nbytes/sizeof(double) == p->n_beads) || (nbytes/sizeof(double) == p->n_beads/2) ))
     {
-        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n", p->rfname, 4*p->N, 2*p->N, nbytes);
+        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n", p->rfname, 4*p->n_beads, 2*p->n_beads, nbytes);
         exit(-1);
     }
 
     size_t nInf = 0;
-    for(size_t kk = 0; kk<p->N; kk++)
+    for(size_t kk = 0; kk<p->n_beads; kk++)
     {
         if(!isfinite(p->R[kk]))
         {
@@ -820,21 +842,17 @@ int param_readR(optparam * p)
     return EXIT_SUCCESS;
 }
 
-/* Write coordinates to disk, also write the column names
-   to the log file  */
-void param_dumpX(optparam * p, double * X)
-{
-    size_t N = p->N;
 
-    int write_R = 0;
-    if(p->R != NULL)
-        write_R = 1;
+static void mflock_save_coordinates(mflock_t * p)
+{
+    const double * restrict X = p->beads;
+    size_t N = p->n_beads;
 
     if(run == 1)
     {
         if(p->verbose > 1)
         {
-            logwrite(p, 1, "Writing final structure to %s\n", p->xoutfname);
+            mflock_logwrite(p, 1, "Writing final structure to %s\n", p->xoutfname);
         }
     }
     else {
@@ -842,18 +860,14 @@ void param_dumpX(optparam * p, double * X)
         strcat(p->xoutfname, ".0");
         //    sprintf(p->xoutfname, "%s.0", p->xoutfname);
 
-        logwrite(p, 1, "Writing non-finished structure to: %s\n", p->xoutfname);
+        mflock_logwrite(p, 1, "Writing non-finished structure to: %s\n", p->xoutfname);
     }
 
     if(p->verbose > 1)
     {
-        logwrite(p, 1, "Columns: x, y, z, r");
+        mflock_logwrite(p, 1, "Columns: x, y, z, r");
 
-        if(write_R)
-        {
-            logwrite(p, 1, ", R");
-        }
-        logwrite(p, 1, "\n");
+        mflock_logwrite(p, 1, "\n");
     }
 
     FILE * f = fopen(p->xoutfname, "w");
@@ -869,10 +883,6 @@ void param_dumpX(optparam * p, double * X)
         }
 
         fprintf(f, "%f, %f, %f, %f", X[3*kk], X[3*kk+1], X[3*kk+2], radius);
-        if(write_R)
-        {
-            fprintf(f, ", %f", p->R[kk]);
-        }
 
         fprintf(f, "\n");
     }
@@ -880,39 +890,21 @@ void param_dumpX(optparam * p, double * X)
     return;
 }
 
-void param_show(optparam * p, FILE * f)
+static void mflock_show(mflock_t * p, FILE * f)
 {
-    double volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
+    double volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
 
     if(p->E != NULL)
     {
-        volocc = p->N*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
+        volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
     }
 
 
     fprintf(f, "\n");
     fprintf(f, " >> Parameters:\n");
-    fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->N, 3*p->N);
+    fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->n_beads, 3*p->n_beads);
     fprintf(f, "    - Model parameters\n");
-    if(p->luaDynamics == 0)
-    {
-        fprintf(f, "    Spring constant volume exclusion (repulsion): %f\n", p->kVol);
-        fprintf(f, "    Spring constant bead interactions (attraction): %f\n", p->kInt);
-        fprintf(f, "    Spring constant domain confinement: %f\n", p->kDom);
-        fprintf(f, "    Spring constant radial positioning: %f\n", p->kRad);
-        fprintf(f, "    Max iterations: %zu\n", p->maxiter);
-        fprintf(f, "    Max time: %zu (s)\n", p->maxtime);
-        if(p->compress == 1)
-        {
-            fprintf(f, "    Compression: on\n");
-        } else {
-            fprintf(f, "    Compression: off\n");
-        }
-    }
-    if(p->luaDynamics == 1)
-    {
-        fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
-    }
+    fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
     fprintf(f, "    Bead radius %f (vol. occ. %f)\n", p->r0, volocc);
     fprintf(f, "    - Optimization parameters\n");
     //fprintf(f, "# Optimization: simulated annealing / molecular dynamics\n");
@@ -961,6 +953,15 @@ void param_show(optparam * p, FILE * f)
         fprintf(f, "    R file: %s\n", p->rfname);
     }
 
+    if(p->fname_bead_wells == NULL)
+    {
+        fprintf(f, "    Bead wells: -not specified-\n");
+    }
+    else
+    {
+        fprintf(f, "    Bead wells: %s\n", p->fname_bead_wells);
+    }
+
     if(p->ofoldername == NULL)
     {
         fprintf(f, "    output folder not specified\n");
@@ -970,8 +971,11 @@ void param_show(optparam * p, FILE * f)
         fprintf(f, "    output folder: %s\n", p->ofoldername);
     }
 
+    fprintf(f, "    diploid=%d\n", p->diploid);
+
     fprintf(f, "    verbose level: %d\n", p->verbose);
     fprintf(f, "\n");
+    return;
 }
 
 
@@ -998,7 +1002,7 @@ static int usleep_lua_NULL(lua_State * L)
 }
 
 /* Write out the behavior of the lua script as a table */
-void dump_lua_dynamics(char * luafile)
+static void dump_lua_dynamics(const char * luafile)
 {
     printf("newx, iter, kDom, kVol, kInt, dInt_rel, kRad, compress, Fb\n");
     for(int newx = 1; newx >= 0; newx--)
@@ -1025,112 +1029,139 @@ void dump_lua_dynamics(char * luafile)
                          luafun,
                          lua_tostring(L, -1));
 
-            double kDom = getglobfloat(L, "kDom");
-            double kVol = getglobfloat(L, "kVol");
-            double dInt = getglobfloat(L, "dInteraction");
-            double kInt = getglobfloat(L, "kInt");
-            double kRad = getglobfloat(L, "kRad");
-            double compress = getglobfloat(L, "kCom");
-            double Fb = getglobfloat(L, "fBrown");
-            luaquit = getglobint(L, "quit");
-            //fconf.dInteraction = fconf.r0 * getglobfloat(L, "dInteraction");
+            double kDom = lua_get_float(L, "kDom");
+            double kVol = lua_get_float(L, "kVol");
+            double dInt = lua_get_float(L, "dInteraction");
+            double kInt = lua_get_float(L, "kInt");
+            double kRad = lua_get_float(L, "kRad");
+            double compress = lua_get_float(L, "kCom");
+            double Fb = lua_get_float(L, "fBrown");
+            luaquit = lua_get_int(L, "quit");
+
             printf("%d, %zu, %f, %f, %f, %f, %f, %f, %f\n",
                    newx, iter, kDom, kVol, kInt, dInt, kRad, compress, Fb);
         } while(luaquit == 0);
+
         lua_close(L);
     }
     return;
 }
 
-void usage()
+static void mflock_usage()
 {
-    printf("Note that mflock typically is run via chromflock\n"
-           "see man chromflock for more details\n");
-    printf("1. Required arguments:\n");
-    printf(" --contact-pairs <file>\n\tFile with contact pairs (uint32).\n");
-    printf(" -L <file>, --lFile <file>\b\tlabel matrix (uint8_t)\n");
-    printf(" --dconf mflock.lua\n\tSpecify lua script to use for dynamics\n");
-    printf("2. Optional arguments:\n");
-    printf(" -x <file>, --xFile <file>\n\tfile with initial coordinates\n");
-    printf(" -s N, --seed N\n\tseed for random number generator (defaults to random)\n");
-    printf(" -r <file>, --rFile <file>\n\tfile with wanted radii (in conjunction with -G)\n"
+    printf("mflock %s usage:\n"
+           "\n", cf_version);
+    printf("Required arguments:\n");
+    printf(" --contact-pairs <file>\n\t"
+           "File with contact pairs (uint32).\n");
+    printf(" --labels <file>, --L <file>\n\t"
+           "bead label array (uint8_t). Determines the number of beads.\n\t"
+           "(2X if --diploid is set)\n");
+    printf(" --config mflock.lua\n\t"
+           "lua script that configures the dynamics dynamics\n");
+    printf("\n"
+           "Optional arguments:\n");
+    printf(" --coordinates <file>, -x <file>\n\t"
+           "file with initial coordinates\n");
+    printf(" --diploid\n\t"
+           "Interpret/cast the labels for a diploid structure by duplication\n");
+    printf(" --seed N, -s N\n\t"
+           "seed for random number generator (defaults to random)\n");
+    printf(" --radii <file>, -r <file>\n\t"
+           "file with wanted radii \n"
            "\tall files should be encoded as 64-bit floats\n");
-    printf(" -n N, --maxiter N\n\tmaximum number of iterations\n");
-    printf(" -t N, --maxtime N\n\t time budget in seconds\n");
-    printf("2.1 Forces\n");
-    printf(" --dconf-show mflock.lua\n\tPrint the dynamics as a table and quit.\n");
-    printf("\tNo additional arguments required or used\n");
-    printf("2.2 Geometry\n");
-    printf(" -R r0, --radius r0\n\tbead radius (sphere has radius 1)\n");
-    printf(" -Q vq, --volq vq\n\tvolume quotient (beads/domain)\n"
-           "    For ellipsoidal geometry, set 1=ea>=eb>=ec>0\n");
-    printf(" -A ea, --ea ea\n\tMajor axis of ellipsoid\n");
-    printf(" -B eb, --eb eb\n\tSecond axis of ellipsoid\n");
-    printf(" -C ec, --ec ec\n\tThird axis of ellipsoid\n");
-    printf("2.3 General\n");
-    printf(" -v level, --verbose level\n\tverbosity lowest=0\n");
-    printf(" -o name, --outFolder name\n\twhere to store results\n");
-    printf(" -z, --cmmz\n\twrite compressed cmm files (gzip)\n");
-    printf(" -c, --compress\n\tenable chromosome compression (only for -D)\n");
-    printf(" -a, --live\n\tenable live monitoring (only when compiled with SDL)\n");
-    printf(" -h, --help\n\tshow this help message. For more info see 'man mflock'\n");
-    printf(" -d, --defaults\n\tshow default settings for the parameters\n");
+    printf(" --maxiter N, -n N\n\t"
+           "maximum number of iterations\n");
+    printf(" --maxtime N, -t N\n\t"
+           "time budget in seconds\n");
+    printf(" --bead-wells <file>\n\t"
+           "specify a file containing preferred bead locations (bead wells)\n");
+    printf(" --config-show mflock.lua\n\t"
+           "Perform a dry run and print the dynamics settings as a table.\n\t"
+           "No additional arguments are required or used\n");
+    printf("\n"
+           "Geometry\n");
+    printf(" --radius r0, -R r0\n\t"
+           "bead radius (sphere has radius 1)\n");
+    printf(" --volq vq, -Q vq\n\t"
+           "volume quotient (bead volume/domain volume).\n\t"
+           "For ellipsoidal geometry, set 1=ea>=eb>=ec>0\n");
+    printf(" --ea ea\n\t"
+           "Major axis of ellipsoid\n");
+    printf(" --eb eb\n\t"
+           "Second axis of ellipsoid\n");
+    printf(" --ec ec\n\t"
+           "Third axis of ellipsoid\n");
+    printf("\n"
+           "General settings\n");
+    printf(" --verbose level, -v level\n\t"
+           "verbosity (lowest=0, default=1, ... )\n");
+    printf(" --outFolder name, -o name\n\t"
+           "where to store results\n");
+    printf(" --cmmz, -z\n\t"
+           "write compressed cmm files (gzip)\n");
+    printf(" --live\n\t"
+           "enable live monitoring (only when compiled with SDL)\n");
+    printf(" --help, -h\n\t"
+           "show this help message. For more info see 'man mflock'\n");
+    printf(" --defaults, -d\n\t"
+           "show default settings for the parameters\n");
     printf("\n");
+    printf("For additional help see the man page or visit\n"
+        "https://www.github.com/elgw/chromflock/\n");
     return;
 }
 
-#define ARGS_OK 0
-#define ARGS_ERR 1
-#define ARGS_QUIT 2
 
-int argparsing(optparam * p, int argc, char ** argv)
+static mflock_cli_status
+mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 {
-
     /* Specifications of ellipsoid */
     double ea = -1;
     double eb = -1;
     double ec = -1;
 
     struct option longopts[] = {
-        { "version",      no_argument,       NULL,   'i' },
-        { "help",         no_argument,       NULL,   'h' },
-        // Data
-        { "wFile",        required_argument, NULL,   'w' },
-        { "contact-pairs", required_argument, NULL,  'p' },
-        { "xFile",        required_argument, NULL,   'x' },
-        { "rFile",        required_argument, NULL,   'r' },
+        { "version",       no_argument,       NULL,   'i' },
+        { "help",          no_argument,       NULL,   'h' },
+        /* Data */
+        { "wFile",         required_argument, NULL,   'w' },
+        { "contact-pairs", required_argument, NULL,   'p' },
+        { "xFile",         required_argument, NULL,   'x' },
+        { "coordinates",   required_argument, NULL,   'x' },
+        { "rFile",         required_argument, NULL,   'r' },
+        { "radii",         required_argument, NULL,   'r' },
         { "labels",        required_argument, NULL,   'L' },
-        { "outFolder",    required_argument, NULL,   'o' },
-        // Settings
-        { "maxiter",      required_argument, NULL,   'n' },
-        { "maxtime",      required_argument, NULL,   't' },
-        { "seed",         required_argument, NULL,   's' },
-        { "verbose",      required_argument, NULL,   'v' },
-        { "live",         no_argument, NULL,   'a' },
-        { "cmmz",         no_argument, NULL,   'z' },
-        // Settings / Forces
-        { "kVol",        required_argument, NULL,   'V' },
-        { "kDom",        required_argument, NULL,   'D' },
-        { "kInt",        required_argument, NULL,   'I' },
-        { "kRad",        required_argument, NULL,   'G' },
-        // Settings / Geometry
+        { "lFile",         required_argument, NULL,   'L' },
+        { "outFolder",     required_argument, NULL,   'o' },
+        { "bead-wells",    required_argument, NULL,   'W' },
+        /* Settings */
+        { "diploid",       no_argument,       NULL,   'D' },
+        { "maxiter",       required_argument, NULL,   'n' },
+        { "maxtime",       required_argument, NULL,   't' },
+        { "seed",          required_argument, NULL,   's' },
+        { "verbose",       required_argument, NULL,   'v' },
+        { "live",          no_argument,       NULL,   'a' },
+        { "cmmz",          no_argument,       NULL,   'z' },
+        { "defaults",      no_argument,       NULL,   'd' },
+        /* Geometry */
         { "radius",        required_argument, NULL,   'R' },
-        { "vq",          required_argument, NULL,   'Q' },
+        { "vq",            required_argument, NULL,   'Q' },
         { "ea",            required_argument, NULL,   'A' },
         { "eb",            required_argument, NULL,   'B' },
         { "ec",            required_argument, NULL,   'C' },
-        // Settings / Optimization
-        { "compress",       no_argument,       NULL,   'c' },
-        { "defaults",       no_argument,       NULL,   'd' },
+
         // Lua program for dynamics
-        { "dconf",         required_argument,    NULL,   'l' },
-        { "dconf-show",    required_argument,    NULL,   'M' },
-        { NULL,           0,                 NULL,   0   }
+        { "dconf",         required_argument, NULL,   'l' },
+        { "config",        required_argument, NULL,   'l' },
+        { "dconf-show",    required_argument, NULL,   'M' },
+        { "config-show",   required_argument, NULL,   'M' },
+        { NULL,            0,                 NULL,    0  }
     };
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "A:B:C:w:x:r:n:t:V:I:S:R:G:v:o:p:hMs:L:zcadQ:l:",
+                            "A:B:C:Dw:x:r:n:t:R:v:o:p:hMs:L:zcadQ:l:W:",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1139,32 +1170,38 @@ int argparsing(optparam * p, int argc, char ** argv)
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
             printf("GIT HASH: %s\n", GIT_VERSION);
             printf("Compiler: %s\n", CC_VERSION);
-            return ARGS_QUIT;
+            return MFLOCK_ARGS_QUIT;
         case 'd':
             printf("Defaults:\n");
-            param_show(p, stdout);
-            return ARGS_QUIT;
+            mflock_show(p, stdout);
+            return MFLOCK_ARGS_QUIT;
+        case 'D':
+            p->diploid = 1;
+            break;
         case 'w':
-            if(p->wfname != NULL)
-            {free(p->wfname);}
-            p->wfname = malloc(strlen(optarg)+1);
+            free(p->wfname);
+            p->wfname = strdup(optarg);
             assert(p->wfname != NULL);
-            strcpy(p->wfname, optarg);
+            break;
+        case 'W':
+            free(p->fname_bead_wells);
+            p->fname_bead_wells = strdup(optarg);
+            assert(p->fname_bead_wells != NULL);
             break;
         case 'x':
-            p->xfname = malloc(strlen(optarg)+1);
+            free(p->xfname);
+            p->xfname = strdup(optarg);
             assert(p->xfname != NULL);
-            strcpy(p->xfname, optarg);
             break;
         case 'r':
-            p->rfname = malloc(strlen(optarg)+1);
+            free(p->rfname);
+            p->rfname = strdup(optarg);
             assert(p->rfname != NULL);
-            strcpy(p->rfname, optarg);
             break;
         case 'L':
-            p->lfname = malloc(strlen(optarg)+1);
+            free(p->lfname);
+            p->lfname = strdup(optarg);
             assert(p->lfname != NULL);
-            strcpy(p->lfname, optarg);
             break;
         case 'n':
             p->maxiter = atol(optarg);
@@ -1172,21 +1209,10 @@ int argparsing(optparam * p, int argc, char ** argv)
         case 'p':
             free(p->contact_pairs_file);
             p->contact_pairs_file = strdup(optarg);
+            assert(p->contact_pairs_file != NULL);
             break;
         case 't':
             p->maxtime = atol(optarg);
-            break;
-        case 'V':
-            p->kVol = atof(optarg);
-            break;
-        case 'S':
-            p->kDom = atol(optarg);
-            break;
-        case 'I':
-            p->kInt = atof(optarg);
-            break;
-        case 'G':
-            p->kRad = atof(optarg);
             break;
         case 'R':
             p->r0 = atof(optarg);
@@ -1202,26 +1228,21 @@ int argparsing(optparam * p, int argc, char ** argv)
             break;
         case 'o':
             free(p->ofoldername);
-            p->ofoldername = malloc(strlen(optarg)+2);
+            p->ofoldername = strdup(optarg);
             assert(p->ofoldername != NULL);
-            strcpy(p->ofoldername, optarg);
             break;
         case 'l':
-            p->luaDynamics = 1;
-            p->luaDynamicsFile = malloc(strlen(optarg) + 1);
+            free(p->luaDynamicsFile);
+            p->luaDynamicsFile = strdup(optarg);
             assert(p->luaDynamicsFile != NULL);
-            strcpy(p->luaDynamicsFile, optarg);
             break;
         case 'M':
             dump_lua_dynamics(optarg);
-            return ARGS_QUIT;
+            return MFLOCK_ARGS_QUIT;
         case 'h':
             return(1);
         case 'z':
             p->cmmz = 1;
-            break;
-        case 'c':
-            p->compress = 1;
             break;
         case 'a':
             p->liveView = 1;
@@ -1236,11 +1257,11 @@ int argparsing(optparam * p, int argc, char ** argv)
             ec = atof(optarg);
             break;
         default:
-            return ARGS_ERR;
+            return MFLOCK_ARGS_ERR;
         }
     }
 
-    if(p->luaDynamics == 0)
+    if(p->luaDynamicsFile == NULL)
     {
         fprintf(stderr, "--dconf not specified\n");
         exit(EXIT_FAILURE);
@@ -1255,8 +1276,9 @@ int argparsing(optparam * p, int argc, char ** argv)
                 __FILE__, __LINE__);
         exit(EXIT_FAILURE);
 #endif
-        if(p->ofoldername[strlen(p->ofoldername)] != '/' )
+        if(p->ofoldername[strlen(p->ofoldername) - 1] != '/' )
         {
+            p->ofoldername = realloc(p->ofoldername, strlen(p->ofoldername)+1);
             p->ofoldername[strlen(p->ofoldername)+1] = '\0';
             p->ofoldername[strlen(p->ofoldername)] = '/';
         }
@@ -1265,23 +1287,7 @@ int argparsing(optparam * p, int argc, char ** argv)
     if(p->contact_pairs_file == NULL)
     {
         fprintf(stderr, "WARNING: Contacts file not set\n");
-
-        if(p->wfname == NULL)
-        {
-            printf("ERROR: 'W' file not set (-w) \n");
-            if(0){
-                printf("Generate one in MATLAB with:\n");
-                printf("A = zeros(150,150)\n");
-                printf("A(2:size(A,1)+1:end) = 1;\n");
-                printf("A = A + A';\n");
-                printf("A8 = uint8(A);\n");
-                printf("fout = fopen('A150.dat', 'wb');\n");
-                printf("fwrite(fout, A, 'uint8');\n");
-                printf("fclose(fout)\n");
-                printf("\n\n");
-            }
-            return ARGS_ERR;
-        }
+        return MFLOCK_ARGS_ERR;
     }
 
     int efail = 0;
@@ -1299,56 +1305,39 @@ int argparsing(optparam * p, int argc, char ** argv)
     }
     if(efail)
     {
-        printf("ERROR: Ellipsoidal geometry requires 1=ea>=eb>=ec>0\n\n");
-        return ARGS_ERR;
+        printf("ERROR: Ellipsoidal geometry requires 1 = ea >= eb >= ec > 0"
+               " \n\n");
+        return MFLOCK_ARGS_ERR;
     }
 
-    return ARGS_OK;
+
+
+    return MFLOCK_ARGS_OK;
 }
 
-optparam *  param_alloc(void)
+static mflock_t *  mflock_new(void)
 {
-    optparam * p = calloc(1, sizeof(optparam));
+    mflock_t * p = calloc(1, sizeof(mflock_t));
     assert(p != NULL);
 
     struct timespec ts;
-    //  timespec_get(&ts, TIME_UTC);
     clock_gettime(CLOCK_REALTIME, &ts);
 
+    // TODO: overflows
     p->rseed = time(NULL)*getpid()*ts.tv_nsec;
 
     p->maxiter = 1000000; // iterations
     p->maxtime = 60*60*10; // seconds
 
-    p->grad_final = 0;
-    p->iter_final = 0;
-    p->time_final = 0;
-
-    p->kVol = 1;
-    p->kInt = 1;
-    p->kDom = 1;
-    p->kRad = 0;
     p->r0 = -1;
     p->volq = 0.2;
 
-    p->N = 0;
-    p->I = NULL;
-    p->NI = 0;
-    p->R = NULL;
     p->verbose = 1;
-    p->compress = 0;
-    p->cmmz = 0;
-    p->liveView = 0;
-
-    p->L = NULL;
-
-    p->E = NULL;
     p->newx = 1;
 
-    // Create a suggestion for the output folder
+    /* Create a suggestion for the output folder */
     if(p->ofoldername == NULL)
     {
-
         p->ofoldername = malloc(1024*sizeof(char));
         assert(p->ofoldername != NULL);
 
@@ -1371,18 +1360,17 @@ optparam *  param_alloc(void)
     return p;
 }
 
-int param_init(optparam * p, int argc, char ** argv)
+static void mflock_set_and_create_output_folder(mflock_t * mf)
 {
-
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
 
-    if(stat(p->ofoldername, &st) == -1)
+    if(stat(mf->ofoldername, &st) == -1)
     {
-        if(p->verbose >= 1){
-            printf("Creating output folder: %s\n", p->ofoldername);
+        if(mf->verbose >= 1){
+            printf("Creating output folder: %s\n", mf->ofoldername);
         }
-        int folderok = mkdir(p->ofoldername, 0770);
+        int folderok = mkdir(mf->ofoldername, 0770);
         if(folderok != 0)
         {
             printf("Could not create output folder\n");
@@ -1390,61 +1378,148 @@ int param_init(optparam * p, int argc, char ** argv)
         }
 
     } else {
-        if(p->verbose >= 2){
+        if(mf->verbose >= 2){
             printf("Output folder did already exist.\n");
         }
     }
 
-    char * fullofolder = realpath(p->ofoldername, NULL);
+    char * fullofolder = realpath(mf->ofoldername, NULL);
     if(fullofolder == NULL)
     {
-        printf("Error: The output folder '%s' can't be understood by realpath\n", p->ofoldername);
+        printf("Error: The output folder '%s' can't be understood by realpath\n", mf->ofoldername);
         exit(-1);
     }
 
     // Create output folder
-    if(p->verbose >= 1) {
+    if(mf->verbose >= 1) {
         printf("Output folder: %s\n", fullofolder);
     }
     free(fullofolder);
+    return;
+}
 
-
-    // Set names of output files
-    p->xoutfname = malloc(1024*sizeof(char));
-    assert(p->xoutfname != NULL);
-    sprintf(p->xoutfname, "%s%s", p->ofoldername, "coords.csv");
-
-    p->logfname = malloc(1024*sizeof(char));
-    assert(p->logfname != NULL);
-    sprintf(p->logfname, "%s%s", p->ofoldername, "log.txt");
-
-    // Open log
-    p->logf = fopen(p->logfname, "a");
-    assert(p->logf != NULL);
-
-    if(p->logf== NULL)
+static void mflock_load_bead_wells(mflock_t * mf)
+{
+    if(mf->fname_bead_wells == NULL)
     {
-        printf("Failed to open log file\n");
-        exit(1);
+        if(mf->verbose > 1)
+        {
+            printf("no bead wells to load\n");
+        }
+        return;
+    }
+
+    if(mf->verbose > 1)
+    {
+        printf("loading bead wells from %s\n", mf->fname_bead_wells);
+    }
+
+    size_t fsize = cf_file_size(mf->fname_bead_wells);
+    if(fsize % sizeof(double) != 0)
+    {
+        fprintf(stderr, "%s seems corrupt, The file size (%zu) can not be divided by %zu",
+                mf->fname_bead_wells, fsize, sizeof(double));
+        exit(EXIT_FAILURE);
+    }
+
+    size_t n_elements = fsize / sizeof(double);
+
+    mf->bead_wells = calloc(n_elements, sizeof(double));
+    FILE * fid = fopen(mf->fname_bead_wells, "r");
+    if(fid == NULL)
+    {
+        fprintf(stderr, "Error while reading %s\n", mf->fname_bead_wells);
+        exit(EXIT_FAILURE);
+    }
+    size_t n_read = fread(mf->bead_wells, sizeof(double), n_elements, fid);
+    if(n_read != n_elements)
+    {
+        fprintf(stderr, "Error while reading %s\n", mf->fname_bead_wells);
+        exit(EXIT_FAILURE);
+    }
+    fclose(fid);
+
+    size_t n_constraints = n_elements / 4;
+    for(size_t kk = 0; kk < n_constraints ; kk++)
+    {
+        size_t bead1 = mf->bead_wells[4*kk]+1;
+        if(bead1 > mf->n_beads)
+        {
+            fprintf(stderr, "Error: Got a bead well for bead %zu, but there are only %zu beads\n",
+                    bead1, mf->n_beads);
+            exit(EXIT_FAILURE);
+        }
+    }
+    mf->n_bead_wells = n_constraints;
+    if(mf->verbose > 1)
+    {
+        printf("Successfully read %u beads wells from %s\n",
+               mf->n_bead_wells,
+               mf->fname_bead_wells);
+    }
+    return;
+}
+
+static void mflock_init(mflock_t * mf, int argc, char ** argv)
+{
+    mflock_set_and_create_output_folder(mf);
+
+    /* Set names of output files */
+    mf->xoutfname = malloc(1024*sizeof(char));
+    assert(mf->xoutfname != NULL);
+    sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.csv");
+
+    mf->logfname = malloc(1024*sizeof(char));
+    assert(mf->logfname != NULL);
+    sprintf(mf->logfname, "%s%s", mf->ofoldername, "log.txt");
+
+    /* Open log */
+    mf->logf = fopen(mf->logfname, "a");
+    assert(mf->logf != NULL);
+
+    if(mf->logf== NULL)
+    {
+        fprintf(stderr, "mflock: Failed to open log file for writing (%s)\n",
+                mf->logfname);
+        exit(EXIT_FAILURE);
     }
 
     char * time_str = cf_timestr();
-    fprintf(p->logf, "\nmflock started: %s\n", time_str);
+    fprintf(mf->logf, "\nmflock started: %s\n", time_str);
     free(time_str);
 
-    fprintf(p->logf, "CMD: ");
+    fprintf(mf->logf, "CMD: ");
     for(int kk = 0; kk<argc; kk++)
     {
-        fprintf(p->logf, "%s ", argv[kk]);
+        fprintf(mf->logf, "'%s' ", argv[kk]);
     }
-    fprintf(p->logf, "\n");
-    fflush(p->logf);
+    fprintf(mf->logf, "\n");
+    fflush(mf->logf);
 
-    return 0;
+    /* We load the labels first to determine how many beads there
+     * are (or 2X if --diploid is set) */
+    mflock_load_bead_labels(mf);
+
+    /* Once we know how many beads we can set their radius based on the
+     * volume quotient (or do nothing if it was given at the command line) */
+    mflock_set_bead_size(mf);
+
+    /* Read coordinates from previous iteration, or generate
+       random coordinates if first iteration.
+    */
+    mflock_init_coordinates(mf);
+
+    mflock_read_contact_pairs(mf);
+
+    mflock_load_radial_constraints(mf);
+
+    mflock_load_bead_wells(mf);
+
+    return;
 }
 
 
-void param_free(optparam * p)
+void mflock_free(mflock_t * p)
 {
     free(p->R);
     free(p->I);
@@ -1459,26 +1534,16 @@ void param_free(optparam * p)
     free(p->luaDynamicsFile);
     free(p->logfname);
     free(p->E);
-
+    free(p->beads);
+    free(p->fname_bead_wells);
+    free(p->bead_wells);
     free(p);
     return;
 }
 
 
-void param_validate(optparam * p)
+static void mflock_set_bead_size(mflock_t * p)
 {
-    if(p->N == 0)
-    {
-        fprintf(stderr, "p->N = 0\nCheck the size of the W-matrix\n");
-        exit(1);
-    }
-
-    if(p->logf == NULL)
-    {
-        fprintf(stderr, "p->logf = NULL\nThis indicates that the log file could not be opened\n");
-        exit(1);
-    }
-
     if(p->r0 < 0)
     {
         double vq = p->volq;
@@ -1491,17 +1556,19 @@ void param_validate(optparam * p)
         {
             Vd = elli_vol(p->E);
         }
-        p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->N*M_PI) );
+        p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->n_beads*M_PI) );
 
-#ifndef NDEBUG
-        double Vbeads = p->N*pow(p->r0,3)*M_PI*4.0/3.0;
-        printf("Vd: %f, Vbeads: %f, Vbeads/Vd = %f\n", Vd, Vbeads, Vbeads/Vd);
-        assert(fabs(Vbeads/Vd - vq)<1e-5);
-#endif
+        if(p->verbose > 2)
+        {
+            double Vbeads = p->n_beads*pow(p->r0,3)*M_PI*4.0/3.0;
+            printf("Vd: %f, Vbeads: %f, Vbeads/Vd = %f\n", Vd, Vbeads, Vbeads/Vd);
+            assert(fabs(Vbeads/Vd - vq)<1e-5);
+        }
     }
 }
 
-void logwrite(optparam * p, int level, const char *fmt, ...)
+/** @brief write to both stdout and to the log file if p->verbose >= level */
+static void mflock_logwrite(const mflock_t * p, int level, const char *fmt, ...)
 {
 
     if(p->verbose >= level)
@@ -1526,7 +1593,7 @@ void logwrite(optparam * p, int level, const char *fmt, ...)
 }
 
 
-int param_readX(optparam * p, double * X)
+static int mflock_load_coordinates(mflock_t * p)
 {
 
     //  fprintf(stdout, "Reading X-data from %s\n", p->xfname);
@@ -1542,7 +1609,7 @@ int param_readX(optparam * p, double * X)
     size_t len = 0;
 
     char delim[] = ",";
-    for(size_t ll = 0; ll<p->N; ll++)
+    for(size_t ll = 0; ll<p->n_beads; ll++)
     {
         int read = getline(&line, &len, f);
         if(read == -1)
@@ -1551,109 +1618,61 @@ int param_readX(optparam * p, double * X)
             return -1;
         }
         char *ptr = strtok(line, delim);
-        X[3*ll] = atof(ptr);
+        p->beads[3*ll] = atof(ptr);
         ptr = strtok(NULL, delim);
-        X[3*ll+1] = atof(ptr);
+        p->beads[3*ll+1] = atof(ptr);
         ptr = strtok(NULL, delim);
-        X[3*ll+2] = atof(ptr);
+        p->beads[3*ll+2] = atof(ptr);
     }
 
     free(line);
     return 0;
 }
 
-
-void optimize(double * restrict X, optparam * restrict p)
+static void * solve_t(void * args)
 {
-    if(p->luaDynamics == 0)
-    {
-        double Fb = .7;
-        while(Fb>0.1)
-        {
-            dynamic(X, p, Fb);
-            Fb = Fb*.7;
-        }
-        dynamic(X, p, 0);
-
-        if(p->compress == 1)
-        {
-            printf("Running again with compression off (relaxation)\n");
-            p->compress = 0;
-            dynamic(X, p, 0);
-        }
-    } else {
-        dynamic(X, p, 0); /* Default way */
-    }
-
-}
-
-
-void * solve_t(void * args)
-{
-    solve_t_args * sargs = (solve_t_args *) args;
-    optimize(sargs->X, sargs->p);
+    mflock_dynamics((mflock_t *) args, 0);
     return NULL;
 }
 
-
-int main(int argc, char ** argv)
+/* Write chimera file (for simple visualization) */
+static void mflock_write_cmm(const mflock_t * p)
 {
+    const double * restrict X = p->beads;
+    if(p->cmmz == 1)
+    {
+        char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
+        sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
+
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
+        free(cmmfile);
+    } else {
+        char * cmmfile = malloc(1024*sizeof(char));
+        assert(cmmfile != NULL);
+        sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
+        free(cmmfile);
+    }
+    return;
+}
+
+static void mflock_close_log(mflock_t * p)
+{
+    char * time_str = cf_timestr();
+    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
+    free(time_str);
+
+    /* Close log file */
+    fclose(p->logf);
+    return;
+}
+
+static void mflock_run(mflock_t * p)
+{
+
     time_t starttime, nowtime;
     time(&starttime);
-
-    optparam * p = param_alloc(); // Set default options
-
-    switch(argparsing(p, argc, argv))
-    {
-    case ARGS_OK:
-        break;
-    case ARGS_ERR:
-        usage();
-        param_free(p);
-        return EXIT_FAILURE;
-        break;
-    case ARGS_QUIT:
-        param_free(p);
-        return EXIT_SUCCESS;
-        break;
-    }
-
-    param_init(p, argc, argv);
-
-    if(p->contact_pairs_file != NULL)
-    {
-        param_read_contact_pairs(p);
-    } else {
-        if(p->wfname != NULL)
-        {
-            /* Read binary contact indication matrix */
-            param_readW(p);
-        } else {
-            fprintf(stderr, "No contact pairs specified\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    /* Read radial preferences, if rfname is set */
-    param_readR(p);
-
-    /* Read chromosome labels */
-    param_readL(p);
-
-    /* Read coordinates from previous iteration, or generate
-       random coordinates if not previous iteration is available
-    */
-    double * X = init_X(p);
-
-    /* Double check that the parameters make sense and that
-       everything necessary could be loaded. */
-    param_validate(p);
-
-    if(p->verbose>0)
-    {
-        param_show(p, stdout);
-    }
-    param_show(p, p->logf);
 
     /* Set up capturing of Ctrl+C for graceful exit */
     struct sigaction act;
@@ -1662,22 +1681,22 @@ int main(int argc, char ** argv)
     sigaction(SIGINT, &act, NULL);
 
     /* Start molecular dynamics */
-    logwrite(p, 1, " >> Solving ... \n");
+    mflock_logwrite(p, 1, " >> Solving ... \n");
 
 #ifdef SDL
     if(p->liveView == 1)
     {
         int quit = 0;
 
+        /* SDL likes to be in the main thread so we run mflock
+           dynamics in a secondary.  */
+
         pthread_t th;
-        solve_t_args solve_arg;
-        solve_arg.X = X;
-        solve_arg.p = p;
 
         pthread_create(&th, // thread
                        NULL, // pthread_attrib_t
                        solve_t, // function
-                       &solve_arg); // arg
+                       p); // arg
 
         elli * E;
         if(p->E == NULL)
@@ -1687,66 +1706,71 @@ int main(int argc, char ** argv)
             E = p->E;
         }
 
-        liveview(X, p->L, p->N, &quit, p->r0, E);
+        liveview(p->beads, p->L, p->n_beads, &quit, p->r0, E);
         pthread_join(th, NULL);
     } else {
-        optimize(X,p);
+        mflock_dynamics(p, 0);
     }
 #else
-    optimize(X, p);
+    mflock_dynamics(p, 0);
 #endif
-    //radpos(X, p, stdout);
 
+
+    /* resolution: 1 s, consider clockdiff  */
     time(&nowtime);
     p->time_final = difftime(nowtime, starttime);
+    return;
+}
 
-    /* Write a summary of how the simulations proceeded to the log file */
-    param_summary(p, X);
+int mflock(int argc, char ** argv)
+{
 
-    /* Write chimera file (for simple visualization) */
-    if(p->cmmz == 1)
+#ifndef NDEBUG
+    printf("WARNING: mflock was compiled without defining NDEBUG and will "
+           "be very slow\n");
+#endif
+
+    mflock_t * mf = mflock_new();
+
+    switch(mflock_parse_cli(mf, argc, argv))
     {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
-        sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
-
-        cmmwritez(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
-        free(cmmfile);
-    } else {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
-        sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->N, p->r0, p->I, p->NI, p->L);
-        free(cmmfile);
+    case MFLOCK_ARGS_OK:
+        break;
+    case MFLOCK_ARGS_ERR:
+        mflock_usage();
+        mflock_free(mf);
+        return EXIT_FAILURE;
+        break;
+    case MFLOCK_ARGS_QUIT:
+        mflock_free(mf);
+        return EXIT_SUCCESS;
+        break;
     }
+
+    mflock_init(mf, argc, argv);
+
+    if(mf->verbose>0)
+    {
+        mflock_show(mf, stdout);
+    }
+
+    mflock_show(mf, mf->logf);
+
+    mflock_run(mf);
+
+    mflock_summary(mf);
 
     /* Write coordinates to disk */
-    // TODO: rename mflock_write_coords(mflock * m, double * X)
-    param_dumpX(p, X);
+    mflock_save_coordinates(mf);
 
-    /* Write radial profile to disk ? */
-    // Just wastes space, can as well be calculated on the fly.
-    if(0) {
-        char * rpfname = malloc(1024*sizeof(char));
-        assert(rpfname != NULL);
-        sprintf(rpfname, "%s/rad.csv", p->ofoldername);
-        FILE * rpfile = fopen(rpfname, "w");
-        assert(rpfile != NULL);
-        radpos(X, p, rpfile);
-        fclose(rpfile);
-        free(rpfname);
-    }
+    /* Write chimera cmm file (.gz) */
+    mflock_write_cmm(mf);
 
-    char * time_str = cf_timestr();
-    fprintf(p->logf, "\nmflock finished: %s\n", time_str);
-    free(time_str);
+    /* Write a few last things and close the log file */
+    mflock_close_log(mf);
 
-    /* Close log file */
-    fclose(p->logf);
     /* Free most data */
-    param_free(p);
-    /* Free coordinates */
-    free(X);
+    mflock_free(mf);
 
     return EXIT_SUCCESS;
 }
