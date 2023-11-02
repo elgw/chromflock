@@ -973,6 +973,8 @@ static void mflock_show(mflock_t * p, FILE * f)
 
     fprintf(f, "    diploid=%d\n", p->diploid);
 
+    fprintf(f, "    live view=%d\n", p->liveView);
+
     fprintf(f, "    verbose level: %d\n", p->verbose);
     fprintf(f, "\n");
     return;
@@ -1161,10 +1163,22 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "A:B:C:Dw:x:r:n:t:R:v:o:p:hMs:L:zcadQ:l:W:",
+                            "aA:B:C:Dw:x:r:n:t:R:v:o:p:hMs:L:zcdQ:l:W:",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
+        case 'a':
+            p->liveView = 1;
+            break;
+        case 'A':
+            ea = atof(optarg);
+            break;
+        case 'B':
+            eb = atof(optarg);
+            break;
+        case 'C':
+            ec = atof(optarg);
+            break;
         case 'i':
             printf("mflock (chromflock version %s)\n", cf_version);
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
@@ -1243,18 +1257,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             return(1);
         case 'z':
             p->cmmz = 1;
-            break;
-        case 'a':
-            p->liveView = 1;
-            break;
-        case 'A':
-            ea = atof(optarg);
-            break;
-        case 'B':
-            eb = atof(optarg);
-            break;
-        case 'C':
-            ec = atof(optarg);
             break;
         default:
             return MFLOCK_ARGS_ERR;
@@ -1500,6 +1502,8 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
      * are (or 2X if --diploid is set) */
     mflock_load_bead_labels(mf);
 
+    printf("n_beads = %zu\n", mf->n_beads);
+
     /* Once we know how many beads we can set their radius based on the
      * volume quotient (or do nothing if it was given at the command line) */
     mflock_set_bead_size(mf);
@@ -1514,6 +1518,24 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     mflock_load_radial_constraints(mf);
 
     mflock_load_bead_wells(mf);
+
+    #ifndef NDEBUG
+    if(mf->verbose > 3)
+    {
+        for(size_t kk = 0; kk< mf->n_beads; kk++)
+        {
+            printf("%5zu: %f, %f, %f\n",
+                   kk, mf->beads[3*kk], mf->beads[3*kk+1], mf->beads[3*kk+2]);
+        }
+        for(size_t kk = 0; kk < mf->n_pairs; kk++)
+        {
+            printf("P%5zu: %u %u\n", kk,
+                   mf->I[2*kk], mf->I[2*kk+1]);
+            assert(mf->I[2*kk] < mf->n_beads);
+            assert(mf->I[2*kk+1] < mf->n_beads);
+        }
+    }
+    #endif
 
     return;
 }

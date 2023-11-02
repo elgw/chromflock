@@ -11,7 +11,7 @@
 #   both aflock and mflock uses isfinite().
 
 CC = gcc -std=gnu99
-CFLAGS=-Wall -Wextra
+CFLAGS=-Wall -Wextra -D_FILE_OFFSET_BITS=64
 LDFLAGS=
 
 DEBUG?=0

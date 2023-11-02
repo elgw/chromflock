@@ -954,18 +954,19 @@ static uint8_t * initial_W(aflock * af)
 
         for(size_t kk = 0; kk<af->nBeads; kk++)
         {
-            //      for(size_t ll = kk+1; ll<af->nBeads; ll++)
-            size_t ll = kk+1; /* Note, only for elements on the first off-diagonal */
+            for(size_t ll = kk+1; ll<af->nBeads; ll++)
+            // size_t ll = kk+1; /* Note, only for elements on the first off-diagonal */
             {
                 size_t idxA = kk + af->nBeads*ll;
                 if(af->A[idxA] == 1)
                 {
-                    size_t N = af->nBeads;
-                    Widx[0] = kk + 2*N*ll;
-                    Widx[1] = ll + 2*N*kk;
+                    size_t N = 2*af->nBeads; /* Side length of the W matrix */
+                    size_t N2 = af->nBeads; /* Size of A matrix */
+                    Widx[0] = kk + N*ll;
+                    Widx[1] = ll + N*kk;
 
-                    Widx[2] = (kk+N) + (2*N)*(ll+N);
-                    Widx[3] = (ll+N) + (2*N)*(kk+N);
+                    Widx[2] = (kk+N2) + N*(ll+N2);
+                    Widx[3] = (ll+N2) + N*(kk+N2);
 
                     for(int ee = 0; ee<4; ee++)
                     {
@@ -974,6 +975,7 @@ static uint8_t * initial_W(aflock * af)
                 }
             }
         }
+
         return W0;
     } else
     {
@@ -1047,7 +1049,20 @@ static void aflock_init_structures(aflock * af, cf_structure * flock)
     /* Create the common start contacts */
     uint8_t * W0 = initial_W(af);
     uint64_t nCP = 0;
-    uint32_t * CP = contact_pairs_from_matrix(W0, af->nBeads, &nCP);
+    uint32_t * CP = NULL;
+    if(af->diploid)
+    {
+        FILE * fid = fopen("temp.uint8", "w");
+        assert(fid != NULL);
+        fwrite(W0, 1, 2*af->nBeads * 2*af->nBeads, fid);
+        fclose(fid);
+        CP = contact_pairs_from_matrix(W0, 2*af->nBeads, &nCP);
+        printf("Found %lu contact pairs\n", nCP);
+    } else {
+        CP = contact_pairs_from_matrix(W0, af->nBeads, &nCP);
+    }
+
+
     free(W0);
     contact_pairs_write(flock[0].contact_pairs_file, CP, nCP);
     free(CP);
