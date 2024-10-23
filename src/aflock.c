@@ -1041,7 +1041,7 @@ static void aflock_init_structures(aflock * af, cf_structure * flock)
             mkdir(dir, 0700);
         }
     }
-    free(dir);
+
     fclose(jobFile);
 
     /* Create the common start contacts */
@@ -1110,7 +1110,7 @@ static void aflock_init_structures(aflock * af, cf_structure * flock)
         printf("\r");
         free(R0);
     }
-
+    free(dir);
     for(size_t ff =0; ff< af->nStruct; ff++)
         cf_structure_free(&flock[ff]);
 
