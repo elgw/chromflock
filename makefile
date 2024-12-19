@@ -84,8 +84,8 @@ src/oscp.c \
 src/sprite2cmap.c \
 obj/chromflock_init.o \
 obj/balance.o \
-obj/cf_util.o
-
+obj/cf_util.o \
+obj/contact_pairs_io.o
 
 ## Targets
 
