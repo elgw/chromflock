@@ -159,12 +159,6 @@ static uint32_t * contact_pairs_read_gz(const char * file,
 {
     size_t uncompressed_size = get_gz_size(file);
 
-    if(uncompressed_size == 0)
-    {
-        fprintf(stderr, "Unable to determine the uncompressed size of %s\n",
-                file);
-        return NULL;
-    }
 
     uint32_t * CP = calloc(uncompressed_size/sizeof(uint32_t), sizeof(uint32_t));
     if(CP == NULL)
@@ -275,7 +269,8 @@ static int contact_pairs_write_raw(const char * file,
     return EXIT_SUCCESS;
 }
 
-static int contact_pairs_write_gz(const char * file,
+static int
+contact_pairs_write_gz(const char * file,
                                   const uint32_t * P,
                                   uint64_t nPairs)
 {
@@ -293,7 +288,7 @@ static int contact_pairs_write_gz(const char * file,
         return EXIT_FAILURE;
     }
     int status = gzwrite(zf, P, nbytes);
-    if(status < 1)
+    if(status < 0)
     {
         fprintf(stderr, "gzwrite failed for %s\n", file);
         int errnum;
@@ -471,6 +466,17 @@ int contact_pairs_io_ut(int argc, char ** argv)
     {
         fprintf(stderr, "Failed to remove %s\n", tempfilegz);
     }
+
+    printf(" -> Write and read empty contact list\n");
+    printf("Writing to %s\n", tempfilegz);
+    uint32_t contacts[1] = {0};
+    contact_pairs_write_gz(tempfilegz, contacts, 0);
+    printf("Reading %s\n", tempfilegz);
+    nPairs = 0;
+    uint32_t * pairs = contact_pairs_read_gz(tempfilegz, &nPairs);
+    printf("nPairs = %u\n", nPairs);
+    free(pairs);
+
     printf("All tests passed and temporary files cleaned up\n");
 
 
@@ -478,7 +484,8 @@ int contact_pairs_io_ut(int argc, char ** argv)
 }
 
 
-int contact_pairs_write_from_matrix(const char * filename,
+int
+contact_pairs_write_from_matrix(const char * filename,
                                     uint64_t n_elements ,
                                     const uint8_t * restrict W)
 {
