@@ -296,6 +296,10 @@ static int contact_pairs_write_gz(const char * file,
     if(status < 1)
     {
         fprintf(stderr, "gzwrite failed for %s\n", file);
+        int errnum;
+        const char * err = gzerror(zf, &errnum);
+        fprintf(stderr, "   error code:  %d\n", errnum);
+        fprintf(stderr, "error message: %s\n", err);
         gzclose(zf);
         return EXIT_FAILURE;
     }
