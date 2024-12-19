@@ -28,8 +28,9 @@ $chromflock string2any contact_pairs.u32 uint32_t \
 # Tell bead i0 to be to the right
 # Tell bead i9 to be to the left
 $chromflock string2any bead_wells.f64 double \
-            0  0.9 0 0 \
-            9 -0.9 0 0
+            0 0  0.9 0 \
+            0 0 -0.9 0 \
+            9 0 0 0 \
 
 $mflock --contact-pairs contact_pairs.u32 \
         --lFile labels.u8 \
