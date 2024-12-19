@@ -11,7 +11,7 @@
 #   both aflock and mflock uses isfinite().
 
 CC = gcc -std=gnu99
-CFLAGS=-Wall -Wextra
+CFLAGS=-Wall -Wextra -D_FILE_OFFSET_BITS=64
 LDFLAGS=
 
 DEBUG?=0
@@ -84,8 +84,8 @@ src/oscp.c \
 src/sprite2cmap.c \
 obj/chromflock_init.o \
 obj/balance.o \
-obj/cf_util.o
-
+obj/cf_util.o \
+obj/contact_pairs_io.o
 
 ## Targets
 

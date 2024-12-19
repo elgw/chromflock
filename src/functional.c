@@ -776,6 +776,7 @@ void grad3(const double * restrict X,
     {
         if(C->kRad > 0)
         {
+            assert(R != NULL);
             for(size_t kk = 0; kk<nX; kk++)
             {
                 if(isfinite(R[kk]) == 1)

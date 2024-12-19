@@ -15,7 +15,7 @@
 #include "string2any.h"
 #include "any2string.h"
 #include "sprite2cmap.h"
-
+#include "contact_pairs_io.h"
 
 static int show_version(void)
 {
@@ -98,6 +98,12 @@ int main(int argc, char ** argv)
     {
         return sprite2cmap(argc-1, argv+1);
     }
+
+    if(!strcmp(command, "unittests"))
+    {
+        return contact_pairs_io_ut(argc-1, argv+1);
+    }
+
 
     fprintf(stderr, "%s is an unknown command to me\n", command);
 
