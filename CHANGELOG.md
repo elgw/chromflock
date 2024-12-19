@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.4.3
+- Fixed reading and writing empty contact lists.
+
 ## 0.4.2
 - Fixed broken `--diploid` mode.
 
