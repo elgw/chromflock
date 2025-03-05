@@ -1182,8 +1182,8 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         case 'i':
             printf("mflock (chromflock version %s)\n", cf_version);
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
-            printf("GIT HASH: %s\n", GIT_VERSION);
-            printf("Compiler: %s\n", CC_VERSION);
+            //printf("GIT HASH: %s\n", GIT_VERSION);
+            //printf("Compiler: %s\n", CC_VERSION);
             return MFLOCK_ARGS_QUIT;
         case 'd':
             printf("Defaults:\n");

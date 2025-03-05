@@ -422,8 +422,8 @@ static int aflock_parse_command_line(aflock * p, int argc, char ** argv)
         case 'i':
             printf("aflock (chromflock version %s)\n", cf_version);
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
-            printf("GIT HASH: %s\n", GIT_VERSION);
-            printf("Compiler: %s\n", CC_VERSION);
+            //printf("GIT HASH: %s\n", GIT_VERSION);
+            //printf("Compiler: %s\n", CC_VERSION);
             exit(EXIT_SUCCESS);
         case 'A': /* sphere contact probability matrix */
             free(p->afname);
