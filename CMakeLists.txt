@@ -39,7 +39,6 @@ set(mflock_SOURCES
   src/cmmwrite.c
   src/wio.c
   src/hsvrgb.c
-  src/liveview.c
   src/ellipsoid.c
   src/contact_pairs_io.c
   src/cf_util.c)
@@ -53,14 +52,22 @@ set(aflock_SOURCES
   src/oscp.c
 )
 
-set(chromflock_SOURCES,
-  src/chromflock.c)
-
-
+set(chromflock_SOURCES
+  src/chromflock.c
+  src/cc2cpm.c
+    src/string2any.c
+    src/any2string.c
+    src/oscp.c
+    src/sprite2cmap.c
+    src/chromflock_init.c
+    src/balance.c
+    src/cf_util.c
+    src/contact_pairs_io.c
+  )
 
 add_executable( mflock ${mflock_SOURCES})
 add_executable( aflock ${aflock_SOURCES})
-add_executable( chromflock ${aflock_SOURCES})
+add_executable( chromflock ${chromflock_SOURCES})
 
 #
 # Handle large files
@@ -111,12 +118,14 @@ target_link_libraries(chromflock ZLIB::ZLIB)
 #
 find_package(SDL2)
 if(SDL2_FOUND)
+ message(STATUS "SDL2 found")
 target_link_libraries(
   mflock
   SDL2::SDL2
   SDL2::SDL2main
 )
 add_definitions(-DSDL)
+target_sources(mflock PRIVATE src/liveview.c)
 else()
   message(STATUS "SDL2 not found, some features will be disabled")
 endif()

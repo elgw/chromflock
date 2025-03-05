@@ -1,29 +1,34 @@
 #include "functional.h"
 
-static double norm3(const double * restrict X)
-{
-    double n = 0;
-    for(size_t kk = 0; kk<3; kk++)
-        n+=pow(X[kk], 2);
-    return sqrt(n);
-}
 
-static void vec3_normalize(double * restrict X)
+static double f_interaction(double r)
 {
-    double n = 0;
-    for(size_t kk = 0; kk<3; kk++)
-        n+=pow(X[kk], 2);
-    X[0] /= n; X[1] /= n; X[2] /= n;
+    return pow(r, 2.0);
 }
 
 
+/* Squared L2 norm of a 3-vector */
 static double norm32(const double * restrict X)
 {
     double n = 0;
     for(size_t kk = 0; kk<3; kk++)
+    {
         n+=pow(X[kk], 2);
+    }
     return n;
 }
+
+static double norm3(const double * restrict X)
+{
+    return sqrt(norm32(X));
+}
+
+static void vec3_normalize(double * restrict X)
+{
+    double n = norm3(X);
+    X[0] /= n; X[1] /= n; X[2] /= n;
+}
+
 
 static double eudist3sq(const double * A, const double * B)
 {
@@ -34,7 +39,7 @@ static double eudist3sq(const double * A, const double * B)
 static double eudist3(const double * A, const double * B)
 {
     /* Euclidean distance between two 3D-vectors */
-    return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
+    return sqrt(eudist3sq(A, B));
 }
 
 static size_t hash_coord(const int nDiv, const double X)
@@ -107,7 +112,7 @@ double errRepulsion(const double * restrict D,
     // For 3300 points: 9 or 10
     // For 33000 points: 15 about 30% faster than using 9
 
-    size_t nH = pow(nDiv, 3);
+    size_t nH = nDiv*nDiv*nDiv;
     uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S != NULL);
 
@@ -117,9 +122,9 @@ double errRepulsion(const double * restrict D,
     }
 
     /* Create boundaries for the data */
-    uint32_t * B = malloc((nH+1)*sizeof(uint32_t));
+    uint32_t * B = calloc((nH+1), sizeof(uint32_t));
     assert(B != NULL);
-    uint32_t * C = malloc((nH+1)*sizeof(uint32_t));
+    uint32_t * C = calloc((nH+1), sizeof(uint32_t));
     assert(C != NULL);
 
     B[0] = 0;
@@ -249,7 +254,7 @@ gradRepulsion(const double * restrict D,
     {
         nDiv = 15;
     }
-    size_t nH = pow(nDiv, 3);
+    size_t nH = nDiv*nDiv*nDiv;
     uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);
 
@@ -456,10 +461,10 @@ double err3(const double * restrict X,
         size_t ll = P[pp*2+1];
         {
             double d = eudist3(X+3*kk, X+3*ll);
-            // TODO: min/max to avoid branch?
             if(d > C->dInteraction)
             {
-                errInt += pow(d - C->dInteraction, 2);
+                //errInt += pow(d - C->dInteraction, 2);
+                errInt += f_interaction(d - C->dInteraction);
             }
         }
     }
@@ -513,7 +518,8 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, mflock_func_t * C )
             double d = eudist3(X+3*kk, X+3*ll);
             if(d > C->dInteraction)
             {
-                errInt += pow(d - C->dInteraction, 2);
+                //errInt += pow(d - C->dInteraction, 2);
+                errInt += f_interaction(d - C->dInteraction);
             }
         }
     }
@@ -579,7 +585,8 @@ double err(double * X, size_t nX, double * R, uint8_t * A, mflock_func_t * C )
                 double d = eudist3(X+3*kk, X+3*ll);
                 if(d > C->dInteraction)
                 {
-                    errInt += pow(d - C->dInteraction, 2);
+                    //errInt += pow(d - C->dInteraction, 2);
+                    errInt += f_interaction(d - C->dInteraction);
                 }
             }
         }
@@ -845,7 +852,7 @@ void grad3(const double * restrict X,
             const double d = elli_getScale2(C->Es, X+3*kk);
             if( d >= 1)
             {
-                double n[3];
+                double n[3] = {0};
                 double r = elli_gdistL(C->E, X+3*kk, XT);
 
                 //elli_normal(C->E, XT, n);

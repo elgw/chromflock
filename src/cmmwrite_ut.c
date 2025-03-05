@@ -53,7 +53,7 @@ static void savecmap(const char * filename)
 
     /* Writing in the foreground */
 
-    char * label = malloc(1024*sizeof(char));
+    char * label = calloc(1024, sizeof(char));
     assert(label != NULL);
 
     for (int kk=0; kk<5; kk++)
@@ -112,15 +112,18 @@ int main(int argc, char ** argv)
     size_t nD = 3000;
     size_t nP = 0;
 
-    double * D = malloc(3*nD*sizeof(double));
-    uint32_t * P = malloc(2*nP*sizeof(uint32_t));
+    double * D = calloc(3*nD, sizeof(double));
+    assert(D != NULL);
+    uint32_t * P = calloc(2*nP, sizeof(uint32_t));
+    assert(P != NULL);
 
     for(size_t kk = 0; kk<3*nD; kk++)
     {
         D[kk] = kk;
     }
 
-    uint8_t * L = malloc(nD*sizeof(uint8_t));
+    uint8_t * L = calloc(nD, sizeof(uint8_t));
+    assert(L != NULL);
 
     for(size_t kk = 0; kk<nD; kk++)
     {

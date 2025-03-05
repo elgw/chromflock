@@ -30,6 +30,7 @@ static int usage(void)
            "chromflock <command>\n");
     printf("\n");
     printf("Available commands:\n");
+    printf("\n");
     printf("help\n\t"
            "Show this help message\n");
     printf("init\n\t"
@@ -44,6 +45,7 @@ static int usage(void)
            "write human readable to raw\n");
     printf("version\n\t"
            "show version information\n");
+    printf("\n");
     printf("Each command has a separate help section\n");
     printf("\n");
     printf("Web page: https://www.github.com/elgw/chromflock\n");

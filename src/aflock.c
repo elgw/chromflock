@@ -628,6 +628,9 @@ static void aflock_set_bead_radius(aflock * af)
  * with already many contacts get more, and those with relatively few
  * keep loosing this allocation game.
  *
+ * The _th in the name means that the activation distances are calculated
+ * for beads contacts with probability p:  s->af->th_low >= p < s->af->th_high
+ *
  */
 static void calc_activation_distance_th( adstruct * s)
 {
@@ -644,7 +647,7 @@ static void calc_activation_distance_th( adstruct * s)
     size_t B = af->nBeads;
 
     /* temporary array for each bead pair */
-    float * DS = malloc(nDist*sizeof(float));
+    float * DS = calloc(nDist, sizeof(float));
     assert(DS != NULL);
 
     for(size_t aa = thread; aa < af->nBeads; aa = aa+nThreads)
@@ -1150,7 +1153,7 @@ static void aflock_update_structures(aflock * af, cf_structure * flock)
     /* Activation distance initialize as NAN */
     double * AD = malloc(af->nBeads*af->nBeads*sizeof(double));
     assert(AD != NULL);
-    for(size_t kk = 0 ; kk<powl(af->nBeads,2) ; kk++)
+    for(size_t kk = 0 ; kk < powl(af->nBeads, 2) ; kk++)
     {
         AD[kk] = NAN;
     }

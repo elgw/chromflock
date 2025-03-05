@@ -1265,7 +1265,8 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     if(p->luaDynamicsFile == NULL)
     {
-        fprintf(stderr, "--dconf not specified\n");
+        fprintf(stderr, "Incorrect command line: --dconf not specified\n");
+        fprintf(stderr, "see %s --help for usage\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -1311,8 +1312,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
                " \n\n");
         return MFLOCK_ARGS_ERR;
     }
-
-
 
     return MFLOCK_ARGS_OK;
 }

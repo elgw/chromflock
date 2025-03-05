@@ -9,18 +9,17 @@
 #define malloc(x) assert_malloc(x)
 static void * assert_malloc(size_t x)
 {
-    double * p = (malloc)(x);
+    void * p = (malloc)(x);
     assert(p!=NULL);
     return p;
 }
 static void * assert_calloc(size_t x, size_t y)
 {
-    double * p = (calloc)(x, y);
+    void * p = (calloc)(x, y);
     assert(p!=NULL);
     return p;
 }
 #endif
-
 
 typedef double (*statfun) (double * , size_t );
 
@@ -169,6 +168,7 @@ static int argparsing(pargs * p, int argc, char ** argv)
         switch (ch)
         {
         case 'A':
+            free(p->aOutFile);
             p->aOutFile = strdup(optarg);
             break;
         case 'c':
@@ -208,8 +208,6 @@ static int argparsing(pargs * p, int argc, char ** argv)
         case 'v':
             printf("cc2cpm (chromflock version %s)\n", cf_version);
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
-            printf("GIT HASH: %s\n", GIT_VERSION);
-            printf("Compiler: %s\n", CC_VERSION);
             exit(0);
         default:
             break;
@@ -235,7 +233,8 @@ static int argparsing(pargs * p, int argc, char ** argv)
     {
         sprintf(ystr, "%s", "");
     }
-    char * modeStr = malloc(100*sizeof(char));
+    char * modeStr = calloc(100, sizeof(char));
+    assert(modeStr != NULL);
     sprintf(modeStr, "%s", "");
 
 
@@ -268,6 +267,7 @@ static int argparsing(pargs * p, int argc, char ** argv)
         p->lOutFile = malloc(1024*sizeof(char));
         sprintf(p->lOutFile, "%s.L.uint8", p->aOutFile);
     }
+    free(modeStr);
     return ret;
 }
 
@@ -815,9 +815,6 @@ static void pargs_free(pargs * p)
 
 static void toLogFile(FILE * f, int argc, char ** argv)
 {
-    fprintf(f, "CC_VERSION: %s\n", CC_VERSION);
-    fprintf(f, "GIT_VERSION: %s\n", GIT_VERSION);
-
     fprintf(f, "Command line:\n");
     for(int kk = 0; kk<argc; kk++)
     {
@@ -872,7 +869,8 @@ static double * removeChr(double* H0, uint8_t * L, size_t * N, uint8_t chr)
     size_t N1 = N0-nx;
 
     // Create new H
-    double * H = malloc(pow(N0-nx, 2)*sizeof(double));
+    double * H = calloc( (N0-nx)*(N0-nx), sizeof(double));
+    assert(H != NULL);
     size_t nnw = 0;
     for(size_t nn = 0; nn < N0; nn++)
     {
