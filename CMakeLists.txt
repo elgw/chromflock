@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.9)
 
 # Might be of interest:
-# cmake -DCMAKE_BUILD_TYPE=Debug ..
+# - Build in debug mode:
+#   $ cmake -DCMAKE_BUILD_TYPE=Debug ..
+#
+# - Built a .deb file
+#   $ cpack -G DEB
+#
 # todo:
 # - see that the install works
 # - create a deb file
@@ -51,16 +56,20 @@ set(aflock_SOURCES
 set(chromflock_SOURCES,
   src/chromflock.c)
 
-include_directories(src/lua-5.3.5/src/)
+
 
 add_executable( mflock ${mflock_SOURCES})
 add_executable( aflock ${aflock_SOURCES})
 add_executable( chromflock ${aflock_SOURCES})
 
-# TODO add_custom_command for building lua
+#
+# Handle large files
+#
+
+add_definitions(-D_FILE_OFFSET_BITS=64)
 
 #
-# OpenMP for mflock (TODO: This is optional)
+# OpenMP for mflock
 #
 
 find_package(OpenMP)
@@ -69,8 +78,7 @@ if(OpenMP_C_FOUND)
   target_link_libraries(mflock OpenMP::OpenMP_C)
   target_link_libraries(aflock OpenMP::OpenMP_C)
 else()
-  message("OpenMP not found automatically, trying manual")
-
+  message(STATUS "OpenMP not found automatically, trying manual")
   set(
     CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} -fopenmp=omp /openmp"
@@ -98,17 +106,60 @@ target_link_libraries(mflock ZLIB::ZLIB)
 target_link_libraries(aflock ZLIB::ZLIB)
 target_link_libraries(chromflock ZLIB::ZLIB)
 
-find_package(SDL2 REQUIRED)
+#
+# SDL2
+#
+find_package(SDL2)
+if(SDL2_FOUND)
 target_link_libraries(
   mflock
   SDL2::SDL2
   SDL2::SDL2main
 )
+add_definitions(-DSDL)
+else()
+  message(STATUS "SDL2 not found, some features will be disabled")
+endif()
 
+#
+# LUA 5.3.5 -- note: has to be built separately
+#
+include_directories(src/lua-5.3.5/src/)
 target_link_libraries(mflock
   ${CMAKE_CURRENT_SOURCE_DIR}/src/lua-5.3.5/src/liblua.a
-  )
+)
+
+
+# Enable -flto (GCC) and similar if available, see
+# https://cmake.org/cmake/help/latest/policy/CMP0069.html
+# https://cmake.org/cmake/help/latest/module/CheckIPOSupported.html
+include(CheckIPOSupported)
+check_ipo_supported(RESULT result OUTPUT output)
+if(result)
+  message("Enabling IPO")
+  set_property(TARGET aflock PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set_property(TARGET mflock PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set_property(TARGET chromflock PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_JOBS 8)
+else()
+  message(WARNING "IPO is not supported: ${output}")
+endif()
+
+
 
 # Note the value of CMAKE_INSTALL_PREFIX
 include(GNUInstallDirs)
-install(TARGETS mflock)
+install(TARGETS mflock aflock chromflock)
+
+#
+# .deb package
+#
+# Ref:
+# https://cmake.org/cmake/help/book/mastering-cmake/chapter/Packaging%20With%20CPack.html
+
+SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Erik Wernersson")
+# resolve dependencies automatically
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://www.github.com/elgw/deconwolf/")
+SET(CPACK_DEBIAN_PACKAGE_SECTION "science")
+INCLUDE(CPack)

@@ -474,7 +474,7 @@ int contact_pairs_io_ut(int argc, char ** argv)
     printf("Reading %s\n", tempfilegz);
     nPairs = 0;
     uint32_t * pairs = contact_pairs_read_gz(tempfilegz, &nPairs);
-    printf("nPairs = %u\n", nPairs);
+    printf("nPairs = %zu\n", nPairs);
     free(pairs);
 
     printf("All tests passed and temporary files cleaned up\n");

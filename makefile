@@ -2,13 +2,8 @@
 # Purpose:
 #    For building chromflock.
 #
-# NOTES:
-# - Please use the makedeb-ubuntu_2204.sh or similar scripts to
-#   create a deb file for installation.
-#
-# WARNING:
-#   Do not use --finite-math-only (or --ffast-math or -Ofast) since
-#   both aflock and mflock uses isfinite().
+# It is recommended that cmake is used (CMakeLists.txt) for most
+# users.
 
 CC = gcc -std=gnu99
 CFLAGS=-Wall -Wextra -D_FILE_OFFSET_BITS=64

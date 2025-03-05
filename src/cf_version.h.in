@@ -1,0 +1,15 @@
+#pragma once
+
+/**
+ * @file cf_version.h
+ * @author Erik Wernersson
+ * @date 2020-2023
+ */
+
+#define CF_VERSION_MAJOR "${chromflock_VERSION_MAJOR}"
+#define CF_VERSION_MINOR "${chromflock_VERSION_MINOR}"
+#define CF_VERSION_PATCH "${chromflock_VERSION_PATCH}"
+
+#define cf_version CF_VERSION_MAJOR "."         \
+    CF_VERSION_MINOR "."                        \
+    CF_VERSION_PATCH
