@@ -113,6 +113,8 @@ chromflock string2any/any2string
 
 # Wanted or to do
 
+- Use rst for man pages/and or include them in the documentation.
+- Update man pages.
 - Use 3D DNA FISH Coordinates
 - Write hash/checksums of the input files, possibly with
       [XXH64](https://github.com/Cyan4973/xxHash)
