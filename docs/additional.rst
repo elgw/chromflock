@@ -229,8 +229,7 @@ Domain Error / Partial derivatives
 
 For a point :math:`p` we first find :math:`r = d_G(p)`. If
 :math:`r+R_0 > 0`, the error :math:`E_d(p) = (r - R_0)^2`, otherwise
-:math:`0` (compare Eq. `[eq:domError] <#eq:domError>`__ for the
-spherical domain) and the gradient is
+:math:`0`.
 
 .. math:: \frac{\partial}{\partial x_i}E_d = \frac{2(p_i-q_i) r}{r-R_0}
 

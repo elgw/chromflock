@@ -32,6 +32,8 @@ set( CMAKE_INSTALL_PREFIX
 # Replace variables by their values
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/cf_version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/src/cf_version.h)
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/docs/version.rst.in ${CMAKE_CURRENT_SOURCE_DIR}/docs/version.rst)
+
 set(mflock_SOURCES
   src/mflock_cli.c
   src/mflock.c

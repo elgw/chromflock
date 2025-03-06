@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.4.4
+- Moved documentation to sphinx.
+- Minor fixes.
+
 ## 0.4.3
 - Fixed reading and writing empty contact lists.
 
@@ -106,3 +110,11 @@ chromflock string2any/any2string
 ## 0.3.1
  - Added script to make a deb package for Ubuntu. That is the
    preferred way to install from now.
+
+# Wanted or to do
+
+- Use 3D DNA FISH Coordinates
+- Write hash/checksums of the input files, possibly with
+      [XXH64](https://github.com/Cyan4973/xxHash)
+- Enable Numpy arrays (.npy) for input and output.
+- Distribute mflock jobs on slurm clusters.

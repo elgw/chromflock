@@ -14,22 +14,26 @@ Chromflock will:
  - Can integrate GPSeq data for radial preferences.
  - Supports spherical as well as an ellipsoidal domain for the beads.
 
-The documentation is not complete at the moment and it is suggested
-that anyone interested in chromflock start by reading [Kalhor et al,
-2012](https://doi.org/10.1038/nbt.2057), especially the supplementary
-materials since much of the terminology used here can be traced back
-to that paper.
+Please see the [documentation](https://elgw.github.io/chromflock/) for
+more information.
 
 ## Installation
-There are no pre built packages for chromflock so it has to be built
-from source. If all dependencies are installed it should be simple as:
+There are no pre built packages for chromflock so build it from
+source! If all dependencies are installed it should be simple as:
 
 ``` shell
+cd cd src/lua-5.3.5/
+make linux
+cd ../../
+mkdir build
+cd build
+cmake ..
 make
-./makedeb-ubuntu_2204.sh
-sudo apt-get install ./chromflock_x.y.z_amd64.deb
+# sudo make install
 ```
-more details can be found in [INSTALL.md](INSTALL.md).
+
+Please see the [documentation](https://elgw.github.io/chromflock/) for
+more information.
 
 ## Usage
 Chromflock requires at least two data inputs
@@ -41,8 +45,10 @@ constructed from a (bulk) Hi-C matrix.
    numerical label each bead has.
 
 and produce a user-specified number of putative single-cell 3D
-structures with a binary contact matrix for details, see
-[USAGE.md](USAGE.md) as well as the man pages.
+structures with a binary contact matrix.
+
+Please see the [documentation](https://elgw.github.io/chromflock/) for
+more information.
 
 ## References
 
