@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage &mdash; chromflock  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Molecular dynamics (M-step)" href="mstep.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chromflock
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Chromflock</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#prepare-input-to-chromflock">Prepare input to chromflock</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example-with-two-beads">Example with two beads</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-with-three-beads">Example with three beads</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#from-hi-c-data">From Hi-C data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#example-usage">Example usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#questions-and-answers">Questions and Answers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#resume-aborted-work">Resume aborted work?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-are-the-columns-of-coords-csv">What are the columns of <code class="docutils literal notranslate"><span class="pre">coords.csv</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#visualizing-the-results">Visualizing the results?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hap1-with-gpseq-at-100-kb">HAP1 with GPSeq at 100 kb</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#get-hi-c-data">Get Hi-C data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#convert-hi-c-matrix-to-raw-matrices">Convert Hi-C matrix to raw matrices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#convert-hi-c-cc-data-to-contact-probability-matrix-cpm">Convert Hi-C (cc) data to contact probability matrix (cpm)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#prepare-gpseq-data">Prepare GPSeq data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#run-chromflock">Run chromflock</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mstep.html">Molecular dynamics (M-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="astep.html">Contact assignment (A-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="additional.html">Additional topics</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chromflock</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h1>
+<p>If you have installed chromflock there will be man pages for the
+binaries, as well a some short usage instructions via the <strong>–help</strong>
+flag. The man pages, rendered to text, can also be viewed here:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="man/mflock.txt">mflock</a></p></li>
+<li><p><a class="reference external" href="man/aflock.txt">aflock</a></p></li>
+<li><p><a class="reference external" href="man/chromflock.txt">chromflock</a></p></li>
+</ul>
+<section id="prepare-input-to-chromflock">
+<h2>Prepare input to chromflock<a class="headerlink" href="#prepare-input-to-chromflock" title="Link to this heading"></a></h2>
+<p>Chromflock requires two data sources:</p>
+<ol class="arabic simple">
+<li><p>A quadratic and symmetric contact probability matrix which says how
+probable it is that each bead is in contact with every other bead,
+let’s assume that you will name it <strong>contact_probabilities.double</strong>.</p></li>
+<li><p>An array telling chromflock which bead that belongs to what
+chromosome. Let’s assume that you call it <strong>chromosome_labels.u8</strong>.</p></li>
+</ol>
+<p>Both files have to be written as raw data and the user, you, have to
+create them.</p>
+<section id="example-with-two-beads">
+<h3>Example with two beads<a class="headerlink" href="#example-with-two-beads" title="Link to this heading"></a></h3>
+<p>A really small, but correct input pair would be this:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\mbox{contact_probabilities} = \begin{bmatrix} 0 &amp; 1 \\ 1 &amp; 0 \end{bmatrix},\quad
+\mbox{labels} = \begin{bmatrix} 1 \\ 1 \end{bmatrix}\end{split}\]</div>
+<p>chromflock would interpret it as follows: The first and second bead are
+in contact with probability 1, i.e. they will be connected in all
+structures. The label matrix will be interpreted as the first and second
+bead belong to the same chromosome, 1.</p>
+<p>By command line you could create such input by:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>chromflock<span class="w"> </span>string2any<span class="w"> </span>contact_pairs.u32<span class="w"> </span>uint32_t<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="c1"># note 0-indexed</span>
+chromflock<span class="w"> </span>string2any<span class="w"> </span>chromosome_labels.u8<span class="w"> </span>uint8_t<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">1</span>
+</pre></div>
+</div>
+</section>
+<section id="example-with-three-beads">
+<h3>Example with three beads<a class="headerlink" href="#example-with-three-beads" title="Link to this heading"></a></h3>
+<div class="math notranslate nohighlight">
+\[\begin{split}\mbox{CP} = \begin{bmatrix} 0 &amp; 1 &amp; 0.4\\ 1 &amp; 0 &amp; 1\\ 0.4 &amp; 1 &amp; 0 \end{bmatrix},\quad
+\mbox{L} = \begin{bmatrix} 1 \\ 1 \\ 1 \end{bmatrix}\end{split}\]</div>
+<p>If you generate structures with this input, the first and third bead
+would be in contact in :math:<code class="docutils literal notranslate"><span class="pre">\leq</span></code> 40% of the structures. I.e., if
+you generate 3 structures the contact between the first and the third
+bead will be in contact in one of them. I.e., visualized with chimera,
+this is what you might get:</p>
+<p>where connections between adjacent beads are shown in yellow, other
+connections in grey (e.g., the connection between the first and third
+bead in this example).</p>
+</section>
+<section id="from-hi-c-data">
+<h3>From Hi-C data<a class="headerlink" href="#from-hi-c-data" title="Link to this heading"></a></h3>
+<p>For real data you would start with Hi-C data, load it into Python/MATLAB
+or your language of preference and then convert the Hi-C counts to
+contact probabilities. Chromflock has a tool to convert raw counts to
+contact probabilities (note there are many alternative ways to do that)
+which has a command line interface like this:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>chromflock<span class="w"> </span>hic2cpm<span class="w"> </span>--help<span class="w"> </span><span class="c1"># check this out first</span>
+chromflock<span class="w"> </span>hic2cpm<span class="w"> </span>--hFile<span class="w"> </span>HiC-data.double<span class="w"> </span>--lFile<span class="w"> </span>chromosome_labels.u8<span class="w"> </span>--nStruct<span class="w"> </span><span class="m">1000</span>
+</pre></div>
+</div>
+<p>Note that you would still have to export the Hi-C data as raw doubles
+and write to disk.</p>
+</section>
+</section>
+<section id="example-usage">
+<h2>Example usage<a class="headerlink" href="#example-usage" title="Link to this heading"></a></h2>
+<p>Here is how you use the input data that you have prepared to generate
+structures:</p>
+<ol class="arabic simple">
+<li><p>Create a folder</p></li>
+</ol>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>chromflock_test1
+<span class="nb">cd</span><span class="w"> </span>chromflock_test1
+</pre></div>
+</div>
+<p>and copy the contact probability matrix and the label array to it.</p>
+<ol class="arabic simple" start="2">
+<li><p>Initialize chromflock</p></li>
+</ol>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>chromflock<span class="w"> </span>init
+</pre></div>
+</div>
+<p>This will create two new files in the folder: - <strong>chromflock_gen</strong> is a
+shell script and contains the overall settings like how many structures
+to generate, what input files to use etc. - <strong>mflock.lua</strong> is a lua
+script and contains the settings for the molecular dynamics, i.e. for
+mflock. This includes the number of iterations, the temperature as a
+function of iterations, the strength of the forces etc.</p>
+<p>Edit these files, at least chromflock_gen to set the number of
+structures and the contact probability matrix and the label array
+correct.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="c1"># Edit settings with vim (or nano or emacs or gedit ...)</span>
+vim<span class="w"> </span>chromflock_gen
+<span class="c1"># Possibly also the dynamics settings</span>
+vim<span class="w"> </span>mflock.lua
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Run chromflock</p></li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">./</span><span class="n">chromflock_run</span> <span class="c1"># runs chromflock</span>
+</pre></div>
+</div>
+</section>
+<section id="questions-and-answers">
+<h2>Questions and Answers<a class="headerlink" href="#questions-and-answers" title="Link to this heading"></a></h2>
+<section id="resume-aborted-work">
+<h3>Resume aborted work?<a class="headerlink" href="#resume-aborted-work" title="Link to this heading"></a></h3>
+<p>If <code class="docutils literal notranslate"><span class="pre">chromflock_run</span></code> was aborted for some reason, inspect
+<code class="docutils literal notranslate"><span class="pre">status.txt</span></code> to see the last thing that was finished and continue from
+any line, L, by</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>&lt;<span class="w"> </span><span class="o">(</span>sed<span class="w"> </span>-n<span class="w"> </span><span class="s1">&#39;L,$p&#39;</span><span class="w"> </span>chromflock_run<span class="o">)</span>
+</pre></div>
+</div>
+</section>
+<section id="what-are-the-columns-of-coords-csv">
+<h3>What are the columns of <code class="docutils literal notranslate"><span class="pre">coords.csv</span></code><a class="headerlink" href="#what-are-the-columns-of-coords-csv" title="Link to this heading"></a></h3>
+<p>The columns are <code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code>, <code class="docutils literal notranslate"><span class="pre">radius</span></code>, and (if supplied)
+<code class="docutils literal notranslate"><span class="pre">preferred_radius</span></code>.</p>
+</section>
+<section id="visualizing-the-results">
+<h3>Visualizing the results?<a class="headerlink" href="#visualizing-the-results" title="Link to this heading"></a></h3>
+<p>Each folder will have a <code class="docutils literal notranslate"><span class="pre">cmmdump.cmm.gz</span></code> which, once extracted, can be
+opened with <a class="reference external" href="https://www.cgl.ucsf.edu/chimera/">UCFS chimera</a> or A
+per chromosome color map, which can be found in <code class="docutils literal notranslate"><span class="pre">src/cmmdump.c</span></code> is
+used. Which look like this:</p>
+</section>
+</section>
+<section id="hap1-with-gpseq-at-100-kb">
+<h2>HAP1 with GPSeq at 100 kb<a class="headerlink" href="#hap1-with-gpseq-at-100-kb" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The code examples in this section contain references to scripts that re not available in the chromflock repo. To be updated.</p>
+</div>
+<p>This can be done on a system with 32 GB but will kill a system with 16
+GB of ram (or use a lot of swapping).</p>
+<section id="get-hi-c-data">
+<h3>Get Hi-C data<a class="headerlink" href="#get-hi-c-data" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 5,032,452,195 bytes</span>
+<span class="n">wget</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">data</span><span class="mf">.4</span><span class="n">dnucleome</span><span class="o">.</span><span class="n">org</span><span class="o">/</span><span class="n">files</span><span class="o">-</span><span class="n">processed</span><span class="o">/</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">/@</span><span class="nd">@download</span><span class="o">/</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span>
+</pre></div>
+</div>
+</section>
+<section id="convert-hi-c-matrix-to-raw-matrices">
+<h3>Convert Hi-C matrix to raw matrices<a class="headerlink" href="#convert-hi-c-matrix-to-raw-matrices" title="Link to this heading"></a></h3>
+<p>This step requires that straw is installed and can be found in the PATH.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># A 30877x30877 matrix</span>
+<span class="o">~/</span><span class="n">code</span><span class="o">/</span><span class="n">chromflock_dev</span><span class="o">/</span><span class="n">util</span><span class="o">/</span><span class="n">python</span><span class="o">/</span><span class="n">chromflock_hic2H</span><span class="o">.</span><span class="n">py</span> <span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span> <span class="mi">100000</span>
+</pre></div>
+</div>
+</section>
+<section id="convert-hi-c-cc-data-to-contact-probability-matrix-cpm">
+<h3>Convert Hi-C (cc) data to contact probability matrix (cpm)<a class="headerlink" href="#convert-hi-c-cc-data-to-contact-probability-matrix-cpm" title="Link to this heading"></a></h3>
+<p>ChrY is also removed at this stage.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mkdir</span> <span class="mi">1000</span>
+<span class="n">cd</span> <span class="mi">1000</span>
+<span class="n">chromflock</span> <span class="n">hic2cpm</span> <span class="o">--</span><span class="n">hfile</span> <span class="o">../</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span><span class="o">.</span><span class="n">H_trans</span><span class="o">.</span><span class="n">double</span> <span class="o">--</span><span class="n">lfile</span> <span class="o">../</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span><span class="o">.</span><span class="n">H_trans</span><span class="o">.</span><span class="n">L</span><span class="o">.</span><span class="n">uint8</span> <span class="o">--</span><span class="n">nCont</span> <span class="mi">8</span> <span class="o">--</span><span class="n">nStruct</span> <span class="mi">1000</span>
+</pre></div>
+</div>
+</section>
+<section id="prepare-gpseq-data">
+<h3>Prepare GPSeq data<a class="headerlink" href="#prepare-gpseq-data" title="Link to this heading"></a></h3>
+<p>Example code using MATLAB</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">L</span> <span class="o">=</span> <span class="n">read_raw</span><span class="p">(</span><span class="s1">&#39;8.000000_1000_MAX.L.uint8&#39;</span><span class="p">,</span> <span class="s1">&#39;uint8&#39;</span><span class="p">);</span>
+<span class="n">L</span> <span class="o">=</span> <span class="n">L</span><span class="p">(</span><span class="n">L</span><span class="o">&lt;</span><span class="mi">24</span><span class="p">);</span> <span class="o">%</span> <span class="n">Excluded</span> <span class="n">Y</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">already</span> <span class="n">excluded</span>
+
+<span class="n">G</span> <span class="o">=</span> <span class="n">loadGPSeq</span><span class="p">(</span><span class="n">L</span><span class="p">,</span> <span class="o">...</span>
+    <span class="s1">&#39;/mnt/bicroserver2/projects/GPSeq/centrality_by_seq/SeqNoGroup/B170_transCorrected/all/B170_transCorrected.asB165.rescaled.bins.size100000.step100000.csm3.rmOutliers_chi2.rmAllOutliers.tsv&#39;</span><span class="p">,</span> <span class="o">...</span>
+    <span class="mi">100000</span><span class="p">);</span>
+
+<span class="n">GN</span> <span class="o">=</span> <span class="n">log2</span><span class="p">(</span><span class="n">G</span><span class="p">);</span>
+<span class="n">GN</span><span class="p">(</span><span class="n">GN</span><span class="o">&gt;</span><span class="mi">1</span><span class="p">)</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+<span class="n">GN</span><span class="p">(</span><span class="n">GN</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="o">%</span> <span class="n">GG</span><span class="p">:</span> <span class="n">That</span><span class="s1">&#39;s GPSeq score, ergo &quot;centrality&quot;. I.e., greater at the center.</span>
+<span class="n">GN</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">GN</span><span class="p">;</span>
+
+<span class="n">figure</span><span class="p">,</span> <span class="n">plot</span><span class="p">(</span><span class="n">GN</span><span class="p">)</span>
+<span class="n">write_raw</span><span class="p">(</span><span class="n">GN</span><span class="p">,</span> <span class="s1">&#39;G.double&#39;</span><span class="p">,</span> <span class="s1">&#39;double&#39;</span><span class="p">);</span>
+</pre></div>
+</div>
+</section>
+<section id="run-chromflock">
+<h3>Run chromflock<a class="headerlink" href="#run-chromflock" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">chromflock</span> <span class="n">init</span>
+<span class="n">vim</span> <span class="n">chromflock_gen</span>
+<span class="c1"># Add gpseq force</span>
+<span class="n">vim</span> <span class="n">chromflock</span><span class="o">.</span><span class="n">lua</span>
+<span class="o">./</span><span class="n">chromflock_gen</span>
+<span class="n">screen</span>
+<span class="o">./</span><span class="n">chromflock_run</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="mstep.html" class="btn btn-neutral float-right" title="Molecular dynamics (M-step)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Erik Wernersson.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

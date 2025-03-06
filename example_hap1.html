@@ -1,0 +1,172 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HAP1 with GPSeq at 100 kb &mdash; chromflock  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chromflock
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Chromflock</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mstep.html">Molecular dynamics (M-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="astep.html">Contact assignment (A-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="additional.html">Additional topics</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chromflock</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">HAP1 with GPSeq at 100 kb</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/example_hap1.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="hap1-with-gpseq-at-100-kb">
+<h1>HAP1 with GPSeq at 100 kb<a class="headerlink" href="#hap1-with-gpseq-at-100-kb" title="Link to this heading"></a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The code examples in this section contain references to scripts that re not available in the chromflock repo. To be updated.</p>
+</div>
+<p>This can be done on a system with 32 GB but will kill a system with 16
+GB of ram (or use a lot of swapping).</p>
+<section id="get-hi-c-data">
+<h2>Get Hi-C data<a class="headerlink" href="#get-hi-c-data" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 5,032,452,195 bytes</span>
+<span class="n">wget</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">data</span><span class="mf">.4</span><span class="n">dnucleome</span><span class="o">.</span><span class="n">org</span><span class="o">/</span><span class="n">files</span><span class="o">-</span><span class="n">processed</span><span class="o">/</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">/@</span><span class="nd">@download</span><span class="o">/</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span>
+</pre></div>
+</div>
+</section>
+<section id="convert-hi-c-matrix-to-raw-matrices">
+<h2>Convert Hi-C matrix to raw matrices<a class="headerlink" href="#convert-hi-c-matrix-to-raw-matrices" title="Link to this heading"></a></h2>
+<p>This step requires that straw is installed and can be found in the PATH.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># A 30877x30877 matrix</span>
+<span class="o">~/</span><span class="n">code</span><span class="o">/</span><span class="n">chromflock_dev</span><span class="o">/</span><span class="n">util</span><span class="o">/</span><span class="n">python</span><span class="o">/</span><span class="n">chromflock_hic2H</span><span class="o">.</span><span class="n">py</span> <span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span> <span class="mi">100000</span>
+</pre></div>
+</div>
+</section>
+<section id="convert-hi-c-cc-data-to-contact-probability-matrix-cpm">
+<h2>Convert Hi-C (cc) data to contact probability matrix (cpm)<a class="headerlink" href="#convert-hi-c-cc-data-to-contact-probability-matrix-cpm" title="Link to this heading"></a></h2>
+<p>ChrY is also removed at this stage.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mkdir</span> <span class="mi">1000</span>
+<span class="n">cd</span> <span class="mi">1000</span>
+<span class="n">chromflock</span> <span class="n">hic2cpm</span> <span class="o">--</span><span class="n">hfile</span> <span class="o">../</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span><span class="o">.</span><span class="n">H_trans</span><span class="o">.</span><span class="n">double</span> <span class="o">--</span><span class="n">lfile</span> <span class="o">../</span><span class="mi">4</span><span class="n">DNFI1E6NJQJ</span><span class="o">.</span><span class="n">hic</span><span class="o">.</span><span class="n">H_trans</span><span class="o">.</span><span class="n">L</span><span class="o">.</span><span class="n">uint8</span> <span class="o">--</span><span class="n">nCont</span> <span class="mi">8</span> <span class="o">--</span><span class="n">nStruct</span> <span class="mi">1000</span>
+</pre></div>
+</div>
+</section>
+<section id="prepare-gpseq-data">
+<h2>Prepare GPSeq data<a class="headerlink" href="#prepare-gpseq-data" title="Link to this heading"></a></h2>
+<p>Example code using MATLAB</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">L</span> <span class="o">=</span> <span class="n">read_raw</span><span class="p">(</span><span class="s1">&#39;8.000000_1000_MAX.L.uint8&#39;</span><span class="p">,</span> <span class="s1">&#39;uint8&#39;</span><span class="p">);</span>
+<span class="n">L</span> <span class="o">=</span> <span class="n">L</span><span class="p">(</span><span class="n">L</span><span class="o">&lt;</span><span class="mi">24</span><span class="p">);</span> <span class="o">%</span> <span class="n">Excluded</span> <span class="n">Y</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">already</span> <span class="n">excluded</span>
+
+<span class="n">G</span> <span class="o">=</span> <span class="n">loadGPSeq</span><span class="p">(</span><span class="n">L</span><span class="p">,</span> <span class="o">...</span>
+    <span class="s1">&#39;/mnt/bicroserver2/projects/GPSeq/centrality_by_seq/SeqNoGroup/B170_transCorrected/all/B170_transCorrected.asB165.rescaled.bins.size100000.step100000.csm3.rmOutliers_chi2.rmAllOutliers.tsv&#39;</span><span class="p">,</span> <span class="o">...</span>
+    <span class="mi">100000</span><span class="p">);</span>
+
+<span class="n">GN</span> <span class="o">=</span> <span class="n">log2</span><span class="p">(</span><span class="n">G</span><span class="p">);</span>
+<span class="n">GN</span><span class="p">(</span><span class="n">GN</span><span class="o">&gt;</span><span class="mi">1</span><span class="p">)</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+<span class="n">GN</span><span class="p">(</span><span class="n">GN</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="o">%</span> <span class="n">GG</span><span class="p">:</span> <span class="n">That</span><span class="s1">&#39;s GPSeq score, ergo &quot;centrality&quot;. I.e., greater at the center.</span>
+<span class="n">GN</span> <span class="o">=</span> <span class="mi">1</span><span class="o">-</span><span class="n">GN</span><span class="p">;</span>
+
+<span class="n">figure</span><span class="p">,</span> <span class="n">plot</span><span class="p">(</span><span class="n">GN</span><span class="p">)</span>
+<span class="n">write_raw</span><span class="p">(</span><span class="n">GN</span><span class="p">,</span> <span class="s1">&#39;G.double&#39;</span><span class="p">,</span> <span class="s1">&#39;double&#39;</span><span class="p">);</span>
+</pre></div>
+</div>
+</section>
+<section id="run-chromflock">
+<h2>Run chromflock<a class="headerlink" href="#run-chromflock" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">chromflock</span> <span class="n">init</span>
+<span class="n">vim</span> <span class="n">chromflock_gen</span>
+<span class="c1"># Add gpseq force</span>
+<span class="n">vim</span> <span class="n">chromflock</span><span class="o">.</span><span class="n">lua</span>
+<span class="o">./</span><span class="n">chromflock_gen</span>
+<span class="n">screen</span>
+<span class="o">./</span><span class="n">chromflock_run</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Erik Wernersson.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

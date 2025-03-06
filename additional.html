@@ -1,0 +1,367 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Additional topics &mdash; chromflock  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Contact assignment (A-step)" href="astep.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chromflock
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Chromflock</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mstep.html">Molecular dynamics (M-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="astep.html">Contact assignment (A-step)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Additional topics</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#binning">Binning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-contact-probability-matrix">The contact probability matrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ellipsoidal-domain">Ellipsoidal domain</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#distance-from-point-to-ellipsoid">Distance from point to Ellipsoid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#scaling-projection">Scaling projection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#domain-error-partial-derivatives">Domain Error / Partial derivatives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quick-discards">Quick discards</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#numerical-evaluation">Numerical evaluation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#visualizing-structures">Visualizing structures</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chromflock</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Additional topics</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/additional.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="additional-topics">
+<h1>Additional topics<a class="headerlink" href="#additional-topics" title="Link to this heading"></a></h1>
+<section id="binning">
+<h2>Binning<a class="headerlink" href="#binning" title="Link to this heading"></a></h2>
+<p>Most likely it would be better to bin the Hi-C data according to TAD
+boundaries than to use regular binning. TADs are compact by definition
+which makes it ideal to group together chromatin based on them. By
+having bins placed regularly and with the same size, many of them will
+cross more than one TAD. Hence regular binning might average out
+important differences that would be found if the simulations were based
+on TADs.</p>
+<p>While you can use non-regular binning, chromflock can at the moment
+only use beads of the same size.</p>
+</section>
+<section id="the-contact-probability-matrix">
+<h2>The contact probability matrix<a class="headerlink" href="#the-contact-probability-matrix" title="Link to this heading"></a></h2>
+<p>The input to chromflock is the contact probability matrix which, for
+each pair of beads states the probability that we find those beads in
+contact in any of the structures. If we would know how often each bead
+is in contact with every other bead in nuclei we could use that data
+right away.</p>
+<p>Unfortunately neither Hi-C or TCC provides absolute measurements since
+they are affected by several biases.</p>
+<p>First of all the concept of <em>contact</em> is not well defined. It is known
+that Hi-C has a certain capture range which is small, but not
+neglectable. Most likely it is small enought that we don’t need to care
+about it here.</p>
+<p>A few factors will also contribute to the efficiency of each genomic
+site, i.e., how easy it can be ligated.</p>
+<p>Matrix balancing of the Hi-C matrix (that can be done with the
+KR-algorithm) is often used as a pre-processing step when
+<em>normalizing</em> or <em>correcting</em> contact data. It should be noted that
+using such method, properties like chromatine density will also be
+normalized away.</p>
+</section>
+<section id="ellipsoidal-domain">
+<h2>Ellipsoidal domain<a class="headerlink" href="#ellipsoidal-domain" title="Link to this heading"></a></h2>
+<p>It is possible to use an ellipsoidal domain. Here follows some notes on
+how it is implemented and how it differs to a spherical domain.</p>
+<ol class="arabic">
+<li><p><em>Slower collision detection</em></p>
+<p>At the moment, there is no special handling for ellipses when
+detecting collisions. The same binning structure as we use for
+spheres is used to detect neighbours in ellipsoids. As a consequence
+a few bins will always be empty so the remaining bins have to host
+more beads.</p>
+</li>
+<li><p>The force keeping the beads inside the domain, <span class="math notranslate nohighlight">\(F_s\)</span>, is
+different. And slower.</p>
+<p>The direction and magnitude of the force that keeps the beads inside
+the domain is found by identifying the closest point on the ellipse
+from each bead. This involves solving a high order polynomial since
+there can be multiple solutions. The force is zero for any bead that
+is completely inside the domain so we can expect that there is a
+unique solution to the problem. This is solved with a few iterations
+of Newtons method, see below.</p>
+</li>
+<li><p>Several distinct ways to incorporate per-bead radial information.</p>
+<p>If there is radial information available, it can be interpreted in
+different ways. The major options are: 1) As geodesic distance to the
+domain boundary (normalized by the largest distance). 2) The length
+to the domain boundary when travelling along the ray that goes
+through the centre of the domain and the bead (normalized by this
+distance). Both alternatives will be equivalent to the definition
+that we use for spheres when the all axes of the ellipsoid are equal.</p>
+</li>
+</ol>
+<section id="distance-from-point-to-ellipsoid">
+<h3>Distance from point to Ellipsoid<a class="headerlink" href="#distance-from-point-to-ellipsoid" title="Link to this heading"></a></h3>
+<p>To find the shortest path from a point to an ellipsoid involve finding
+the roots of a 6th degree polynomial, see <a class="footnote-reference brackets" href="#id3" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a> and <a class="footnote-reference brackets" href="#id4" id="id2" role="doc-noteref"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></a>.</p>
+<p>We define an ellipsoid, <span class="math notranslate nohighlight">\(E\)</span> by the length of it’s axes, <span class="math notranslate nohighlight">\(a\)</span>,
+<span class="math notranslate nohighlight">\(b\)</span>, and <span class="math notranslate nohighlight">\(c\)</span> as the set of points <span class="math notranslate nohighlight">\({(x,y,z)}\)</span> for
+which:</p>
+<div class="math notranslate nohighlight">
+\[f(x,y, z) = \frac{x^2}{a^2} +\frac{y^2}{b^2} +  \frac{z^2}{c^2} - 1 = 0\]</div>
+<p>In matrix form we could write is as <span class="math notranslate nohighlight">\(x^TAx = 1\)</span> where</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}A =
+  \begin{pmatrix}
+    1/a^2 &amp; 0 &amp; 0 \\
+    0 &amp; 1/b^2 &amp; 0 \\
+    0 &amp; 0 &amp; 1/c^2 \\
+  \end{pmatrix}\end{split}\]</div>
+<p>To find the closest point <span class="math notranslate nohighlight">\(x\in E\)</span> to a arbitrary point <span class="math notranslate nohighlight">\(P\)</span>
+could be formulated as:</p>
+<div class="math notranslate nohighlight">
+\[x = P_E(y) = \mathop{\mathrm{arg\,min}}_{x^TAx=1} ||y-x||^2\]</div>
+<p>Using Lagrange multipliers, we find the equation:</p>
+<div class="math notranslate nohighlight">
+\[L = ||y-x||^2 + \lambda (1-x^TAx)\]</div>
+<p>The optimality condition states that</p>
+<div class="math notranslate nohighlight">
+\[\frac{\partial}{\partial x} L = 2(y-x) - 2\lambda Ax = 0\quad
+  \mbox{i.e.,}\quad x(\lambda A +I) = y\]</div>
+<p>which gives</p>
+<div class="math notranslate nohighlight" id="eq-1">
+<span id="equation-eq-1"></span><span class="eqno">(1)<a class="headerlink" href="#eq-1" title="Link to this equation"></a></span>\[x=(\lambda A +I)^{-1}y\]</div>
+<p>We insert that into <span class="math notranslate nohighlight">\(x^TAx=1\)</span> and get</p>
+<div class="math notranslate nohighlight" id="eq-2">
+<span id="equation-eq-2"></span><span class="eqno">(2)<a class="headerlink" href="#eq-2" title="Link to this equation"></a></span>\[\left(((\lambda A-I)^{-1})y\right)^TA(\lambda A -I)^{-1}y - 1 = 0\]</div>
+<p>Eq. <a class="reference internal" href="#eq-2"><span class="std std-ref">2</span></a> can the be solved numerically
+(for <span class="math notranslate nohighlight">\(\lambda\)</span>) using Newtons method, note that is isn’t
+complicated since <span class="math notranslate nohighlight">\(A\)</span> is diagonal. Finally <span class="math notranslate nohighlight">\(x\)</span> is obtained
+from Eq. <a class="reference internal" href="#eq-1"><span class="std std-ref">1</span></a>.</p>
+<p>There are other ways to find the closest point, below follows another
+approach. For a point <span class="math notranslate nohighlight">\(P = (x_P,y_P,z_P)\)</span> on <span class="math notranslate nohighlight">\(E\)</span> the surface
+normal is:</p>
+<div class="math notranslate nohighlight">
+\[N_E(P) = 2\left(\frac{x_P}{a^2} + \frac{y_P}{b^2} + \frac{z_P}{c^2}\right)\]</div>
+<p>It can be shown that the closest point <span class="math notranslate nohighlight">\(P \in E\)</span> from another
+point <span class="math notranslate nohighlight">\(Q\)</span>, <span class="math notranslate nohighlight">\(P-Q\)</span> is parallel to <span class="math notranslate nohighlight">\(N_E(P)\)</span>.</p>
+<p>Hence, at the solution:</p>
+<div class="math notranslate nohighlight">
+\[N_E(P) = c (P-Q)\]</div>
+<p>With the help of some extra notation: <span class="math notranslate nohighlight">\(A=1/a^2\)</span>, <span class="math notranslate nohighlight">\(B=1/b^2\)</span>
+<span class="math notranslate nohighlight">\(C=1/c^2\)</span> we see that:</p>
+<div class="math notranslate nohighlight" id="eq-3">
+<span id="equation-eq-3"></span><span class="eqno">(3)<a class="headerlink" href="#eq-3" title="Link to this equation"></a></span>\[c = \frac{x_P - x_Q}{x_P A} = \frac{y_P - y_Q}{y_P B} = \frac{z_P - z_Q}{z_P C}\]</div>
+<p>If we extract two equations from Eq. <a class="reference internal" href="#eq-3"><span class="std std-ref">3</span></a> and add
+the condition that <span class="math notranslate nohighlight">\(P\)</span> is on <span class="math notranslate nohighlight">\(E\)</span> we get the following set of
+equations:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{aligned}
+  c_1(P) = (x_P - x_Q)y_P B - (y_P - y_Q)x_PA \\
+  c_2(P) = (x_P-x_Q)z_PC - (z_P-z_Q)x_PA \\
+  c_3(P) = A(x_P)^2 + B(y_P)^2 + C(z_P)^2 - 1 \\
+\end{aligned}\end{split}\]</div>
+<p>which we can compose into a vectorial function which is quadratic in
+<span class="math notranslate nohighlight">\(P\)</span>.</p>
+<div class="math notranslate nohighlight">
+\[C(P) = (c_1(P), c_2(P), c_3(P))\]</div>
+<p>We can find zeros to <span class="math notranslate nohighlight">\(C(P)\)</span> using the Newton-Raphson method. In
+general:</p>
+<div class="math notranslate nohighlight">
+\[X^{(n+1)} = X^{(n)} + J^{-1}(X^{(n)})f(X^{(n)})\]</div>
+<p>where superscript in parenthesis denotes sucessive updated numbers and
+<span class="math notranslate nohighlight">\(J\)</span> is the Jacobian matrix, i.e.,</p>
+<div class="math notranslate nohighlight">
+\[J_{ij}= \frac{\partial f_i}{\partial x_j}\]</div>
+</section>
+<section id="scaling-projection">
+<h3>Scaling projection<a class="headerlink" href="#scaling-projection" title="Link to this heading"></a></h3>
+<p>Any point <span class="math notranslate nohighlight">\(Q\neq 0\)</span> can be scaled onto and ellipse. Let</p>
+<div class="math notranslate nohighlight">
+\[s(Q) = \left(\frac{Q_x}{a}\right)^2 +\left(\frac{Q_y}{b}\right)^2 +
+  \left(\frac{Q_z}{z}\right)^2\]</div>
+<p>Then <span class="math notranslate nohighlight">\(S(Q) = Q/\sqrt{s(Q)}\)</span> is on <span class="math notranslate nohighlight">\(E\)</span> since
+<span class="math notranslate nohighlight">\(S(cQ)=S(Q)c^2\)</span> and hence</p>
+<div class="math notranslate nohighlight">
+\[s(Q/\sqrt{s(Q)}) = \frac{s(Q)}{s(Q)} = 1\]</div>
+<p>For a more general setting where the ellipsoid is described by a matrix,
+<span class="math notranslate nohighlight">\(A\)</span>, we can introduce the quadratic form
+<span class="math notranslate nohighlight">\(\langle a, b \rangle
+= a^TAb\)</span> and the norm <span class="math notranslate nohighlight">\(||a|| = \sqrt{\langle a, a \rangle }\)</span> then
+it is clear that <span class="math notranslate nohighlight">\(||\frac{a}{||a||}|| = \frac{||a||}{||a||}\)</span>.</p>
+<p>This projection the same as scaling along a line that passes the origo.
+We define a scaling distance as:</p>
+<div class="math notranslate nohighlight">
+\[d_{S(E)}(Q) = ||Q-S(Q)||\]</div>
+<p>Please note that <span class="math notranslate nohighlight">\(d_{S(E)}(Q)\)</span> isn’t the shortest Euclidean
+distance to the ellipsoid unless <span class="math notranslate nohighlight">\(a=b=c\)</span>.</p>
+<p>Using this we introduce a notation for the shortest distance:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}d_{G(E)}(y) =
+  \begin{cases}
+    \phantom{-}||y - P_E(y)|| &amp; \text{if } d_{S(E)}(x) \geq 1\\
+    -||y - P_E(y)|| &amp; \text{if } d_{S(E)}(x) &lt; 1 \\
+  \end{cases}\end{split}\]</div>
+</section>
+<section id="domain-error-partial-derivatives">
+<h3>Domain Error / Partial derivatives<a class="headerlink" href="#domain-error-partial-derivatives" title="Link to this heading"></a></h3>
+<p>For a point <span class="math notranslate nohighlight">\(p\)</span> we first find <span class="math notranslate nohighlight">\(r = d_G(p)\)</span>. If
+<span class="math notranslate nohighlight">\(r+R_0 &gt; 0\)</span>, the error <span class="math notranslate nohighlight">\(E_d(p) = (r - R_0)^2\)</span>, otherwise
+<span class="math notranslate nohighlight">\(0\)</span>.</p>
+<div class="math notranslate nohighlight">
+\[\frac{\partial}{\partial x_i}E_d = \frac{2(p_i-q_i) r}{r-R_0}\]</div>
+</section>
+<section id="quick-discards">
+<h3>Quick discards<a class="headerlink" href="#quick-discards" title="Link to this heading"></a></h3>
+<p>If the domain is defined by an ellipsoid, <span class="math notranslate nohighlight">\(E=(a, b, c)\)</span> then
+(lemma) for any point
+<span class="math notranslate nohighlight">\(Q \in E_\delta=(a-\delta, b-\delta, c-\delta)\)</span> the geodesic
+distance to <span class="math notranslate nohighlight">\(E\)</span> is at least <span class="math notranslate nohighlight">\(\delta\)</span>, i.e.,
+<span class="math notranslate nohighlight">\(d_{G(E)}(Q)\geq
+\delta\)</span> (equality along the axes). Equivalently:</p>
+<div class="math notranslate nohighlight">
+\[|| p - q || \geq \delta, \quad p\in E, \quad q \in E_\delta\]</div>
+</section>
+<section id="numerical-evaluation">
+<h3>Numerical evaluation<a class="headerlink" href="#numerical-evaluation" title="Link to this heading"></a></h3>
+<p>In this section we will study the geodesic shortest distance vs the
+distance obtained by scaling for relevant <span class="math notranslate nohighlight">\(E\)</span> and distances from
+<span class="math notranslate nohighlight">\(E\)</span>, as well as the direction of the normal of <span class="math notranslate nohighlight">\(E\)</span> at
+<span class="math notranslate nohighlight">\(P(Q)\)</span> vs <span class="math notranslate nohighlight">\(S(Q)\)</span>.</p>
+<p>How can it be tested? What has been tested?</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Method</span>        <span class="n">maxerr</span>      <span class="n">relerr</span>    <span class="n">angerr</span>     <span class="n">t</span>         <span class="n">tpp</span>
+<span class="n">scaling1</span>      <span class="mf">1.3368e-01</span>  <span class="mf">83.55574</span>  <span class="mf">1.3161</span><span class="o">+</span><span class="mi">01</span>  <span class="mf">1.17e-01</span>  <span class="mf">8.50e+07</span>
+<span class="n">scaling2</span>      <span class="mf">3.6489e-01</span>  <span class="mf">2.28e+02</span>  <span class="mf">3.0681</span><span class="o">+</span><span class="mi">01</span>  <span class="mf">1.87e-01</span>  <span class="mf">5.34e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">1</span>      <span class="mf">1.3480e-02</span>  <span class="mf">8.425478</span>  <span class="mf">1.5497</span><span class="o">+</span><span class="mi">00</span>  <span class="mf">2.85e-01</span>  <span class="mf">3.49e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">2</span>      <span class="mf">1.4290e-04</span>  <span class="mf">0.089318</span>  <span class="mf">1.4435</span><span class="o">-</span><span class="mi">02</span>  <span class="mf">4.27e-01</span>  <span class="mf">2.34e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">3</span>      <span class="mf">1.4824e-08</span>  <span class="mf">0.000009</span>  <span class="mf">3.4150</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">5.70e-01</span>  <span class="mf">1.75e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">4</span>      <span class="mf">3.3577e-12</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">7.01e-01</span>  <span class="mf">1.42e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">5</span>      <span class="mf">3.3577e-12</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">7.02e-01</span>  <span class="mf">1.42e+07</span>
+<span class="n">bektas</span><span class="o">-</span><span class="mi">99</span>     <span class="mf">3.3577e-12</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">7.02e-01</span>  <span class="mf">1.42e+07</span>
+<span class="n">lagrange1</span>     <span class="mf">1.1443e-01</span>  <span class="mf">71.52170</span>  <span class="mf">6.6816</span><span class="o">+</span><span class="mi">00</span>  <span class="mf">3.11e-01</span>  <span class="mf">3.21e+07</span>
+<span class="n">lagrange2</span>     <span class="mf">1.6737e-02</span>  <span class="mf">10.46074</span>  <span class="mf">9.4292</span><span class="o">-</span><span class="mi">01</span>  <span class="mf">4.78e-01</span>  <span class="mf">2.09e+07</span>
+<span class="n">lagrange3</span>     <span class="mf">4.4791e-04</span>  <span class="mf">0.279945</span>  <span class="mf">2.3522</span><span class="o">-</span><span class="mi">02</span>  <span class="mf">6.46e-01</span>  <span class="mf">1.54e+07</span>
+<span class="n">lagrange4</span>     <span class="mf">3.3536e-07</span>  <span class="mf">0.000210</span>  <span class="mf">1.6817</span><span class="o">-</span><span class="mi">05</span>  <span class="mf">8.13e-01</span>  <span class="mf">1.22e+07</span>
+<span class="n">lagrange5</span>     <span class="mf">2.3831e-13</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">9.83e-01</span>  <span class="mf">1.01e+07</span>
+<span class="n">lagrange99</span>    <span class="mf">2.3831e-13</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">9.83e-01</span>  <span class="mf">1.01e+07</span>
+<span class="n">polynomial1</span>   <span class="mf">9.0911e-02</span>  <span class="mf">56.81946</span>  <span class="mf">7.1800</span><span class="o">+</span><span class="mi">00</span>  <span class="mf">1.38e-01</span>  <span class="mf">7.21e+07</span>
+<span class="n">polynomial2</span>   <span class="mf">4.0359e-02</span>  <span class="mf">25.22448</span>  <span class="mf">2.8665</span><span class="o">+</span><span class="mi">00</span>  <span class="mf">2.81e-01</span>  <span class="mf">3.55e+07</span>
+<span class="n">polynomial3</span>   <span class="mf">1.1012e-02</span>  <span class="mf">6.883039</span>  <span class="mf">6.4450</span><span class="o">-</span><span class="mi">01</span>  <span class="mf">4.71e-01</span>  <span class="mf">2.12e+07</span>
+<span class="n">polynomial4</span>   <span class="mf">1.0581e-03</span>  <span class="mf">0.661334</span>  <span class="mf">4.6778</span><span class="o">-</span><span class="mi">02</span>  <span class="mf">6.59e-01</span>  <span class="mf">1.51e+07</span>
+<span class="n">polynomial5</span>   <span class="mf">1.0840e-05</span>  <span class="mf">0.006775</span>  <span class="mf">3.4573</span><span class="o">-</span><span class="mi">04</span>  <span class="mf">9.01e-01</span>  <span class="mf">1.10e+07</span>
+<span class="n">polynomial99</span>  <span class="mf">3.5340e-12</span>  <span class="mf">0.000000</span>  <span class="mf">3.8181</span><span class="o">-</span><span class="mi">06</span>  <span class="mf">9.21e-01</span>  <span class="mf">1.08e+07</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="visualizing-structures">
+<h2>Visualizing structures<a class="headerlink" href="#visualizing-structures" title="Link to this heading"></a></h2>
+<p>The cmm files generated by mflock can be directly opened in <a class="reference external" href="https://www.cgl.ucsf.edu/chimera/">UCSF
+Chimera</a>, most likely also in
+their later software <a class="reference external" href="https://www.cgl.ucsf.edu/chimerax/">ChimeraX</a>.</p>
+<p>The color map that is encoded in chromflock is for haploid structures only:</p>
+<img alt="_images/cmm_cmap.svg" src="_images/cmm_cmap.svg" />
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id3" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>Hart, J.C. (1994). Distance to an Ellipsoid. Graphics gems. <a class="reference external" href="https://doi.org/10.1016/b978-0-12-336156-1.50019-7">doi</a></p>
+</aside>
+<aside class="footnote brackets" id="id4" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id2">2</a><span class="fn-bracket">]</span></span>
+<p>Alexei Yu. Uteshev, Marina V. Yashina, (2015) Metric problems for quadrics in multidimensional space, Journal of Symbolic Computation, Volume 68, Part 1, <a class="reference external" href="https://doi.org/10.1016/j.jsc.2014.09.021">doi</a></p>
+</aside>
+</aside>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="astep.html" class="btn btn-neutral float-left" title="Contact assignment (A-step)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Erik Wernersson.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

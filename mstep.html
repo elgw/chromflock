@@ -1,0 +1,230 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Molecular dynamics (M-step) &mdash; chromflock  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Contact assignment (A-step)" href="astep.html" />
+    <link rel="prev" title="Usage" href="usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chromflock
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Chromflock</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Molecular dynamics (M-step)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#definition-of-forces">Definition of forces</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#time-evolution">Time evolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#finding-neighbours">Finding neighbours</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="astep.html">Contact assignment (A-step)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="additional.html">Additional topics</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chromflock</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Molecular dynamics (M-step)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/mstep.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="molecular-dynamics-m-step">
+<h1>Molecular dynamics (M-step)<a class="headerlink" href="#molecular-dynamics-m-step" title="Link to this heading"></a></h1>
+<p>The m-step uses simulated annealing with a decreasing temperature.
+Currently 8 temperatures are used: <span class="math notranslate nohighlight">\(T=.7^s\)</span>, where <span class="math notranslate nohighlight">\(s =
+0, ..., 6\)</span> and then finally <span class="math notranslate nohighlight">\(T=0\)</span>.</p>
+<p>If chromosome compression is enabled, it is turned off when <span class="math notranslate nohighlight">\(T=0\)</span>
+in order for the structure to relax.</p>
+<p>The forces in common with Alber are:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(F_v\)</span>, volume exclusion, i.e. beads are not allowed to overlap.</p></li>
+<li><p><span class="math notranslate nohighlight">\(F_s\)</span>, confinement in the sphere.</p></li>
+<li><p><span class="math notranslate nohighlight">\(F_a\)</span>, attraction between beads in contacts.</p></li>
+<li><p><span class="math notranslate nohighlight">\(F_c\)</span>, chromosomal compression.</p></li>
+</ul>
+<p>As well as:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(F_r\)</span>, radial positioning (GPSeq).</p></li>
+<li><p><span class="math notranslate nohighlight">\(F_b\)</span>, Brownian force.</p></li>
+<li><p><span class="math notranslate nohighlight">\(F_v\)</span>, viscosity or dampening proportional to the velocity of
+each bead.</p></li>
+</ul>
+<section id="definition-of-forces">
+<h2>Definition of forces<a class="headerlink" href="#definition-of-forces" title="Link to this heading"></a></h2>
+<p>Here follows a list of the forces that chromflock uses. The Brownian
+force:</p>
+<div class="math notranslate nohighlight">
+\[F_b(i) = c_bs\]</div>
+<p>where <span class="math notranslate nohighlight">\(s\)</span> is drawn from an isotropic 3D Gaussian with
+<span class="math notranslate nohighlight">\(\sigma=1\)</span>. The drag force (viscosity):</p>
+<div class="math notranslate nohighlight">
+\[F_v(i) = -\eta v(i)\]</div>
+<p>The other forces are defined in terms of their errors (or potential). We
+set <span class="math notranslate nohighlight">\(d_{ij} = ||X_i - X_j||\)</span>, and <span class="math notranslate nohighlight">\(r_i=||X_i||\)</span>, then the
+volume exclusions potential that keeps the beads from overlapping is:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}E_v(i,j) = \begin{cases}
+    c_v(d_{ij} - 2R_b)^2 &amp; \text{if } d_{ij} &lt; 2R_b,\\
+    0 &amp; \text{if } d_{ij} &gt; 2R_b.
+  \end{cases}\end{split}\]</div>
+<p>The potential that keeps the beads inside the domain (nuclei):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}E_d(i) = \begin{cases}
+    c_d(r_i+R_b-R_s)^2 &amp; \text{if } r_i &gt; R_s-R_b, \\
+    0 &amp; \text{if } r_i &lt; 1-R_b
+  \end{cases}
+  \label{eq:domError}\end{split}\]</div>
+<p>And the potential that keeps beads attracted to each other:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}E_a(i,j) = \begin{cases}
+    c_a(d_{ij}-R_c)^2 &amp; \text{if } W_{ij} =1 \mbox{ and } d_{ij}&gt;R_c, \\
+    0 &amp; \text{if } W_{ij} =0.
+  \end{cases}\end{split}\]</div>
+<p>And the potential for radial preference:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}E_r(i) = \begin{cases}
+    c_r (r_i-g_i)^2 &amp; \text{if } g_i \text{is finite} \\
+    0 &amp; \text{else}
+  \end{cases}\end{split}\]</div>
+<div class="math notranslate nohighlight">
+\[E_c(i) = c_c(p_i-m_k)^2\]</div>
+<p>when bead <span class="math notranslate nohighlight">\(i\)</span> belongs to chromosome <span class="math notranslate nohighlight">\(k\)</span>. We let the volume
+exclusion force vary with time as:</p>
+<div class="math notranslate nohighlight">
+\[F_v(x) = \frac{1}{2}\left(1+\mbox{erf}(\beta(p-.5)\right)
+  \label{eq:kvol}\]</div>
+<p>where we let <span class="math notranslate nohighlight">\(\beta\)</span>=5.</p>
+<p>The total error is</p>
+<div class="math notranslate nohighlight">
+\[E = \sum_{i=1}^N \left(E_d(i) + E_c(i) + E_r(i)\right) + \sum_{i,j} \left(E_v(i,j)+E_a(i,j)\right)\]</div>
+<p>and hence the total forces are:</p>
+<div class="math notranslate nohighlight">
+\[F = \nabla E + F_b + F_v\]</div>
+<p>It is inefficient to calculate <span class="math notranslate nohighlight">\(\nabla E\)</span> by finite differences,
+and hence we have derived analytic expressions which we have validated
+against the numerical gradient.</p>
+</section>
+<section id="time-evolution">
+<h2>Time evolution<a class="headerlink" href="#time-evolution" title="Link to this heading"></a></h2>
+<p>We use Verlet integration <a class="footnote-reference brackets" href="#id2" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a> to
+evolve the beads in time:</p>
+<div class="math notranslate nohighlight">
+\[X_{t+1} = 2X_t - X_{t-1} - (\Delta t)^2F\]</div>
+</section>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<p>Default parameters are: <span class="math notranslate nohighlight">\(R_s = 1\)</span>, <span class="math notranslate nohighlight">\(V_q = 0.2\)</span>
+<span class="math notranslate nohighlight">\(R_c = (2.1+0.9p)R_b\)</span> <span class="math notranslate nohighlight">\(\eta = 0.5\)</span>, <span class="math notranslate nohighlight">\(\Delta t = 0.15\)</span>,
+<span class="math notranslate nohighlight">\(c_a = 1\)</span>, <span class="math notranslate nohighlight">\(c_b=1\)</span>. <span class="math notranslate nohighlight">\(c_c=1\)</span>, <span class="math notranslate nohighlight">\(c_d=1\)</span>,
+<span class="math notranslate nohighlight">\(c_r=0\)</span> or <span class="math notranslate nohighlight">\(0.001\)</span> if the radial force is enabled,
+<span class="math notranslate nohighlight">\(c_s=1\)</span>, <span class="math notranslate nohighlight">\(c_v=1\)</span>. Where <span class="math notranslate nohighlight">\(p\in[0,1]\)</span> is the proportion
+of steps taken.</p>
+</section>
+<section id="finding-neighbours">
+<h2>Finding neighbours<a class="headerlink" href="#finding-neighbours" title="Link to this heading"></a></h2>
+<p>An indirect hash table constructed with count-sort is used. It has low
+memory usage since the load factor is 1. It might be faster to use open
+addressing with linear probing since there are limits for how many beads
+there can be per bucket due to self-repulsion.</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id2" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<ol class="upperalpha simple" start="20">
+<li><p>Schlick (2010) Molecular Modeling and Simulation: An Interdisciplinary Guide, Spinger <a class="reference external" href="https://doi.org/10.1007/978-1-4419-6351-2">doi</a></p></li>
+</ol>
+</aside>
+</aside>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage.html" class="btn btn-neutral float-left" title="Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="astep.html" class="btn btn-neutral float-right" title="Contact assignment (A-step)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Erik Wernersson.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
