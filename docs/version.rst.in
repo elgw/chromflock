@@ -1,0 +1,3 @@
+.. version.rst is generated from version.rst.in by cmake
+
+Latest version: ${chromflock_VERSION_MAJOR}.${chromflock_VERSION_MINOR}.${chromflock_VERSION_PATCH}
