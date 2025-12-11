@@ -99,12 +99,8 @@ double errRepulsion(const double * restrict D,
     double d2 = pow(d,2);
 
     // 1. Counting -- Figure out how many elements per bucket
-    int nDiv = 9; // Will create nDiv^3 buckets over [-1,1]^3
-
-    if(N>10000)
-    {
-        nDiv = 15;
-    }
+    int nDiv = cbrt(N/8);
+    nDiv < 1 ? nDiv = 1 : 0;
 
     // i.e. bucket side length is 2/nDiv which can be related to d.
     // You can figure out optimal nDiv vs d and N by
@@ -249,11 +245,9 @@ gradRepulsion(const double * restrict D,
     double d2 = pow(d,2);
 
     // 1. Figure out how many elements per bucket
-    int nDiv = 9;
-    if(N>10000)
-    {
-        nDiv = 15;
-    }
+    int nDiv = cbrt(N/8);
+    nDiv < 1 ? nDiv = 1 : 0;
+    
     size_t nH = nDiv*nDiv*nDiv;
     uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);

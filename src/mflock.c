@@ -145,10 +145,9 @@ static void mflock_logwrite(const mflock_t * p, int level, const char * fmt, ...
  * @breif The beads dynamics main loop
  *
  * @param p the settings
- * @param Fb: the Brownian force
  */
-static int mflock_dynamics(mflock_t * restrict p,
-                   double Fb);
+static int mflock_dynamics(mflock_t * restrict p);
+
 
 typedef enum {
     MFLOCK_ARGS_OK,
@@ -351,8 +350,8 @@ static void comforce(mflock_t * restrict p,
 }
 
 
-static int mflock_dynamics(mflock_t * restrict p,
-                           double Fb)
+static int
+mflock_dynamics(mflock_t * restrict p)
 {
     double * X = p->beads;
     /* set up fast prng in normal.h before calling normal() */
@@ -395,8 +394,7 @@ static int mflock_dynamics(mflock_t * restrict p,
     double gnorm = 9e99;
     double dt = 0.15;
     double damp = 0.5; /* dampening (.8) faster convergence than .4 */
-    int showStep = 0;
-    double Frnd = .10; /* Don't change this, change Fb instead */
+    int showStep = 0;    
 
     lua_State *L = NULL;
 
@@ -435,7 +433,7 @@ static int mflock_dynamics(mflock_t * restrict p,
         fconf.kBeadWell = lua_get_float(L, "kBeadWell");
         fconf.kChrWell = lua_get_float(L, "kChrWell");
         p->compress = lua_get_float(L, "kCom");
-        Fb = lua_get_float(L, "fBrown");
+        double Fb = lua_get_float(L, "fBrown");
         luaquit = lua_get_int(L, "quit");
         fconf.dInteraction = fconf.r0 * lua_get_float(L, "dInteraction");
 
@@ -473,35 +471,33 @@ static int mflock_dynamics(mflock_t * restrict p,
         {
             for(size_t kk = 0; kk < p->n_beads; kk++)
             {
-                double d[] = {0,0,0};
-                d[0] = normal(); /* From normal distribution */
-                d[1] = normal();
-                d[2] = normal();
-
                 for(size_t idx = 0 ; idx<3; idx++)
                 {
-                    g[3*kk+idx] += Fb*Frnd*d[idx];
+                    g[3*kk+idx] += 0.1*Fb*normal();
                 }
             }
         }
 
-        /* Bead wells */
+        /* 
+         * Bead wells i.e. attraction of beads to specific coordinates
+         * 
+         */
         if( p->n_bead_wells > 0 )
         {
             bead_wells_gradient(&fconf, p->bead_wells, p->n_bead_wells, X, g);
         }
 
         /* 2.3 Dampening */
-        /* Estimate velocities, note: per component */
+        /* Estimate velocities, 
+           note: cheating and doing it per component */
 
-        for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
+        if(damp > 0)
         {
-            v[pp] = (X[pp] - Xm[pp]) / (2.0 * dt);
-        }
-
-        for(size_t kk = 0; kk < 3*p->n_beads; kk++)
-        {
-            g[kk] = g[kk] + damp*v[kk];
+            for(size_t pp = 0 ; pp < 3*p->n_beads ; pp++)
+            {
+                v[pp] = (X[pp] - Xm[pp]) / (2.0 * dt);
+                g[pp] = g[pp] + damp*v[pp];
+            }
         }
 
         /* 3. Update X */
@@ -513,6 +509,9 @@ static int mflock_dynamics(mflock_t * restrict p,
         }
         /* End of molecular dynamics */
 
+        /* 
+         * Possibly output some info at the end of the step 
+         */
         if(iter % 1500 == 0 || iter == maxiter-1)
         { showStep = 1; } else { showStep = 0; }
 
@@ -1652,7 +1651,7 @@ static int mflock_load_coordinates(mflock_t * p)
 
 static void * solve_t(void * args)
 {
-    mflock_dynamics((mflock_t *) args, 0);
+    mflock_dynamics((mflock_t *) args);
     return NULL;
 }
 
@@ -1730,10 +1729,10 @@ static void mflock_run(mflock_t * p)
         liveview(p->beads, p->L, p->n_beads, &quit, p->r0, E);
         pthread_join(th, NULL);
     } else {
-        mflock_dynamics(p, 0);
+        mflock_dynamics(p);
     }
 #else
-    mflock_dynamics(p, 0);
+    mflock_dynamics(p);
 #endif
 
 
