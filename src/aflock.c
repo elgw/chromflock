@@ -6,6 +6,14 @@
 
 #include "aflock.h"
 
+static float norm3f(const float * X)
+{
+    float n = 0;
+    for(size_t kk = 0; kk<3; kk++)
+        n+=pow(X[kk], 2);
+    return sqrt(n);
+}
+
 static aflock * aflock_init()
 {
     aflock * c = calloc(1, sizeof(aflock));
@@ -54,13 +62,6 @@ static float eudist3(const float * A, const float * B)
     return sqrt( pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2));
 }
 
-static float norm3(const float * X)
-{
-    float n = 0;
-    for(size_t kk = 0; kk<3; kk++)
-        n+=pow(X[kk], 2);
-    return sqrt(n);
-}
 
 static void aflock_load_contact_probabilities(aflock * af)
 {
@@ -760,7 +761,7 @@ static void * final_tfun(void * data)
         {
             for(size_t kk = 0; kk<N; kk++)
             {
-                td->rprof[kk]+=norm3(X+3*kk);
+                td->rprof[kk]+=norm3f(X+3*kk);
             }
         }
 
@@ -882,7 +883,7 @@ static void flock_updateR(aflock * af, cf_structure * flock, double th_high, dou
 
                 for(size_t ss = 0; ss< af->nStruct; ss++)
                 {
-                    DS[ss] = norm3(flock[ss].X+pp*3);
+                    DS[ss] = norm3f(flock[ss].X+pp*3);
                     //printf("%f ", DS[ss]);
                 }
                 //printf("\n");
@@ -917,7 +918,7 @@ static void flock_updateR(aflock * af, cf_structure * flock, double th_high, dou
             if((PR[pp] < th_high) & (PR[pp] >= th_low))
                 /* Don't change the values for the other beads */
             {
-                double r = norm3(flock[ss].X+pp*3);
+                double r = norm3f(flock[ss].X+pp*3);
                 if(r <= TH[pp])
                 {
                     SR[pp] = R[pp];

@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #endif
 
+#include "ellipsoid.h"
+
 /** @brief returns the time at the moment
  *
  * @return A string with the current time in the format
@@ -56,3 +58,27 @@ double clockdiff(struct timespec* start,
  * @return -1 on failure;
  */
 int64_t cf_file_size(const char * filename);
+
+/* Write an array of bead coordinates to a csv file
+ * For each bead, x, y, z and r will be written.
+ * The reason for writing the radius is a convenience
+ * when the geometry is non-spherical (ellipsoidal)
+ * E should be set to NULL when a spherical geometry is used
+ */
+
+int
+write_bead_coordinates_to_csv(const char * fname,
+                              const double * X,
+                              const int64_t nbead,
+                              const elli * geometry);
+
+/* Read nbead rows from a csv
+ * Does not expect a header rows
+ * Three values are read from row, any extra values are ignored
+ * Values are interpreted as x, y, z coordinates of a bead
+ */
+
+int
+load_bead_coordinates_from_csv(const char * fname,
+                               double * X,
+                               const int64_t nbead);

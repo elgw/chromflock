@@ -1,5 +1,42 @@
 #pragma once
 
+
+#include <assert.h>
+#include <getopt.h>
+#include <math.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+#ifdef SDL
+#include <pthread.h>
+#endif
+
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+// TODO: Offer alternative for non x86-systems
+#include "fast_prng/normal.h"
+
+#ifdef SDL
+#include "liveview.h"
+#endif
+#include "cf_version.h"
+#include "cf_util.h"
+#include "cmmwrite.h"
+#include "ellipsoid.h"
+#include "functional.h"
+#include "wio.h"
+#include "contact_pairs_io.h"
+
+#include "mflock_help.h"
+
 typedef int64_t i64;
 
 
@@ -50,6 +87,8 @@ typedef struct {
     char * xoutfname;
     char * ofoldername; // Outfolder
     char * logfname; // log file name
+
+    int write_cmm;
     int cmmz;
 
     FILE * logf;
@@ -143,16 +182,6 @@ static void mflock_logwrite(const mflock_t * p, int level, const char * fmt, ...
  */
 static int mflock_dynamics(mflock_t * restrict p);
 
-static int
-write_bead_coordinates_to_csv(const char * fname,
-                              const double * X,
-                              const i64 nbead,
-                              const elli * geometry);
-
-static int
-load_bead_coordinates_from_csv(const char * fname,
-                                double * X,
-                                const i64 nbead);
 
 
 /** @brief parse command line arguments */

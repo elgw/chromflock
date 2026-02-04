@@ -1,0 +1,83 @@
+performs beads-on-a string simulations. Each beads should have
+a label, starting with 1 for chromosome 1. Consequent beads of the
+same label will be connected. Additional connections are supplied by
+the --contacts-pairs argument. Simulation settings are specified by a
+lua script via the --config argument.
+
+Required arguments
+==================
+--labels <file>, --L <file>
+	bead label array (uint8_t). Determines the number of beads.
+	(2X if --diploid is set)
+
+--contact-pairs <file>
+	File with contact pairs (uint32, uint32). The indexing is 0-based.
+
+--config mflock.lua
+	lua script that configures the dynamics dynamics. A template can be
+        found in the src folder.
+
+Optional arguments
+==================
+
+--coordinates <file>, -x <file>
+	file with initial coordinates. Unless provided the beads will be placed
+        randomly within the simulation domain.
+--diploid
+	Interpret/cast the labels for a diploid structure by duplication
+--seed N, -s N
+	seed for random number generator (defaults to random)
+--radii <file>, -r <file>
+	file with wanted radial position per bead, e.g. data from GPSeq. Values
+        should be encoded as 64-bit floats.
+--bead-wells <file>
+	specify a file containing preferred bead locations (bead wells)
+--config-show mflock.lua
+	Perform a dry run and print the dynamics settings as a table.
+	No additional arguments are required or used
+
+Geometry
+========
+
+By default the simulation domain is a sphere with radius 1, it remains so unless
+any of the --ea, --eb and/or --ec parameters are set.
+
+--volq vq, -Q vq
+	volume quotient (bead volume/domain volume), this is the preferred way
+        to control the bead size.
+--radius r0, -R r0
+	Explicitly set the bead radius if you for some reason don't want to use
+        the --volq option.
+
+These arguments will make the simulation domain switch to an
+ellipsoidal. Please make sure that ea >= eb >= ec >0.
+
+--ea ea
+	Major axis of ellipsoid
+--eb eb
+	Second axis of ellipsoid
+--ec ec
+	Third axis of ellipsoid
+
+General settings
+================
+
+--verbose level, -v level
+	verbosity (lowest=0, default=1, ... )
+--outFolder name, -o name
+	where to store results
+--cmm
+        The program will write a cmm file that can be visualized with ChimeraX.
+--cmmz, -z
+	write compressed cmm files (gzip), also enables --cmm
+--live
+	enable live monitoring (only when compiled with SDL)
+--help, -h
+	show this help message. For more info see 'man mflock'
+--defaults, -d
+	show default settings for the parameters
+--test
+	Run some self-tests and quit
+
+For additional help see the man page or visit
+https://www.github.com/elgw/chromflock/

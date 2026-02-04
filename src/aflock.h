@@ -266,4 +266,3 @@ int cmp_float(const void * A, const void * B);
 
 
 static float eudist3(const float * A, const float * B);
-static float norm3(const float * X);

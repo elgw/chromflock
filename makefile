@@ -80,6 +80,7 @@ src/sprite2cmap.c \
 obj/chromflock_init.o \
 obj/balance.o \
 obj/cf_util.o \
+obj/ellipsoid.o \
 obj/contact_pairs_io.o
 
 ## Targets
@@ -90,14 +91,15 @@ bin/chromflock: $(chromflock_files)
 bin/cmmfilter:
 	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` $(LDFLAGS) -o bin/cmmfilter
 
-mflock_files = src/mflock_cli.c \
+mflock_files = src/mflock_help.h \
+src/mflock_cli.c \
+obj/ellipsoid.o \
 src/mflock.o \
 src/functional.o \
 src/cmmwrite.o \
 src/wio.o \
 src/hsvrgb.o \
 src/liveview.o \
-obj/ellipsoid.o \
 obj/contact_pairs_io.o \
 obj/cf_util.o \
 
@@ -129,3 +131,6 @@ obj/contact_pairs_io.o: src/contact_pairs_io.c
 
 obj/cf_util.o: src/cf_util.c src/cf_util.h
 	$(CC) -c $(CFLAGS) src/cf_util.c -o obj/cf_util.o
+
+src/mflock_help.h: src/mflock_help.txt
+	xxd -i src/mflock_help.txt > src/mflock_help.h
