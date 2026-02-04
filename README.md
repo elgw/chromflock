@@ -10,6 +10,7 @@ putative single-cell structures. The overall scheme is borrowed from
 fork.
 
 Chromflock will:
+
  - Work with haploid as well as diploid structures.
  - Can integrate GPSeq data for radial preferences.
  - Supports spherical as well as an ellipsoidal domain for the beads.
@@ -36,11 +37,13 @@ Please see the [documentation](https://elgw.github.io/chromflock/) for
 more information.
 
 ## Usage
+
 Chromflock requires at least two data inputs
 
 1. A contact probability matrix, $`A`$, where $`A(i,j)`$ is the
-probability that bead $`i`$ and $`j`$ is in contact. This is typically
-constructed from a (bulk) Hi-C matrix.
+   probability that bead $`i`$ and $`j`$ is in contact. This is
+   typically constructed from a (bulk) Hi-C matrix.
+
 2. A label vector, $`L`$ defining how many beads there are and what
    numerical label each bead has.
 

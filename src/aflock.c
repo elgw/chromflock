@@ -169,7 +169,6 @@ static int aflock_load_coordinates(aflock * af, cf_structure * c)
 {
 
     size_t nBeads = af->nBeads*(1+af->diploid);
-
     c->X = malloc(nBeads*3*sizeof(float));
     assert(c->X != NULL);
     /* Read from c->xfName ... */
