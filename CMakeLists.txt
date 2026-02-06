@@ -43,7 +43,9 @@ set(mflock_SOURCES
   src/hsvrgb.c
   src/ellipsoid.c
   src/contact_pairs_io.c
-  src/cf_util.c)
+  src/cf_util.c
+  src/npio.c
+)
 
 set(aflock_SOURCES
   src/aflock.c
@@ -52,6 +54,7 @@ set(aflock_SOURCES
   src/cf_util.c
   src/ellipsoid.c
   src/oscp.c
+  src/npio.c
 )
 
 set(chromflock_SOURCES
@@ -65,6 +68,7 @@ set(chromflock_SOURCES
     src/balance.c
     src/cf_util.c
     src/contact_pairs_io.c
+    src/npio.c
   )
 
 add_executable( mflock ${mflock_SOURCES})

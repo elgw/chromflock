@@ -59,11 +59,16 @@ double clockdiff(struct timespec* start,
  */
 int64_t cf_file_size(const char * filename);
 
+/* Returns 1 if the string ends with .npy */
+int npy_extension(const char * name);
+
 /* Write an array of bead coordinates to a csv file
  * For each bead, x, y, z and r will be written.
  * The reason for writing the radius is a convenience
  * when the geometry is non-spherical (ellipsoidal)
  * E should be set to NULL when a spherical geometry is used
+ *
+ * returns 0 on success
  */
 
 int
@@ -72,13 +77,27 @@ write_bead_coordinates_to_csv(const char * fname,
                               const int64_t nbead,
                               const elli * geometry);
 
+int
+write_bead_coordinates_to_npy(const char * fname,
+                                  const double * X,
+                                  const int64_t nbead,
+                                  const elli * geometry);
+
 /* Read nbead rows from a csv
  * Does not expect a header rows
  * Three values are read from row, any extra values are ignored
  * Values are interpreted as x, y, z coordinates of a bead
+ *
+ * Writes values to either X32 or X64, i.e. exactly one of them should
+ * be non-NULL.
  */
 
 int
 load_bead_coordinates_from_csv(const char * fname,
-                               double * X,
+                               float * X32, double * X64,
+                               const int64_t nbead);
+
+int
+load_bead_coordinates_from_npy(const char * fname,
+                               float * X32, double * X64,
                                const int64_t nbead);

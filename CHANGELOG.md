@@ -1,5 +1,10 @@
 # CHANGELOG
 
+# 0.4.5
+- Writes/reads coordinates as Numpy .npy files by default, resulting in
+  approximately 50% smaller files and hopefully both faster and safer
+  parsing.
+
 ## 0.4.4
 - Moved documentation to sphinx.
 - Minor fixes.

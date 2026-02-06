@@ -149,7 +149,7 @@ static void cf_structure_init(cf_structure * c, size_t nQ, size_t n)
 
     c->xfName = malloc(64);
     assert(c->xfName != NULL);
-    snprintf(c->xfName, 64, "cf_%06zu/coords.csv", n+1);
+    snprintf(c->xfName, 64, "cf_%06zu/coords.npy", n+1);
 
     return;
 }
@@ -166,51 +166,39 @@ static void cf_structure_free(cf_structure * c)
 }
 
 
+
 static int aflock_load_coordinates(aflock * af, cf_structure * c)
 {
-
-    size_t nBeads = af->nBeads*(1+af->diploid);
-    c->X = malloc(nBeads*3*sizeof(float));
-    assert(c->X != NULL);
-    /* Read from c->xfName ... */
-
-    //  fprintf(stdout, "Reading X-data from %s\n", c->xfName);
-
-    FILE * f = fopen(c->xfName, "r");
-    if(f == NULL)
+    if(npy_extension(c->xfName))
     {
-        fprintf(stderr, "\rCan't open %s\n", c->xfName);
-        fprintf(stderr, "Did you forget to run mflock after aflock -I?\n");
-        exit(EXIT_FAILURE);
-    }
-
-    char * line = malloc(1024*sizeof(char));
-    assert(line != NULL);
-    size_t len = 1024*sizeof(char);
-
-    char delim[] = ",";
-    for(size_t ll = 0; ll < nBeads; ll++)
-    {
-        int read = getline(&line, &len, f);
-        if(read == -1)
+        size_t nBeads = af->nBeads*(1+af->diploid);
+        c->X = calloc(nBeads*3, sizeof(float));
+        if(c->X == NULL)
         {
-            printf("Failed to read line %zu\n", ll+1);
-            exit(EXIT_FAILURE);
+            return -1;
         }
-        char *ptr = strtok(line, delim);
-        c->X[3*ll] = atof(ptr);
-        ptr = strtok(NULL, delim);
-        c->X[3*ll+1] = atof(ptr);
-        ptr = strtok(NULL, delim);
-        c->X[3*ll+2] = atof(ptr);
+        if(load_bead_coordinates_from_npy(c->xfName, c->X, NULL, nBeads))
+        {
+            free(c->X);
+            return -1;
+        }
+        return 0;
+    } else {
+        size_t nBeads = af->nBeads*(1+af->diploid);
+        c->X = calloc(nBeads*3, sizeof(float));
+        if(c->X == NULL)
+        {
+            return -1;
+        }
+        if(load_bead_coordinates_from_csv(c->xfName, c->X, NULL, nBeads))
+        {
+            free(c->X);
+            return -1;
+        }
+        return 0;
     }
-
-    free(line);
-    fclose(f);
-
-    return 0;
+    return -1;
 }
-
 int cmp_float_reverse(const void * A, const void * B)
 {
     float * dA = (float *) A;
@@ -1019,10 +1007,10 @@ static void aflock_init_structures(aflock * af, cf_structure * flock)
 
         if(af->rfname == NULL)
         {
-            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.csv --vq %f",
+            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.npy --vq %f",
                     dir, dir, dir, af->vq);
         } else {
-            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.csv -r %sradius.double.gz --volq %f",
+            fprintf(jobFile, "mflock --contact-pairs %scontact-pairs.u32.gz -o %s -x %scoords.npy -r %sradius.double.gz --volq %f",
                     dir, dir, dir, dir, af->vq);
         }
 

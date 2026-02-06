@@ -70,6 +70,7 @@ typedef struct {
     double err_final;
 
     // Input file names
+    int use_csv; // write csv files rather than npy files with the coordinates
     char * wfname; // File with contact indications (depreciated)
     char * contact_pairs_file; /* File with contact pairs */
     char * rfname; // Wanted radius (GPSeq)

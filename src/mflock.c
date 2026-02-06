@@ -110,10 +110,10 @@ static int usleep_lua(lua_State * L)
 }
 
 
-/* Euclidean distance between two 3D-vectors */
+/* Euclidean distance between two 3D-vectors - squared */
 static double eudist3p2(const double * A, const double * B)
 {
-    return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2],2);
+    return pow(A[0]-B[0], 2) + pow(A[1]-B[1], 2) + pow(A[2]-B[2], 2);
 }
 
 
@@ -199,9 +199,9 @@ mflock_dynamics(mflock_t * restrict p)
         /* add ellipse parameters otherwise sphere domain */
         fconf.E = p->E;
         fconf.Es = elli_new(
-                            p->E->a - fconf.r0,
-                            p->E->b - fconf.r0,
-                            p->E->c - fconf.r0);
+            p->E->a - fconf.r0,
+            p->E->b - fconf.r0,
+            p->E->c - fconf.r0);
     }
 
     fconf.nIPairs = p->n_pairs; /* Only for err2 */
@@ -685,7 +685,6 @@ static void mflock_show(mflock_t * p, FILE * f)
         volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
     }
 
-
     fprintf(f, "\n");
     fprintf(f, " >> Parameters:\n");
     fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->n_beads, 3*p->n_beads);
@@ -859,7 +858,7 @@ static void test_read_write_csv(void)
         exit(EXIT_FAILURE);
     }
 
-    if(load_bead_coordinates_from_csv(tmpfile, Y, nbead))
+    if(load_bead_coordinates_from_csv(tmpfile, NULL, Y, nbead))
     {
         exit(EXIT_FAILURE);
     }
@@ -891,6 +890,20 @@ static void test_read_write_csv(void)
 static void mflock_ut(void)
 {
     printf("Testing ... \n");
+    int nfail = 0;
+    if(npy_extension("a.npy") == 0)
+    {
+        nfail++;
+    }
+    if(npy_extension("abc.NPY") == 0)
+    {
+        nfail++;
+    }
+    if(npy_extension("abc.PY") == 1)
+    {
+        nfail++;
+    }
+
     test_read_write_csv();
 
     printf("All tests passed\n");
@@ -951,12 +964,15 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "config",        required_argument, NULL,   'l' },
         { "dconf-show",    required_argument, NULL,   'M' },
         { "config-show",   required_argument, NULL,   'M' },
+
+        // debug
+        { "use-csv",       no_argument,       NULL,    'u' },
         { NULL,            0,                 NULL,    0  }
     };
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "aA:B:cC:Dw:x:r:n:t:R:v:o:p:hMs:L:zcdQ:l:W:T",
+                            "aA:B:cC:Dw:x:r:n:t:R:v:o:p:hMs:L:zcdQ:l:W:Tu",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1032,6 +1048,9 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             break;
         case 's':
             p->rseed = atol(optarg);
+            break;
+        case 'u':
+            p->use_csv = 1;
             break;
         case 'v':
             p->verbose = atoi(optarg);
@@ -1264,7 +1283,12 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     /* Set names of output files */
     mf->xoutfname = malloc(1024*sizeof(char));
     assert(mf->xoutfname != NULL);
-    sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.csv");
+    if(mf->use_csv)
+    {
+        sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.csv");
+    } else {
+        sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.npy");
+    }
 
     mf->logfname = malloc(1024*sizeof(char));
     assert(mf->logfname != NULL);
@@ -1419,9 +1443,16 @@ static void mflock_logwrite(const mflock_t * p, int level, const char *fmt, ...)
 
 static int mflock_load_coordinates(mflock_t * p)
 {
-    return load_bead_coordinates_from_csv(p->xfname,
-                                          p->beads,
-                                          p->n_beads);
+    if(npy_extension(p->xfname))
+    {
+        return load_bead_coordinates_from_npy(p->xfname,
+                                              NULL, p->beads,
+                                              p->n_beads);
+    } else {
+        return load_bead_coordinates_from_csv(p->xfname,
+                                              NULL, p->beads,
+                                              p->n_beads);
+    }
 }
 
 static int mflock_save_coordinates(mflock_t * p)
@@ -1446,10 +1477,19 @@ static int mflock_save_coordinates(mflock_t * p)
         mflock_logwrite(p, 1, "Columns: x, y, z, r\n");
     }
 
-    return write_bead_coordinates_to_csv(p->xoutfname,
-                                         p->beads,
-                                         p->n_beads,
-                                         p->E);
+// TODO: Check file extension as well.
+    if(p->use_csv)
+    {
+        return write_bead_coordinates_to_csv(p->xoutfname,
+                                             p->beads,
+                                             p->n_beads,
+                                             p->E);
+    } else {
+        return write_bead_coordinates_to_npy(p->xoutfname,
+                                             p->beads,
+                                             p->n_beads,
+                                             p->E);
+    }
 
 }
 

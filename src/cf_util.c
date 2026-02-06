@@ -4,7 +4,11 @@
  * @date 2020-2023
  */
 
+
+#include <ctype.h>
+
 #include "cf_util.h"
+#include "npio.h"
 
 typedef int64_t i64;
 
@@ -78,7 +82,7 @@ int64_t cf_file_size(const char * filename)
 
 int
 load_bead_coordinates_from_csv(const char * fname,
-                               double * X,
+                               float * X32, double * X64,
                                const i64 nbead)
 {
 
@@ -99,19 +103,39 @@ load_bead_coordinates_from_csv(const char * fname,
 
     char delim[] = ",";
     i64 ll = 0;
-    for( ; ll < nbead; ll++)
+    if(X32)
     {
-        int read = getline(&line, &line_len, fid);
-        if(read == -1){ goto parsing_error; }
-        char *ptr = strtok(line, delim);
-        if(ptr == NULL){ goto parsing_error; }
-        X[3*ll] = atof(ptr);
-        ptr = strtok(NULL, delim);
-        if(ptr == NULL){ goto parsing_error; }
-        X[3*ll+1] = atof(ptr);
-        ptr = strtok(NULL, delim);
-        if(ptr == NULL){ goto parsing_error; }
-        X[3*ll+2] = atof(ptr);
+        for( ; ll < nbead; ll++)
+        {
+            int read = getline(&line, &line_len, fid);
+            if(read == -1){ goto parsing_error; }
+            char *ptr = strtok(line, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X32[3*ll] = atof(ptr);
+            ptr = strtok(NULL, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X32[3*ll+1] = atof(ptr);
+            ptr = strtok(NULL, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X32[3*ll+2] = atof(ptr);
+        }
+    }
+    if(X64)
+    {
+        for( ; ll < nbead; ll++)
+        {
+            int read = getline(&line, &line_len, fid);
+            if(read == -1){ goto parsing_error; }
+            char *ptr = strtok(line, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X64[3*ll] = atof(ptr);
+            ptr = strtok(NULL, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X64[3*ll+1] = atof(ptr);
+            ptr = strtok(NULL, delim);
+            if(ptr == NULL){ goto parsing_error; }
+            X64[3*ll+2] = atof(ptr);
+        }
     }
 
     fclose(fid);
@@ -124,6 +148,62 @@ load_bead_coordinates_from_csv(const char * fname,
     free(line);
     return -1;
 
+}
+
+int
+load_bead_coordinates_from_npy(const char * fname,
+                               float * X32, double * X64,
+                               const i64 nbead)
+{
+    npio_t * npy = npio_load(fname);
+    if(npy == NULL)
+    {
+        return -1;
+    }
+    if(npy->ndim != 2)
+    {
+        goto fail_data;
+    }
+
+    if(npy->shape[1] != 4)
+    {
+        goto fail_data;
+    }
+
+    if(npy->dtype != NPIO_F32)
+    {
+        goto fail_data;
+    }
+    if(X64 != NULL)
+    {
+        const float * C = (const float *) npy->data;
+        for(i64 kk = 0; kk < nbead; kk++)
+        {
+            for(i64 ll =0; ll < 3; ll++)
+            {
+                X64[3*kk+ll] = C[4*kk+ll];
+            }
+        }
+    }
+    if(X32 != NULL)
+    {
+        const float * C = (const float *) npy->data;
+        for(i64 kk = 0; kk < nbead; kk++)
+        {
+            for(i64 ll =0; ll < 3; ll++)
+            {
+                X32[3*kk+ll] = C[4*kk+ll];
+            }
+        }
+    }
+    npio_free(npy);
+    return 0;
+
+ fail_data:
+    fprintf(stderr, "%s contains invalid data\n", fname);
+    npio_print(stderr, npy);
+    npio_free(npy);
+    return -1;
 }
 
 static double norm3d(const double * restrict X)
@@ -175,4 +255,84 @@ write_bead_coordinates_to_csv(const char * fname,
     fprintf(stderr, "An error occurred while writing to %s\n", fname);
     fclose(fid);
     return -1;
+}
+
+int write_bead_coordinates_to_npy(const char * fname,
+                                  const double * X,
+                                  const i64 nbead,
+                                  const elli * geometry)
+{
+    float * C = calloc(4*nbead, sizeof(float));
+    if(C == NULL)
+    {
+        fprintf(stderr,
+                "write_bead_coordinates_to_npy: "
+                "memory allocation failure\n");
+        return -1;
+    }
+
+    for(i64 kk = 0; kk<nbead; kk++)
+    {
+        for(i64 ll = 0; ll < 3; ll++)
+        {
+            C[4*kk + ll] = X[3*kk+ll];
+        }
+        double radius;
+        if(geometry == NULL)
+        {
+            radius = norm3d(X+3*kk);
+        } else {
+            radius = elli_getScale(geometry, X+3*kk);
+        }
+
+        C[4*kk + 3] = radius;
+    }
+    int shape[2] = {nbead, 4};
+
+    i64 status = npio_write(fname, 2,
+                            shape,
+                            (const void *) C,
+                            NPIO_F32, NPIO_F32);
+    free(C);
+    if(status == -1)
+    {
+        fprintf(stderr,
+                "write_bead_coordinates_to_npy: "
+                "npio_write failed when writing to %s\n", fname);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int npy_extension(const char * name)
+{
+    assert(name != NULL);
+    if(name == NULL)
+    {
+        return 0;
+    }
+    size_t len = strlen(name);
+    if(len < 5)
+    {
+        return 0;
+    }
+    if(toupper(name[len-1]) != 'Y')
+    {
+        return 0;
+    }
+    if(toupper(name[len-2]) != 'P')
+    {
+        return 0;
+    }
+    if(toupper(name[len-3]) != 'N')
+    {
+        return 0;
+    }
+    if(name[len-4] != '.')
+    {
+        return 0;
+    }
+    return 1;
 }

@@ -81,6 +81,7 @@ obj/chromflock_init.o \
 obj/balance.o \
 obj/cf_util.o \
 obj/ellipsoid.o \
+obj/npio.o \
 obj/contact_pairs_io.o
 
 ## Targets
@@ -102,6 +103,7 @@ src/hsvrgb.o \
 src/liveview.o \
 obj/contact_pairs_io.o \
 obj/cf_util.o \
+obj/npio.o \
 
 
 bin/mflock: $(mflock_files) makefile
@@ -112,7 +114,8 @@ src/wio.c \
 src/oscp.c \
 obj/ellipsoid.o \
 obj/cf_util.o \
-obj/contact_pairs_io.o
+obj/contact_pairs_io.o \
+obj/npio.o
 
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)
@@ -131,6 +134,9 @@ obj/contact_pairs_io.o: src/contact_pairs_io.c
 
 obj/cf_util.o: src/cf_util.c src/cf_util.h
 	$(CC) -c $(CFLAGS) src/cf_util.c -o obj/cf_util.o
+
+obj/npio.o: src/npio.c
+	$(CC) -c $(CFLAGS) src/npio.c -o obj/npio.o
 
 src/mflock_help.h: src/mflock_help.txt
 	xxd -i src/mflock_help.txt > src/mflock_help.h
