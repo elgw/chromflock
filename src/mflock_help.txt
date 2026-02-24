@@ -35,6 +35,9 @@ Optional arguments
 --config-show mflock.lua
 	Perform a dry run and print the dynamics settings as a table.
 	No additional arguments are required or used
+--absolute <file>
+        A file that provides absolute/fixed positions for certain beads.
+        Format: (bead_id, x, y, z)
 
 Geometry
 ========

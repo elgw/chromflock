@@ -7,6 +7,27 @@
 #include "mflock.h"
 #include "mflock_private.h"
 
+static bpos *  mflock_load_bead_apos(const char * fname, int * nbpos)
+{
+    if(npy_extension(fname))
+    {
+        int nconstraint = 0;
+        bpos * apos =  load_bead_apos_from_npy(fname,
+                                               &nconstraint);
+        if(apos == NULL)
+        {
+            fprintf(stderr, "Failed to load absolute bead positions from %s\n", fname);
+            exit(EXIT_FAILURE);
+        }
+        *nbpos = nconstraint;
+        return apos;
+    } else {
+        fprintf(stderr,
+                "Can only load absolute bead positions from npy files\n");
+        exit(EXIT_FAILURE);
+    }
+    return NULL;
+}
 
 static double norm3d(const double * restrict X)
 {
@@ -199,9 +220,9 @@ mflock_dynamics(mflock_t * restrict p)
         /* add ellipse parameters otherwise sphere domain */
         fconf.E = p->E;
         fconf.Es = elli_new(
-            p->E->a - fconf.r0,
-            p->E->b - fconf.r0,
-            p->E->c - fconf.r0);
+                            p->E->a - fconf.r0,
+                            p->E->b - fconf.r0,
+                            p->E->c - fconf.r0);
     }
 
     fconf.nIPairs = p->n_pairs; /* Only for err2 */
@@ -342,6 +363,20 @@ mflock_dynamics(mflock_t * restrict p)
         }
         /* End of molecular dynamics */
 
+        //
+        // Enforce absolute bead placement if --absolute was provided
+        //
+        if(p->bead_apos != NULL)
+        {
+            for(i64 kk = 0; kk < p->n_bead_apos; kk++)
+            {
+                i64 bead_id = p->bead_apos[kk].bead_id;
+                X[3*bead_id + 0] = p->bead_apos[kk].x;
+                X[3*bead_id + 1] = p->bead_apos[kk].y;
+                X[3*bead_id + 2] = p->bead_apos[kk].z;
+            }
+        }
+
         /*
          * Possibly output some info at the end of the step
          */
@@ -473,14 +508,30 @@ static void mflock_read_contact_pairs(mflock_t * p)
     mflock_logwrite(p, 1, "Reading pairwise interactions from %s\n",
                     p->contact_pairs_file);
     uint64_t nCP = 0;
-    p->I = contact_pairs_read(p->contact_pairs_file, &nCP);
-    if(p->I == NULL)
+    if(npy_extension(p->contact_pairs_file))
     {
-        fprintf(stderr, "%s/%d Failed to read contact pairs from %s\n",
-                __FILE__, __LINE__, p->contact_pairs_file);
-        exit(EXIT_FAILURE);
+        int npair = 0;
+        p->I = load_bead_contacts_from_npy(p->contact_pairs_file,
+                                           &npair);
+        if(p->I == NULL)
+        {
+            fprintf(stderr, "Failed to read contact pairs from %s\n",
+                    p->contact_pairs_file);
+            exit(EXIT_FAILURE);
+        }
+        p->n_pairs = npair;
+        nCP = npair;
+    } else {
+
+        p->I = contact_pairs_read(p->contact_pairs_file, &nCP);
+        if(p->I == NULL)
+        {
+            fprintf(stderr, "%s/%d Failed to read contact pairs from %s\n",
+                    __FILE__, __LINE__, p->contact_pairs_file);
+            exit(EXIT_FAILURE);
+        }
+        p->n_pairs = nCP;
     }
-    p->n_pairs = nCP;
     mflock_logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
     return;
 }
@@ -555,6 +606,7 @@ static void mflock_validate_labels(const mflock_t * p)
     return;
 }
 
+
 static int mflock_load_bead_labels(mflock_t * p)
 {
     if(p->lfname == NULL)
@@ -565,35 +617,47 @@ static int mflock_load_bead_labels(mflock_t * p)
 
     mflock_logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
 
-    size_t fsize = cf_file_size(p->lfname);
-
-    mflock_logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
-                    fsize/sizeof(uint8_t), fsize);
-
-    // Try to read as binary
-    FILE * f = fopen(p->lfname, "rb");
-    if(f == NULL)
+    if(npy_extension(p->lfname))
     {
-        fprintf(stderr, "Unable to read %s\n", p->lfname);
-        exit(EXIT_FAILURE);
-    }
+        int nbead = 0;
+        p->L = load_bead_labels_from_npy(p->lfname, &nbead);
+        if(p->L == NULL)
+        {
+            fprintf(stderr, "Failed to read labels from %s\n",
+                    p->lfname);
+        }
+        p->n_beads = nbead;
+    } else {
+        size_t fsize = cf_file_size(p->lfname);
 
-    p->n_beads = fsize/sizeof(uint8_t);
-    if(p->n_beads == 0)
-    {
-        fprintf(stderr, "No beads desribed in %s\n", p->lfname);
-        exit(EXIT_FAILURE);
-    }
+        mflock_logwrite(p, 1, "As uint8_t, %s %zu numbers (%zu bytes)\n", p->lfname,
+                        fsize/sizeof(uint8_t), fsize);
 
-    p->L = malloc(p->n_beads*sizeof(double));
-    assert(p->L != NULL);
-    size_t nread = fread(p->L, sizeof(uint8_t), p->n_beads, f);
-    if(nread != p->n_beads)
-    {
-        fprintf(stderr, "Unable to read from %s\n", p->lfname);
-        exit(EXIT_FAILURE);
+        // Try to read as binary
+        FILE * f = fopen(p->lfname, "rb");
+        if(f == NULL)
+        {
+            fprintf(stderr, "Unable to read %s\n", p->lfname);
+            exit(EXIT_FAILURE);
+        }
+
+        p->n_beads = fsize/sizeof(uint8_t);
+        if(p->n_beads == 0)
+        {
+            fprintf(stderr, "No beads desribed in %s\n", p->lfname);
+            exit(EXIT_FAILURE);
+        }
+
+        p->L = malloc(p->n_beads*sizeof(double));
+        assert(p->L != NULL);
+        size_t nread = fread(p->L, sizeof(uint8_t), p->n_beads, f);
+        if(nread != p->n_beads)
+        {
+            fprintf(stderr, "Unable to read from %s\n", p->lfname);
+            exit(EXIT_FAILURE);
+        }
+        fclose(f);
     }
-    fclose(f);
 
     mflock_validate_labels(p);
 
@@ -942,6 +1006,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "lFile",         required_argument, NULL,   'L' },
         { "outFolder",     required_argument, NULL,   'o' },
         { "bead-wells",    required_argument, NULL,   'W' },
+        { "absolute",      required_argument, NULL,   'P' },
         /* Settings */
         { "diploid",       no_argument,       NULL,   'D' },
         { "maxiter",       required_argument, NULL,   'n' },
@@ -972,7 +1037,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "aA:B:cC:Dw:x:r:n:t:R:v:o:p:hMs:L:zcdQ:l:W:Tu",
+                            "aA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1037,6 +1102,10 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             p->contact_pairs_file = strdup(optarg);
             assert(p->contact_pairs_file != NULL);
             break;
+        case 'P':
+            free(p->bead_apos_file);
+            p->bead_apos_file = strdup(optarg);
+            break;
         case 't':
             p->maxtime = atol(optarg);
             break;
@@ -1080,6 +1149,17 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         default:
             return MFLOCK_ARGS_ERR;
         }
+    }
+
+    if(p->bead_apos_file != NULL)
+    {
+        FILE * fid = fopen(p->bead_apos_file, "rb");
+        if(fid == NULL)
+        {
+            printf("Unable to open %s\n", p->bead_apos_file);
+            return MFLOCK_ARGS_ERR;
+        }
+        fclose(fid);
     }
 
     if(p->luaDynamicsFile == NULL)
@@ -1340,6 +1420,19 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     mflock_load_bead_wells(mf);
 
+    if(mf->bead_apos_file != NULL)
+    {
+        mf->bead_apos = mflock_load_bead_apos(mf->bead_apos_file,
+                                              &mf->n_bead_apos);
+        if(mf->bead_apos == NULL)
+        {
+            fprintf(stderr,
+                    "Unable to load absolut bead positions from %s\n",
+                    mf->bead_apos_file);
+            exit(EXIT_FAILURE);
+        }
+    }
+
 
     if(mf->verbose > 3)
     {
@@ -1381,6 +1474,8 @@ void mflock_free(mflock_t * p)
     free(p->beads);
     free(p->fname_bead_wells);
     free(p->bead_wells);
+    free(p->bead_apos);
+    free(p->bead_apos_file);
     free(p);
     return;
 }
@@ -1436,11 +1531,6 @@ static void mflock_logwrite(const mflock_t * p, int level, const char *fmt, ...)
     return;
 }
 
-
-
-
-
-
 static int mflock_load_coordinates(mflock_t * p)
 {
     if(npy_extension(p->xfname))
@@ -1477,7 +1567,7 @@ static int mflock_save_coordinates(mflock_t * p)
         mflock_logwrite(p, 1, "Columns: x, y, z, r\n");
     }
 
-// TODO: Check file extension as well.
+    // TODO: Check file extension as well.
     if(p->use_csv)
     {
         return write_bead_coordinates_to_csv(p->xoutfname,

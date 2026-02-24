@@ -40,7 +40,6 @@
 typedef int64_t i64;
 
 
-
 typedef struct {
     uint32_t * I; // List with pairwise distances
     size_t n_pairs; // Number of pairs in I
@@ -49,6 +48,10 @@ typedef struct {
     int diploid; /* Cast the labels to diploid format */
     uint8_t * L; // chr labels per bead
     double * R; // wanted radii together with kRad
+
+    char * bead_apos_file; // file provided by --absolute
+    bpos * bead_apos; // absolute bead positions provided by --absolute
+    int n_bead_apos;
 
     // Geometry
     // Sphere if E isn't set.
@@ -141,6 +144,11 @@ static void mflock_summary(mflock_t * p);
     @return - Nothing, but aborts the program on failure.
 */
 static void mflock_read_contact_pairs(mflock_t * p);
+
+
+// Read absolute bead positions from csv (no header) or npy
+// columns: bead_id, x, y, z
+static bpos *  mflock_load_bead_apos(const char * fname, int * nbpos);
 
 /** @brief Load radial constraints
  *

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdint.h>
 
 #ifdef __linux__
 #include <dlfcn.h>
@@ -22,6 +23,19 @@
 #endif
 
 #include "ellipsoid.h"
+
+typedef uint32_t u32;
+typedef uint8_t u8;
+
+/* For holding absolute bead position information used by mflock (--absolute) */
+typedef struct {
+    u32 bead_id;
+    float x;
+    float y;
+    float z;
+} bpos;
+
+void bpos_print(FILE * fid, bpos *);
 
 /** @brief returns the time at the moment
  *
@@ -101,3 +115,20 @@ int
 load_bead_coordinates_from_npy(const char * fname,
                                float * X32, double * X64,
                                const int64_t nbead);
+
+
+// Load absolute positions for (certain) beads
+//
+// On success: sets the number of constraints to nconstraint
+//
+// On failure: Returns NULL
+
+bpos *
+load_bead_apos_from_npy(const char * fname,
+                        int * nconstraint);
+
+u8 *
+load_bead_labels_from_npy(const char * fname, int * nbead);
+
+u32 *
+load_bead_contacts_from_npy(const char * fname, int * ncont);

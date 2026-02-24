@@ -37,6 +37,11 @@ int limit_mem(size_t max_bytes)
 #endif
 }
 
+void bpos_print(FILE * fid, bpos * P)
+{
+    fprintf(fid, "#=%u (x=%f, y=%f, z=%f)\n", P->bead_id,
+           P->x, P->y, P->z);
+}
 
 char * cf_timestr()
 {
@@ -142,7 +147,7 @@ load_bead_coordinates_from_csv(const char * fname,
     free(line);
     return 0;
 
- parsing_error:
+parsing_error:
     fclose(fid);
     fprintf(stderr, "Failed to read line %zu from %s\n", ll+1, fname);
     free(line);
@@ -199,11 +204,173 @@ load_bead_coordinates_from_npy(const char * fname,
     npio_free(npy);
     return 0;
 
- fail_data:
+fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
     return -1;
+}
+
+bpos *
+load_bead_apos_from_npy(const char * fname,
+                        int * nconstraint)
+{
+    npio_t * npy = npio_load(fname);
+    if(npy == NULL)
+    {
+        return NULL;
+    }
+    if(npy->ndim != 2)
+    {
+        goto fail_data;
+    }
+
+    int nrow = (int) npy->shape[0];
+    int ncol = (int) npy->shape[1];
+    if(ncol != 4)
+    {
+        goto fail_data;
+    }
+
+    if(npy->dtype == NPIO_F32)
+    {
+
+        *nconstraint = nrow;
+        bpos * apos = calloc(nrow, sizeof(bpos));
+        if(apos == NULL)
+        {
+            printf("Memory allocation failure while reading %s\n", fname);
+            exit(EXIT_FAILURE);
+        }
+
+        const float * C = (const float *) npy->data;
+        for(i64 kk = 0; kk < nrow; kk++)
+        {
+            apos[kk].bead_id = (u32) C[4*kk];
+            apos[kk].x = C[4*kk + 1];
+            apos[kk].y = C[4*kk + 2];
+            apos[kk].z = C[4*kk + 3];
+            bpos_print(stdout, apos+kk);
+        }
+
+        npio_free(npy);
+        return apos;
+    }
+    fprintf(stderr, "Invalid data format, expected F32\n");
+
+fail_data:
+    fprintf(stderr, "%s contains invalid data\n", fname);
+    npio_print(stderr, npy);
+    npio_free(npy);
+    return NULL;
+}
+
+u32 *
+load_bead_contacts_from_npy(const char * fname, int * _ncont)
+{
+    npio_t * npy = npio_load(fname);
+    if(npy == NULL)
+    {
+        printf("Could not open %s as an npy file\n", fname);
+        return NULL;
+    }
+    if(npy->nel == 0)
+    {
+        npio_free(npy);
+        *_ncont = 0;
+        return malloc(0); // ok on linux 6.7
+    }
+    if(npy->ndim != 2)
+    {
+        goto fail_data;
+    }
+
+    if(npy->shape[1] != 2)
+    {
+        goto fail_data;
+    }
+    int ncont = npy->shape[0];
+    *_ncont = ncont;
+
+    if(npy->dtype == NPIO_U32)
+    {
+        u32 * C = calloc(2*ncont, sizeof(u32));
+        assert(C != NULL);
+        memcpy(C, npy->data, 2*ncont*sizeof(u32));
+        npio_free(npy);
+        return C;
+    }
+    if(npy ->dtype == NPIO_I64)
+    {
+        u32 * C = calloc(2*ncont, sizeof(u32));
+        assert(C != NULL);
+        i64 * _C = (i64*) npy->data;
+        for(i64 kk = 0; kk < 2*ncont; kk++)
+        {
+            C[kk] = _C[kk];
+        }
+        npio_free(npy);
+        return C;
+    }
+
+fail_data:
+    fprintf(stderr, "%s contains invalid data\n", fname);
+    npio_print(stderr, npy);
+    npio_free(npy);
+    return NULL;
+}
+
+u8 *
+load_bead_labels_from_npy(const char * fname, int * _nbead)
+{
+    npio_t * npy = npio_load(fname);
+    if(npy == NULL)
+    {
+        printf("Could not open %s as an npy file\n", fname);
+        return NULL;
+    }
+
+    int nbead = npy->nel;
+    if(nbead == 0)
+    {
+        fprintf(stderr, "Empty array");
+        goto fail_data;
+    }
+    *_nbead = nbead;
+
+    if(npy->dtype == NPIO_U8)
+    {
+        u8 * L = calloc(nbead, 1);
+        if(L == NULL)
+        {
+            exit(EXIT_FAILURE);
+        }
+        memcpy(L, npy->data, nbead);
+        npio_free(npy);
+        return L;
+    }
+
+    if(npy->dtype == NPIO_I64)
+    {
+        u8 * L = calloc(nbead, 1);
+        if(L == NULL)
+        {
+            exit(EXIT_FAILURE);
+        }
+        i64 * in_L = (i64*) npy->data;
+        for(i64 kk = 0; kk < nbead; kk++)
+        {
+            L[kk] = (u8) in_L[kk];
+        }
+        npio_free(npy);
+        return L;
+    }
+
+fail_data:
+    fprintf(stderr, "%s contains invalid data\n", fname);
+    npio_print(stderr, npy);
+    npio_free(npy);
+    return NULL;
 }
 
 static double norm3d(const double * restrict X)
@@ -251,7 +418,7 @@ write_bead_coordinates_to_csv(const char * fname,
     fclose(fid);
     return 0;
 
- fail_write:
+fail_write:
     fprintf(stderr, "An error occurred while writing to %s\n", fname);
     fclose(fid);
     return -1;
