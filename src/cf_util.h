@@ -26,6 +26,7 @@
 
 typedef uint32_t u32;
 typedef uint8_t u8;
+typedef int64_t i64;
 
 /* For holding absolute bead position information used by mflock (--absolute) */
 typedef struct {
@@ -132,3 +133,36 @@ load_bead_labels_from_npy(const char * fname, int * nbead);
 
 u32 *
 load_bead_contacts_from_npy(const char * fname, int * ncont);
+
+// Write an array of labels to disk
+//
+// If the file name ends with .npy it will be saved as a numpy file
+// else as raw data
+//
+// Returns 0 on success
+int
+write_bead_labels(const char * fname, const u8 * labels, i64 nbin);
+
+int
+write_bead_labels_to_u8(const char * fname, const u8 * labels, i64 nbin);
+
+int
+write_bead_labels_to_npy(const char * fname, const u8 * labels, i64 nbin);
+
+// Write u32 data (1D or 2D) to disk
+//
+// If the file name ends with .npy it will be saved as a numpy file
+// else as raw data
+//
+// Returns 0 on success
+int
+write_u32(const char * fname, u32 * data,
+          i64 M, i64 N);
+
+int write_u32_to_raw(const char * fname,
+                     u32 * data,
+                     i64 M, i64 N);
+
+int write_u32_to_npy(const char * fname,
+                     u32 * data,
+                     i64 M, i64 N);

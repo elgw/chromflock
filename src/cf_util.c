@@ -503,3 +503,91 @@ int npy_extension(const char * name)
     }
     return 1;
 }
+
+int
+write_bead_labels(const char * fname, const u8 * labels, i64 nbin)
+{
+    if(npy_extension(fname))
+    {
+        return write_bead_labels_to_npy(fname, labels, nbin);
+    } else {
+        return write_bead_labels_to_u8(fname, labels, nbin);
+    }
+}
+
+int
+write_bead_labels_to_u8(const char * fname,
+                        const u8 * labels,
+                        i64 nbin)
+{
+
+    FILE * fid = fopen(fname, "wb");
+    if(fid == NULL)
+    {
+        fprintf(stderr, "Error opening %s\n", fname);
+        return -1;
+    }
+    size_t nwritten = fwrite(labels, sizeof(u8), nbin, fid);
+    fclose(fid);
+    if((i64) nwritten != nbin)
+    {
+        fprintf(stderr, "Error writing to %s\n", fname);
+        return -1;
+    }
+    return 0;
+}
+
+
+int
+write_bead_labels_to_npy(const char * fname,
+                         const u8 * labels,
+                         i64 nbin)
+{
+    int shape[] = {nbin};
+    return npio_write(fname,
+                      1, shape,
+                      (const void *) labels,
+                      NPIO_U8, NPIO_U8);
+}
+
+int
+write_u32(const char * fname, u32 * data,
+          i64 M, i64 N)
+{
+    if(npy_extension(fname))
+    {
+        return write_u32_to_npy(fname, data, M, N);
+    } else {
+        return write_u32_to_raw(fname, data, M, N);
+    }
+}
+
+int write_u32_to_raw(const char * fname,
+                     u32 * data,
+                     i64 M, i64 N)
+{
+    FILE * fid = fopen(fname, "wb");
+    if(fid == NULL)
+    {
+        return -1;
+    }
+    size_t nwritten = fwrite(data, sizeof(u32), M*N, fid);
+    if(nwritten != (size_t) M*N)
+    {
+        fclose(fid);
+        return -1;
+    }
+    fclose(fid);
+    return 0;
+}
+
+int write_u32_to_npy(const char * fname,
+                     u32 * data,
+                     i64 M, i64 N)
+{
+    int shape[] = {N, M}; // flip dimensions
+    return npio_write(fname,
+                      2, shape,
+                      (const void *) data,
+                      NPIO_U32, NPIO_U32);
+}

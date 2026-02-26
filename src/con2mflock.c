@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <getopt.h>
 
+#include "cf_util.h"
 #include "gzl.h"
 
 #include "txt/con2mflock_progdesc.txt.h"
@@ -51,9 +52,9 @@ opts * opts_new(void)
     s->chr_sizes = calloc(50, sizeof(i64));
     s->chr_reads = calloc(50, sizeof(i64));
     s->nchr = 23;
-    s->label_file = strdup("c2m_labels.u8");
-    s->contact_file = strdup("c2m_contacts.u32");
-    s->matrix_file = strdup("c2m_matrix.u32");
+    s->label_file = strdup("c2m_labels.npy");
+    s->contact_file = strdup("c2m_contacts.npy");
+    s->matrix_file = strdup("c2m_matrix.npy");
     s->genome = strdup("T2T");
     s->verbose = 1;
     return s;
@@ -469,18 +470,8 @@ write_labels(const opts * s)
     }
 
     // write to disk
-
-    FILE * fid = fopen(s->label_file, "wb");
-    if(fid == NULL)
+    if(write_bead_labels(s->label_file, labels, nbin))
     {
-        fprintf(stderr, "Error opening %s\n", s->label_file);
-        exit(EXIT_FAILURE);
-    }
-    size_t nwritten = fwrite(labels, sizeof(u8), nbin, fid);
-    fclose(fid);
-    if(nwritten != nbin)
-    {
-        fprintf(stderr, "Error writing to %s\n", s->label_file);
         exit(EXIT_FAILURE);
     }
 
@@ -616,15 +607,12 @@ write_contacts(opts * s)
 
 
     printf("Writing to %s\n", s->contact_file);
-    FILE * fout = fopen(s->contact_file, "wb");
-    size_t nwritten = fwrite(s->contacts, sizeof(u32), wpos*2, fout);
-    if(nwritten != (size_t) wpos*2)
+
+    if(write_u32(s->contact_file, s->contacts, 2, wpos))
     {
-        printf("Failed to write!\n");
+        printf("Could not write to %s\n", s->contact_file);
         exit(EXIT_FAILURE);
     }
-
-    fclose(fout);
 
     free(L);
     free(bin_start);
@@ -633,7 +621,7 @@ write_contacts(opts * s)
 
 static void write_matrix(opts * s)
 {
-    printf("Writing contacts to %s\n", s->matrix_file);
+    printf("Writing contact map to %s\n", s->matrix_file);
 
     size_t nchr = s->nchr;
     if(nchr >= 50)
@@ -707,15 +695,12 @@ static void write_matrix(opts * s)
     }
 
     printf("Writing to %s\n", s->matrix_file);
-    FILE * fout = fopen(s->matrix_file, "wb");
-    size_t nwritten = fwrite(M, sizeof(u32), N*N, fout);
-    if(nwritten != (size_t) N*N)
+    if(write_u32(s->matrix_file, M, N, N))
     {
-        printf("Failed to write!\n");
+        printf("Failed to write to %s!\n", s->matrix_file);
         exit(EXIT_FAILURE);
     }
 
-    fclose(fout);
     free(M);
     free(L);
     free(bin_start);
