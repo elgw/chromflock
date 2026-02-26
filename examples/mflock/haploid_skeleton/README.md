@@ -6,6 +6,5 @@ further contacts.
 ``` shell
 # Generate input data
 ./hapoloid
-# Run mflock with --live
-./run_me.sh
+mflock --contact-pairs contact_pairs.npy -L labels.npy --dconf mflock.lua --outFolder ./ --live --cmm
 ```

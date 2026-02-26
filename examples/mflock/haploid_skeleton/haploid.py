@@ -6,6 +6,8 @@ import shutil
 
 resolution = 1e6;
 folder = f'./'
+labels_out = 'labels.npy'
+pairs_out = 'pairs.npy'
 
 print(f"Approximately {resolution} basepairs per bead")
 
@@ -24,23 +26,25 @@ for chr in range(0, nchr):
     bstart = bstart + nbeads[chr]
 
 
-labels.astype('uint8').tofile(folder + '/labels.u8')
+#labels.astype('uint8').tofile(folder + '/labels.u8')
+np.save(labels_out, labels.astype('uint8'))
 
-P = []
+
 # Create the backbone contact pairs
+P = np.zeros([labels.shape[0], 2], np.uint32)
+idx = 0;
 for bead in range(0, len(labels)-1):
     if(labels[bead] == labels[bead+1]):
-        P = np.append(P, [bead, bead+1])
+        P[idx, :] = [bead, bead+1]
+        idx = idx + 1
+P = P[0:idx, :]
 
 
-P.astype('uint32').tofile(folder + '/contact_pairs.u32')
+# P.astype('uint32').tofile(folder + '/contact_pairs.u32')
+np.save(pairs_out, P)
 
 shutil.copyfile('../../..//src/mflock.lua', folder + '/mflock.lua')
 
-with open(folder + '/run_me.sh', 'w') as fid:
-    fid.write('set -e\n')
-    fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.u8 --dconf mflock.lua --outFolder ./ --live\n');
-
-os.chmod(folder + '/run_me.sh', stat.S_IRWXU)
-
-print("Done")
+print("Run the follow command to continue:")
+print("")
+print(f"mflock --contact-pairs {pairs_out} -L {labels_out} --dconf mflock.lua --outFolder ./ --live --cmm\n");

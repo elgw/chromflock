@@ -472,6 +472,7 @@ write_labels(const opts * s)
     // write to disk
     if(write_bead_labels(s->label_file, labels, nbin))
     {
+        printf("Failed to write to %s\n", s->label_file);
         exit(EXIT_FAILURE);
     }
 
@@ -605,8 +606,7 @@ write_contacts(opts * s)
     }
     printf("Keeping %ld / %ld\n", wpos, s->nlines);
 
-
-    printf("Writing to %s\n", s->contact_file);
+    printf("Writing contacts to %s\n", s->contact_file);
 
     if(write_u32(s->contact_file, s->contacts, 2, wpos))
     {

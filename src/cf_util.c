@@ -543,11 +543,19 @@ write_bead_labels_to_npy(const char * fname,
                          const u8 * labels,
                          i64 nbin)
 {
+    assert(nbin >= 0);
+    assert(fname != NULL);
+    assert(labels != NULL);
     int shape[] = {nbin};
-    return npio_write(fname,
+    i64 nwritten =  npio_write(fname,
                       1, shape,
                       (const void *) labels,
                       NPIO_U8, NPIO_U8);
+    if(nwritten > 0)
+    {
+        return 0;
+    }
+    return -1;
 }
 
 int
@@ -585,9 +593,20 @@ int write_u32_to_npy(const char * fname,
                      u32 * data,
                      i64 M, i64 N)
 {
+    assert(fname != NULL);
+    assert(data != NULL);
+    assert(M>0);
+    assert(N>0);
+
     int shape[] = {N, M}; // flip dimensions
-    return npio_write(fname,
+    i64 nwritten = npio_write(fname,
                       2, shape,
                       (const void *) data,
                       NPIO_U32, NPIO_U32);
+    if(nwritten > 0)
+    {
+        return 0;
+    } else {
+        return -1;
+    }
 }

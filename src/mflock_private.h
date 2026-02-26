@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <assert.h>
 #include <getopt.h>
 #include <math.h>

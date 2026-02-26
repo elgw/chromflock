@@ -4,6 +4,8 @@
 - Writes/reads coordinates as Numpy .npy files by default, resulting in
   approximately 50% smaller files and hopefully both faster and safer
   parsing.
+- Included the tool `chromflock pairs2mflock` which reads single cell
+  mapped data and generates input for mflock.
 
 ## 0.4.4
 - Moved documentation to sphinx.
