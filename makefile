@@ -91,7 +91,7 @@ obj/con2mflock.o \
 
 headers=src/*.h
 
-bin/chromflock: $(chromflock_files) $(headers)
+bin/chromflock: $(chromflock_files) $(headers) TXTHEADERS
 	$(CC) $(CFLAGS) $(chromflock_files) $(LDFLAGS) -o bin/chromflock
 
 bin/cmmfilter:
@@ -133,4 +133,6 @@ $(OBJDIR)/%.o : $(SRCDIR)/%.c
 
 
 TXTHEADERS: FORCE
-	find src/txt -name "*.txt" -execdir xxd -i {} {} \;
+	find src/txt -name "*.txt" -execdir xxd -i {} {}.h \;
+
+FORCE:

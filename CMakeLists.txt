@@ -69,6 +69,8 @@ set(chromflock_SOURCES
     src/cf_util.c
     src/contact_pairs_io.c
     src/npio.c
+    src/con2mflock.c
+    src/gzl.c
   )
 
 add_executable( mflock ${mflock_SOURCES})

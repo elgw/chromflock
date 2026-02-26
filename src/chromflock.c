@@ -17,7 +17,7 @@
 #include "sprite2cmap.h"
 #include "contact_pairs_io.h"
 #include "con2mflock.h"
-#include "chromflock_usage.h"
+#include "txt/chromflock_usage.txt.h"
 
 static int show_version(void)
 {
@@ -27,7 +27,7 @@ static int show_version(void)
 
 static int usage(void)
 {
-    printf("%s", src_txt_chromflock_usage_txt);
+    printf("%s", __chromflock_usage_txt);
     return EXIT_SUCCESS;
 }
 

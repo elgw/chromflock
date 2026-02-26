@@ -1,6 +1,4 @@
-USAGE
-
-chromflock <command>
+usage: chromflock <command> [<args>]
 
 Available commands:
 
