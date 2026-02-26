@@ -1,0 +1,26 @@
+USAGE
+
+chromflock <command>
+
+Available commands:
+
+help
+       Show this help message
+init
+       Initialize this directory for chromflock structures;
+hic2cpm
+       Generate contact a contact probability matrix from Hi-C data
+sprite2cpm
+        convert sprite date (.cluster files) to contact probability maps
+any2string
+        convert raw data dumps to text
+string2any
+        write human readable to raw
+con2mflock
+        convert .pairs.gz or .con to mflock input data;
+version
+        show version information
+
+Each command has a separate help section
+
+Web page: https://www.github.com/elgw/chromflock

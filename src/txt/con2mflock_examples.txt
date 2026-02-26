@@ -1,0 +1,4 @@
+Example usage:
+
+
+$ con2mflock --confile /srv/data/ki/DIPC/dipc/c017t1/C017_T1_006.contacts.con --resolution 100000

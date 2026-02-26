@@ -16,6 +16,8 @@
 #include "any2string.h"
 #include "sprite2cmap.h"
 #include "contact_pairs_io.h"
+#include "con2mflock.h"
+#include "chromflock_usage.h"
 
 static int show_version(void)
 {
@@ -23,32 +25,9 @@ static int show_version(void)
     return EXIT_SUCCESS;
 }
 
-
 static int usage(void)
 {
-    printf("usage:\n\t"
-           "chromflock <command>\n");
-    printf("\n");
-    printf("Available commands:\n");
-    printf("\n");
-    printf("help\n\t"
-           "Show this help message\n");
-    printf("init\n\t"
-           "Initialize this directory for chromflock structures\n");
-    printf("hic2cpm\n\t"
-           "Generate contact a contact probability matrix from Hi-C data\n");
-    printf("sprite2cpm\n\t"
-           "convert sprite date (.cluster files) to contact probability maps\n");
-    printf("any2string\n\t"
-           "convert raw data dumps to text\n");
-    printf("string2any\n\t"
-           "write human readable to raw\n");
-    printf("version\n\t"
-           "show version information\n");
-    printf("\n");
-    printf("Each command has a separate help section\n");
-    printf("\n");
-    printf("Web page: https://www.github.com/elgw/chromflock\n");
+    printf("%s", src_txt_chromflock_usage_txt);
     return EXIT_SUCCESS;
 }
 
@@ -106,6 +85,10 @@ int main(int argc, char ** argv)
         return contact_pairs_io_ut(argc-1, argv+1);
     }
 
+    if(!strcmp(command, "con2mflock"))
+    {
+        return con2mflock(argc-1, argv+1);
+    }
 
     fprintf(stderr, "%s is an unknown command to me\n", command);
 

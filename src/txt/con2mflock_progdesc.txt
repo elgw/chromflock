@@ -1,0 +1,14 @@
+This program reads .con/pairs.gz files and prepares their content to
+be used with mflock.
+
+By default each input file will generate two output files
+
+ - c2m_labels.u8 which contain the chromosome labels (starting from 0=chr1)
+ - c2m_contacts.u32 which contain the contacts between the bins (excluding the
+   backbone contacts.
+
+The program does not know the size of the chromosomes and hence there will only
+be as many bins as seems to be required unless "--genome hg19" is used.
+
+Please note that the --matrix option will write out a DENSE contact
+matrix. Use with caution for high resolutions.

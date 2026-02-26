@@ -1,0 +1,14 @@
+2026-02-25 (1.0.2)
+
+- Added chromosome sizes for T2T which becomes the default. The option
+  to derive the chromosome sizes from data is disabled.
+
+2026-01-15 (1.0.1)
+
+- Supports reading .gz files (zlib compressed)
+- Supports .pairs files
+- Fix: Writes out the first chromosome as 1, not 0.
+
+2025-12-15 (1.0.0)
+
+- Can convert .con files to mflock input

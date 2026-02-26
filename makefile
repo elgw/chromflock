@@ -82,18 +82,22 @@ obj/balance.o \
 obj/cf_util.o \
 obj/ellipsoid.o \
 obj/npio.o \
-obj/contact_pairs_io.o
+obj/contact_pairs_io.o \
+obj/gzl.o \
+obj/con2mflock.o \
+
 
 ## Targets
 
-bin/chromflock: $(chromflock_files)
+headers=src/*.h
+
+bin/chromflock: $(chromflock_files) $(headers)
 	$(CC) $(CFLAGS) $(chromflock_files) $(LDFLAGS) -o bin/chromflock
 
 bin/cmmfilter:
 	$(CC) $(CFLAGS)  `xml2-config --cflags` src/cmmfilter.c  `xml2-config --libs` $(LDFLAGS) -o bin/cmmfilter
 
-mflock_files = src/mflock_help.h \
-src/mflock_cli.c \
+mflock_files = src/mflock_cli.c \
 obj/ellipsoid.o \
 src/mflock.o \
 src/functional.o \
@@ -120,23 +124,13 @@ obj/npio.o
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)
 
-obj/chromflock_init.o: src/chromflock_init.c
-	$(CC) -c $(CFLAGS) src/chromflock_init.c -o obj/chromflock_init.o
+SRCDIR = src
+TXTDIR = src/txt
+OBJDIR = obj
 
-obj/ellipsoid.o: src/ellipsoid.c
-	$(CC) -c $(CFLAGS) src/ellipsoid.c -o obj/ellipsoid.o
+$(OBJDIR)/%.o : $(SRCDIR)/%.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-obj/balance.o: src/balance.c
-	$(CC) -c $(CFLAGS) src/balance.c -o obj/balance.o
 
-obj/contact_pairs_io.o: src/contact_pairs_io.c
-	$(CC) -c $(CFLAGS) src/contact_pairs_io.c -o obj/contact_pairs_io.o
-
-obj/cf_util.o: src/cf_util.c src/cf_util.h
-	$(CC) -c $(CFLAGS) src/cf_util.c -o obj/cf_util.o
-
-obj/npio.o: src/npio.c
-	$(CC) -c $(CFLAGS) src/npio.c -o obj/npio.o
-
-src/mflock_help.h: src/mflock_help.txt
-	xxd -i src/mflock_help.txt > src/mflock_help.h
+TXTHEADERS: FORCE
+	find src/txt -name "*.txt" -execdir xxd -i {} {} \;
