@@ -1,3 +1,8 @@
+2026-03-2000000
+
+- Added the --backbone command line argument to generate output that can be used
+  directly with chromflock.
+
 2026-02-25 (1.0.2)
 
 - Added chromosome sizes for T2T which becomes the default. The option

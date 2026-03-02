@@ -36,6 +36,20 @@ typedef struct {
     float z;
 } bpos;
 
+typedef struct {
+    double x;
+    double y;
+    double z;
+} point;
+
+typedef struct {
+    union {
+        point P;
+        double X[3];
+    };
+    size_t bead_idx;
+} wpos;
+
 void bpos_print(FILE * fid, bpos *);
 
 /** @brief returns the time at the moment
@@ -85,6 +99,9 @@ int npy_extension(const char * name);
  *
  * returns 0 on success
  */
+
+// Return "YES"" (v==1) or "NO""
+const char* cf_YES_NO(int v);
 
 int
 write_bead_coordinates_to_csv(const char * fname,

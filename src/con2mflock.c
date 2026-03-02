@@ -18,20 +18,21 @@
 #define CON2MFLOCK_VERSION_MINOR 0
 #define CON2MFLOCK_VERSION_PATCH 1
 
-typedef int64_t i64;
-typedef uint32_t u32;
-typedef uint8_t u8;
 
 typedef struct options {
     i64 resolution;
+    int write_backbone;
     char * infile; /* .pairs.gz or .con */
     int pairs_format; // set to 1 if a pairs file
 
     /* These are 0-indexed, i.e. chr1 is at index 0 */
-    i64 * chr_sizes;
+    i64 * chr_size_bp;  // expressed in basepairs
+    i64 * chr_size_bin; // as above but expressed in resolution
     i64 * chr_reads;
+    u8 * labels; // chr label per bin
 
-    i64 nchr; // number of non-zero entries in chr_sizes and chr_reads
+    i64 n_chr; // number of non-zero entries in chr_sizes and chr_reads
+    i64 n_bin; // Number of bins/beads in total
 
     /* Output files */
     char * label_file;
@@ -41,7 +42,7 @@ typedef struct options {
     int gen_matrix;
     char * matrix_file;
     int verbose;
-    // TODO:
+
     char * genome; // Either a genome file (json?) or the name of a genome
 } opts;
 
@@ -49,9 +50,9 @@ opts * opts_new(void)
 {
     opts * s = calloc(1, sizeof(opts));
     s->resolution = 1000000;
-    s->chr_sizes = calloc(50, sizeof(i64));
+    s->chr_size_bp = calloc(50, sizeof(i64));
+    s->chr_size_bin = calloc(50, sizeof(i64));
     s->chr_reads = calloc(50, sizeof(i64));
-    s->nchr = 23;
     s->label_file = strdup("c2m_labels.npy");
     s->contact_file = strdup("c2m_contacts.npy");
     s->matrix_file = strdup("c2m_matrix.npy");
@@ -62,7 +63,9 @@ opts * opts_new(void)
 
 void opts_free(opts * s)
 {
-    free(s->chr_sizes);
+    free(s->chr_size_bp);
+    free(s->chr_size_bin);
+    free(s->labels);
     free(s->chr_reads);
     free(s->infile);
     free(s->label_file);
@@ -139,6 +142,8 @@ void parse_command_line(int argc, char ** argv, opts * s)
          "Set the file name for the matrix output file, also enables --matrix"},
         {"genome",     required_argument,  NULL, 'g',
          "Default: 'T2T', other possible options: 'hg19'. For other genome please add them to the source."},
+        {"backbone",   no_argument,        NULL, 'b',
+         "Also write 'backbone' contacts, i.e. connect adjacent bins within each chromosome to the contact list (not to the --mfile)"},
         {"verbose",    required_argument,  NULL, 'v',
          "Set verbose level"},
         {"version",    no_argument,        NULL, 'V',
@@ -163,10 +168,13 @@ void parse_command_line(int argc, char ** argv, opts * s)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "r:c:hmMp:g:v:V",
+                            "br:c:hmMp:g:v:V",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
+        case 'b':
+            s->write_backbone = 1;
+            break;
         case 'g':
             free(s->genome);
             s->genome = strdup(optarg);
@@ -300,6 +308,15 @@ i64 chr_size_CHM13[] =
 
 static void get_chr_size(opts * s)
 {
+    // based on the the --genome
+    // Sets:
+    //
+    // s->chr_sizes_bp
+    // s->chr_sizes_bin
+    // s->n_bin
+    // s->n_chr
+    // s->labels
+
     assert(s->genome != NULL);
     int chr_size_fixed = 0;
 
@@ -307,24 +324,46 @@ static void get_chr_size(opts * s)
     {
         for(i64 kk = 0 ; kk < 23; kk++)
         {
-            s->chr_sizes[kk] = chr_size_hg38[kk];
+            s->chr_size_bp[kk] = chr_size_hg38[kk];
         }
         chr_size_fixed = 1;
+        s->n_chr = 23;
     }
     if(strcmp(s->genome, "T2T") == 0)
     {
         for(i64 kk = 0 ; kk < 23; kk++)
         {
-            s->chr_sizes[kk] = chr_size_CHM13[kk];
+            s->chr_size_bp[kk] = chr_size_CHM13[kk];
         }
         chr_size_fixed = 1;
+        s->n_chr = 23;
     }
 
     if(chr_size_fixed == 0)
     {
-        printf("There is no chromosome sizes available for %s\n", s->genome);
+        printf("There are no chromosome sizes available for '%s'n", s->genome);
         exit(EXIT_FAILURE);
     }
+
+    for(i64 kk = 0; kk < s->n_chr; kk++)
+    {
+        s->chr_size_bin[kk] = s->chr_size_bp[kk] / s->resolution;
+        s->n_bin += s->chr_size_bin[kk];
+    }
+
+    // put in array
+    s->labels = malloc(s->n_bin*sizeof(u8));
+    size_t idx = 0;
+    for(i64 cc = 0; cc < s->n_chr; cc++)
+    {
+        u8 chr = cc+1;
+        i64 n = s->chr_size_bin[cc];
+        for(i64 nn = 0 ; nn < n; nn++)
+        {
+            s->labels[idx++] = chr;
+        }
+    }
+
     return;
 }
 
@@ -333,12 +372,10 @@ static i64 get_dataset_size(const opts * s)
     // Side effects:
     // Sets s->n_lines
 
-    int chr_size_fixed = 1;
     if(s->verbose > 0)
     {
         printf("Checking number of reads\n");
     }
-
 
     gzl_state * gzl = gzl_open(s->infile, 1024);
 
@@ -373,7 +410,7 @@ static i64 get_dataset_size(const opts * s)
                 continue;
             }
         }
-        if( (chr1 >= s->nchr) || (chr2 >= s->nchr))
+        if( (chr1 >= s->n_chr) || (chr2 >= s->n_chr))
         {
             printf("Parsed something weird: chr1: %ld, chr2: %ld\n", chr1, chr2);
             printf("Line %ld: '%s'\n", nlines, L);
@@ -381,59 +418,37 @@ static i64 get_dataset_size(const opts * s)
         }
         s->chr_reads[chr1]++;
         s->chr_reads[chr2]++;
-        if(chr_size_fixed)
-        {
-            if(s->chr_sizes[chr1] < pos1)
+
+            if(s->chr_size_bp[chr1] < pos1)
             {
                 fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                        chr1, pos1, s->chr_sizes[chr1]);
+                        chr1, pos1, s->chr_size_bp[chr1]);
                 exit(EXIT_FAILURE);
             }
-            if(s->chr_sizes[chr2] < pos2)
+            if(s->chr_size_bp[chr2] < pos2)
             {
                 fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                        chr2, pos2, s->chr_sizes[chr2]);
+                        chr2, pos2, s->chr_size_bp[chr2]);
                 exit(EXIT_FAILURE);
-            }
-        } else {
-            #if 0
-            if(s->chr_sizes[chr1] < pos1)
-            {
-                s->chr_sizes[chr1] = pos1;
-            }
-            if(s->chr_sizes[chr2] < pos2)
-            {
-                s->chr_sizes[chr2] = pos2;
             }
 
-            if(chr1 > s->nchr)
-            {
-                s->nchr = chr1+1;
-            }
-            if(chr2 > s->nchr)
-            {
-                s->nchr = chr2+1;
-            }
-            #endif
-        }
         nlines++;
     }
 
-    if(s->nchr == 0)
+    if(s->n_chr == 0)
     {
         fprintf(stderr, "\nERROR: Could not get any data from the file\n");
         exit(EXIT_FAILURE);
     }
 
-
     printf("Read %ld lines\n", nlines);
     printf(" #,      Size,    Reads,    Bins\n");
 
-    for(i64 kk = 0; kk < s->nchr; kk++)
+    for(i64 kk = 0; kk < s->n_chr; kk++)
     {
         printf("%2ld, %9ld, %8ld, %7ld\n", kk+1,
-               s->chr_sizes[kk], s->chr_reads[kk],
-               (s->resolution + s->chr_sizes[kk])/s->resolution);
+               s->chr_size_bp[kk], s->chr_reads[kk],
+               (s->resolution + s->chr_size_bp[kk])/s->resolution);
     }
     gzl_destroy(gzl);
     free(L);
@@ -448,35 +463,14 @@ static void
 write_labels(const opts * s)
 {
     printf("Writing labels to %s\n", s->label_file);
-    // number of labels
-    size_t nbin = 0;
-    for(i64 cc = 0; cc < s->nchr; cc++)
-    {
-        i64 n = (s->chr_sizes[cc] + s->resolution)/s->resolution;
-        nbin += n;
-    }
-
-    // put in array
-    u8 * labels = malloc(nbin*sizeof(u8));
-    size_t idx = 0;
-    for(i64 cc = 0; cc < s->nchr; cc++)
-    {
-        u8 chr = cc+1;
-        i64 n = (s->chr_sizes[cc] + s->resolution)/s->resolution;
-        for(i64 nn = 0 ; nn < n; nn++)
-        {
-            labels[idx++] = chr;
-        }
-    }
 
     // write to disk
-    if(write_bead_labels(s->label_file, labels, nbin))
+    if(write_bead_labels(s->label_file, s->labels, s->n_bin))
     {
         printf("Failed to write to %s\n", s->label_file);
         exit(EXIT_FAILURE);
     }
 
-    free(labels);
     return;
 }
 
@@ -512,7 +506,7 @@ int cmp_u32_pair(const void * _A, const void * _B)
 static void
 write_contacts(opts * s)
 {
-    assert(s->nchr > 0);
+    assert(s->n_chr > 0);
     assert(s->nlines > 0);
 
     if(s->verbose > 0)
@@ -529,29 +523,36 @@ write_contacts(opts * s)
         exit(EXIT_FAILURE);
     }
 
-    s->contacts = calloc(s->nlines*2, sizeof(u32));
+    s->contacts = NULL;
+    size_t n_cont_alloc = n_cont_alloc = s->nlines*2;
+    if(s->write_backbone)
+    {
+        n_cont_alloc += s->n_bin; // overshoots
+    }
+    s->contacts = calloc(n_cont_alloc, sizeof(u32));
 
-    size_t nchr = s->nchr;
+    size_t nchr = s->n_chr;
     if(nchr >= 50)
     {
         exit(EXIT_FAILURE);
     }
     i64 * bin_start = calloc(nchr+1, sizeof(i64));
 
-    for(i64 kk = 1; kk < s->nchr; kk++)
+    for(i64 kk = 1; kk < s->n_chr; kk++)
     {
-        bin_start[kk] = bin_start[kk-1] + (s->chr_sizes[kk-1]+s->resolution)/s->resolution;
+        bin_start[kk] = bin_start[kk-1] + s->chr_size_bin[kk-1];
     }
 
     if(s->verbose > 1)
     {
-        for(i64 kk = 0; kk < s->nchr; kk++)
+        for(i64 kk = 0; kk < s->n_chr; kk++)
         {
             printf("chr #%ld starts at %ld\n", kk+1, bin_start[kk]);
         }
     }
 
     i64 line = 0;
+    i64 contact_id = 0;
     char * L = NULL;
     int gzl_error;
 
@@ -566,7 +567,6 @@ write_contacts(opts * s)
                 continue;
             }
             parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
-
         } else {
             if(parse_con_line(L, &chr1, &pos1, &chr2, &pos2))
             {
@@ -574,7 +574,7 @@ write_contacts(opts * s)
                 exit(EXIT_FAILURE);
             }
         }
-        if((chr1 > s->nchr) || (chr2 > s->nchr))
+        if((chr1 > s->n_chr) || (chr2 > s->n_chr))
         {
             printf("Input error on line %ld\n", line);
             printf("chr1=%ld, chr2=%ld\n", chr1, chr2);
@@ -584,12 +584,28 @@ write_contacts(opts * s)
 
         i64 bead1 = bin_start[chr1] + pos1/s->resolution;
         i64 bead2 = bin_start[chr2] + pos2/s->resolution;
-
-        s->contacts[2*line + 0] = bead1;
-        s->contacts[2*line + 1] = bead2;
+        contact_id++;
+        s->contacts[2*contact_id + 0] = bead1;
+        s->contacts[2*contact_id + 1] = bead2;
 
     }
     gzl_destroy(gzl);
+
+
+    // Add backbone contacts connecting adjacent beads within the
+    // same chromosome if --backbone was provided
+    if(s->write_backbone)
+    {
+        for(i64 kk = 0; kk+1 < s->n_bin; kk++)
+        {
+            if(s->labels[kk] == s->labels[kk+1])
+            {
+                contact_id++;
+                s->contacts[2*contact_id + 0] = kk;
+                s->contacts[2*contact_id + 1] = kk+1;
+            }
+        }
+    }
 
     printf("Sorting contacts\n");
     qsort(s->contacts, s->nlines, 2*sizeof(u32), cmp_u32_pair);
@@ -623,23 +639,19 @@ static void write_matrix(opts * s)
 {
     printf("Writing contact map to %s\n", s->matrix_file);
 
-    size_t nchr = s->nchr;
+    size_t nchr = s->n_chr;
     if(nchr >= 50)
     {
         exit(EXIT_FAILURE);
     }
     i64 * bin_start = calloc(nchr, sizeof(i64));
 
-    for(i64 kk = 1; kk < s->nchr; kk++)
+    for(i64 kk = 1; kk < s->n_chr; kk++)
     {
-        bin_start[kk] = bin_start[kk-1] + (s->chr_sizes[kk-1]+s->resolution)/s->resolution;
+        bin_start[kk] = bin_start[kk-1] + s->chr_size_bin[kk-1];
     }
 
-    i64 N = 0;
-    for(i64 kk = 0; kk < s->nchr; kk++)
-    {
-        N+= (s->chr_sizes[kk]+s->resolution)/s->resolution;
-    }
+    i64 N = s->n_bin;
 
     printf("Matrix size: %ld x %ld\n", N, N);
 

@@ -36,9 +36,6 @@
 
 #include "mflock_help.h"
 
-typedef int64_t i64;
-
-
 typedef struct {
     uint32_t * I; // List with pairwise distances
     size_t n_pairs; // Number of pairs in I
@@ -82,7 +79,7 @@ typedef struct {
     /* one well per bead data */
     char * fname_bead_wells;
     uint32_t n_bead_wells;
-    double * bead_wells;
+    wpos * bead_wells;
 
     int newx;
 

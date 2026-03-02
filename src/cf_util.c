@@ -10,8 +10,6 @@
 #include "cf_util.h"
 #include "npio.h"
 
-typedef int64_t i64;
-
 int limit_mem(size_t max_bytes)
 {
 #ifdef __linux__
@@ -35,6 +33,13 @@ int limit_mem(size_t max_bytes)
 #else
     return EXIT_FAILURE;
 #endif
+}
+
+const char* cf_YES_NO(int v)
+{
+    if(v == 1)
+    { return "YES"; }
+    return "NO";
 }
 
 void bpos_print(FILE * fid, bpos * P)
@@ -250,7 +255,11 @@ load_bead_apos_from_npy(const char * fname,
             apos[kk].x = C[4*kk + 1];
             apos[kk].y = C[4*kk + 2];
             apos[kk].z = C[4*kk + 3];
-            bpos_print(stdout, apos+kk);
+            float r = pow(apos[kk].x, 2) + pow(apos[kk].y, 2) + pow(apos[kk].z, 2);
+            if(r > 1)
+            {
+                bpos_print(stdout, apos+kk);
+            }
         }
 
         npio_free(npy);
@@ -442,7 +451,7 @@ int write_bead_coordinates_to_npy(const char * fname,
     {
         for(i64 ll = 0; ll < 3; ll++)
         {
-            C[4*kk + ll] = X[3*kk+ll];
+            C[4*kk + ll] = X[3*kk + ll];
         }
         double radius;
         if(geometry == NULL)
@@ -451,7 +460,10 @@ int write_bead_coordinates_to_npy(const char * fname,
         } else {
             radius = elli_getScale(geometry, X+3*kk);
         }
-
+        if(radius > 1.0)
+        {
+            printf("Warning bead %ld has radius=%f\n", kk, radius);
+        }
         C[4*kk + 3] = radius;
     }
     int shape[2] = {nbead, 4};

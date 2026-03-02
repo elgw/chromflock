@@ -267,11 +267,13 @@ mflock_dynamics(mflock_t * restrict p)
 
         /* Get settings from the lua script */
         lua_getglobal(L, "getConfig"); /* function to be called */
-        lua_pushnumber(L, iter); /* push arguments */
+        // Push function arguments
+        lua_pushnumber(L, iter);
         lua_pushnumber(L, p->newx);
+        lua_pushnumber(L, p->n_beads);
 
         /* do the call (2 arguments, 0 result) */
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK)
         {
             luaerror(L, "error running function 'getConfig' in %s : %s",
                      p->luaDynamicsFile,
@@ -487,14 +489,37 @@ static void mflock_summary(mflock_t * p)
     mflock_logwrite(p, 2,  "\n");
     mflock_logwrite(p, 2,  ">> Structure summary:\n");
     mflock_logwrite(p, 2,  "              X       Y       Z       R\n");
-    mflock_logwrite(p, 2,  "   Max:  % .3f, % .3f, % .3f, % .3f\n", max, may, maz, mar);
-    mflock_logwrite(p, 2,  "   Mean: % .3f, % .3f, % .3f, % .3f\n", mex, mey, mez, mer);
-    mflock_logwrite(p, 2,  "   Min:  % .3f, % .3f, % .3f, % .3f\n", mix, miy, miz, mir);
+    mflock_logwrite(p, 2,  "   Max:  % .3f, % .3f, % .3f, % .3f\n",
+                    max, may, maz, mar);
+    mflock_logwrite(p, 2,  "   Mean: % .3f, % .3f, % .3f, % .3f\n",
+                    mex, mey, mez, mer);
+    mflock_logwrite(p, 2,  "   Min:  % .3f, % .3f, % .3f, % .3f\n",
+                    mix, miy, miz, mir);
+
+    if(p->bead_wells != NULL)
+    {
+        i64 n_filled = 0;
+        double r02 = pow(2.0*p->r0, 2.0);
+        for(size_t kk = 0; kk < p->n_bead_wells; kk++)
+        {
+            size_t accepts = p->bead_wells[kk].bead_idx;
+            double * WX = (double*) &p->bead_wells[kk];
+            double distance = eudist3p2(WX, X + 3*accepts);
+            if(distance < r02)
+            {
+                n_filled++;
+            }
+        }
+        mflock_logwrite(p, 1, "%ld / %ld wells are filled with the accepted bead\n",
+                        n_filled, p->n_bead_wells);
+    }
 
     if(run == 0)
     {
         mflock_logwrite(p, 0, "abnormal exit (Ctrl+c was pressed?)\n");
     }
+
+
 
     char * timestr = cf_timestr();
     mflock_logwrite(p, 2, "Finished at: %s\n", timestr);
@@ -545,9 +570,8 @@ static void mflock_init_coordinates(mflock_t * p)
         assert(p->beads != NULL);
         if(mflock_load_coordinates(p) != 0)
         {
-            mflock_logwrite(p, 2, "Could not open x-file, starting from random\n");
-            free(p->beads);
-            p->beads = NULL;
+            mflock_logwrite(p, 2, "Could not read coordinates from %s\n");
+            exit(EXIT_FAILURE);
         }
         mflock_logwrite(p, 2, "Using coordinates from %s\n", p->xfname);
     }
@@ -573,7 +597,7 @@ static void mflock_init_coordinates(mflock_t * p)
                 {
                     p->beads[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
                 }
-                if(elli_getScale(E, p->beads+3*kk) <= 1)
+                if(elli_getScale(E, p->beads+3*kk) < 0.95)
                 { accepted = 1;}
             }
         }
@@ -752,54 +776,43 @@ static void mflock_show(mflock_t * p, FILE * f)
     fprintf(f, "\n");
     fprintf(f, " >> Parameters:\n");
     fprintf(f, "    Problem size: %zu points (%zu variables)\n", p->n_beads, 3*p->n_beads);
-    fprintf(f, "    - Model parameters\n");
     fprintf(f, "    Dynamics program: %s\n", p->luaDynamicsFile);
     fprintf(f, "    Bead radius %f (vol. occ. %f)\n", p->r0, volocc);
-    fprintf(f, "    - Optimization parameters\n");
-    //fprintf(f, "# Optimization: simulated annealing / molecular dynamics\n");
     fprintf(f, "    random seed: %zu\n", p->rseed);
     fprintf(f, "    write compresseed cmm: %d\n", p->cmmz);
-
-    if(p->wfname == NULL)
-    {
-        fprintf(f, "    W file: -not specified\n");
-    } else
-    {
-        fprintf(f, "    W file: %s\n", p->wfname);
-    }
 
     if(p->contact_pairs_file == NULL)
     {
         fprintf(f, "   Contact Pairs file not specified (REQUIRED!)\n");
     } else {
-        fprintf(f, "   Contacts Pairs File: %s\n", p->contact_pairs_file);
+        fprintf(f, "   Contacts Pairs: %s\n", p->contact_pairs_file);
     }
 
     if(p->xfname == NULL)
     {
-        fprintf(f, "    X file: -not specified-\n");
+        fprintf(f, "    Coordinates not loaded, will use random initialization\n");
     }
     else
     {
-        fprintf(f, "    X file: %s\n", p->xfname);
+        fprintf(f, "    Coordinates from: %s\n", p->xfname);
     }
 
     if(p->lfname == NULL)
     {
-        fprintf(f, "    L file: -not specified-\n");
+        fprintf(f, "    Labels not provided\n");
     }
     else
     {
-        fprintf(f, "    L file: %s\n", p->lfname);
+        fprintf(f, "    Labels from: %s\n", p->lfname);
     }
 
     if(p->rfname == NULL)
     {
-        fprintf(f, "    R file: -not specified-\n");
+        fprintf(f, "    Radial preferences not set\n");
     }
     else
     {
-        fprintf(f, "    R file: %s\n", p->rfname);
+        fprintf(f, "    Radial preferences: %s\n", p->rfname);
     }
 
     if(p->fname_bead_wells == NULL)
@@ -820,9 +833,9 @@ static void mflock_show(mflock_t * p, FILE * f)
         fprintf(f, "    output folder: %s\n", p->ofoldername);
     }
 
-    fprintf(f, "    diploid=%d\n", p->diploid);
+    fprintf(f, "    diploid=%s\n", cf_YES_NO(p->diploid));
 
-    fprintf(f, "    live view=%d\n", p->liveView);
+    fprintf(f, "    live view=%s\n", cf_YES_NO(p->liveView));
 
     fprintf(f, "    verbose level: %d\n", p->verbose);
     fprintf(f, "\n");
@@ -996,7 +1009,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "help",          no_argument,       NULL,   'h' },
         { "test",          no_argument,       NULL,   'T' },
         /* Data */
-        { "wFile",         required_argument, NULL,   'w' },
         { "contact-pairs", required_argument, NULL,   'p' },
         { "xFile",         required_argument, NULL,   'x' },
         { "coordinates",   required_argument, NULL,   'x' },
@@ -1059,8 +1071,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         case 'i':
             printf("mflock (chromflock version %s)\n", cf_version);
             printf("Build date: %s, %s\n", __DATE__, __TIME__);
-            //printf("GIT HASH: %s\n", GIT_VERSION);
-            //printf("Compiler: %s\n", CC_VERSION);
             return MFLOCK_ARGS_QUIT;
         case 'd':
             printf("Defaults:\n");
@@ -1068,11 +1078,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             return MFLOCK_ARGS_QUIT;
         case 'D':
             p->diploid = 1;
-            break;
-        case 'w':
-            free(p->wfname);
-            p->wfname = strdup(optarg);
-            assert(p->wfname != NULL);
             break;
         case 'W':
             free(p->fname_bead_wells);
@@ -1296,6 +1301,10 @@ static void mflock_set_and_create_output_folder(mflock_t * mf)
 
 static void mflock_load_bead_wells(mflock_t * mf)
 {
+    // side effects:
+    // mf->n_bead_wells
+    // mf->bead_wells
+
     if(mf->fname_bead_wells == NULL)
     {
         if(mf->verbose > 1)
@@ -1309,6 +1318,34 @@ static void mflock_load_bead_wells(mflock_t * mf)
     {
         printf("loading bead wells from %s\n", mf->fname_bead_wells);
     }
+
+    if(npy_extension(mf->fname_bead_wells))
+    {
+        int n_bead_wells = 0;
+        bpos * pos = load_bead_apos_from_npy(mf->fname_bead_wells, &n_bead_wells);
+
+        if(pos == NULL)
+        {
+            fprintf(stderr, "Failed to load bead wells from %s\n",
+                    mf->fname_bead_wells);
+            exit(EXIT_FAILURE);
+        }
+
+        mf->bead_wells = calloc(n_bead_wells*4, sizeof(double));
+        assert(mf->bead_wells != NULL);
+        mf->n_bead_wells = n_bead_wells;
+        wpos * wells = (wpos *) mf->bead_wells;
+        for(i64 kk = 0; kk < n_bead_wells; kk++)
+        {
+            wells[kk].bead_idx = (size_t) pos[kk].bead_id;
+            wells[kk].P.x = (double) pos[kk].x;
+            wells[kk].P.y = (double) pos[kk].y;
+            wells[kk].P.z = (double) pos[kk].z;
+        }
+        free(pos);
+        return;
+    }
+
 
     size_t fsize = cf_file_size(mf->fname_bead_wells);
     if(fsize % sizeof(double) != 0)
@@ -1338,7 +1375,7 @@ static void mflock_load_bead_wells(mflock_t * mf)
     size_t n_constraints = n_elements / 4;
     for(size_t kk = 0; kk < n_constraints ; kk++)
     {
-        size_t bead1 = mf->bead_wells[4*kk]+1;
+        size_t bead1 = mf->bead_wells[kk].bead_idx;
         if(bead1 > mf->n_beads)
         {
             fprintf(stderr, "Error: Got a bead well for bead %zu, but there are only %zu beads\n",
@@ -1461,7 +1498,6 @@ void mflock_free(mflock_t * p)
     free(p->R);
     free(p->I);
     free(p->L);
-    free(p->wfname);
     free(p->contact_pairs_file);
     free(p->lfname);
     free(p->rfname);
@@ -1531,6 +1567,7 @@ static void mflock_logwrite(const mflock_t * p, int level, const char *fmt, ...)
     return;
 }
 
+// Load an expected number of beads into a pre-allocated memory location
 static int mflock_load_coordinates(mflock_t * p)
 {
     if(npy_extension(p->xfname))

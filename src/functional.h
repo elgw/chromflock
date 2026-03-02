@@ -18,6 +18,7 @@
 #endif
 
 #include "ellipsoid.h"
+#include "cf_util.h"
 
 /**
  * @brief Settings for the energy landscape
@@ -96,7 +97,7 @@ void grad3(
 */
 void
 bead_wells_gradient(const mflock_func_t * restrict fconf,
-                         const double * restrict W,
+                         const wpos * restrict W,
                          const size_t nW,
                          const double * restrict X,
                          double * restrict G);
@@ -115,7 +116,7 @@ bead_wells_gradient(const mflock_func_t * restrict fconf,
  * @return sum of W(r) for the wells.
  */
 double bead_wells_error(const mflock_func_t * restrict fconf,
-                        const double * restrict W,
+                        const wpos * restrict W,
                         const size_t nW,
                         const double * restrict X);
 

@@ -247,7 +247,7 @@ gradRepulsion(const double * restrict D,
     // 1. Figure out how many elements per bucket
     int nDiv = cbrt(N/8);
     nDiv < 1 ? nDiv = 1 : 0;
-    
+
     size_t nH = nDiv*nDiv*nDiv;
     uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S!=NULL);
@@ -977,8 +977,9 @@ void grad4(double * restrict X,
 }
 
 
-void bead_wells_gradient(const mflock_func_t * restrict fconf,
-                         const double * restrict W,
+void
+bead_wells_gradient(const mflock_func_t * restrict fconf,
+                         const wpos * restrict W,
                          const size_t nW,
                          const double * restrict X,
                          double * restrict G)
@@ -990,20 +991,25 @@ void bead_wells_gradient(const mflock_func_t * restrict fconf,
 
     for(size_t kk = 0; kk < nW; kk++)
     {
-        size_t bead = (size_t )W[4*kk];
-        const double * well = W + 4*kk + 1;
-        const double * pos = X + 3*bead;
+        const wpos well = W[kk];
+        const double * pos = X + 3*well.bead_idx;
 
-        double r2 = pow(pos[0]-well[0], 2) +
-            pow(pos[1]-well[1], 2) +
-            pow(pos[2]-well[2], 2);
+        double r2 = pow(pos[0]-well.X[0], 2) +
+            pow(pos[1]-well.X[1], 2) +
+            pow(pos[2]-well.X[2], 2);
 
         double K3 = K1*exp(K2*r2);
-
+        if(0){
+        printf("%zu: (%f, %f, %f) -> (%f, %f, %f) (%f)\n",
+               well.bead_idx,
+               pos[0], pos[1], pos[2],
+               well.P.x, well.P.y, well.P.z,
+               K3);
+        }
         for(size_t ii = 0; ii< 3; ii++)
         {
-            double delta_i = pos[ii]-well[ii];
-            G[3*bead+ii] += delta_i*K3;
+            double delta_i = pos[ii]-well.X[ii];
+            G[3*well.bead_idx+ii] += delta_i*K3;
         }
     }
     return;
@@ -1011,7 +1017,7 @@ void bead_wells_gradient(const mflock_func_t * restrict fconf,
 
 double
 bead_wells_error(const mflock_func_t * restrict fconf,
-                 const double * restrict W,
+                 const wpos * restrict W,
                  const size_t nW,
                  const double * restrict X)
 {
@@ -1025,16 +1031,14 @@ bead_wells_error(const mflock_func_t * restrict fconf,
 
     K1 *= fconf->kBeadWell;
     double K2 = -0.5/pow(sigma, 2);
-
     for(size_t kk = 0; kk < nW; kk++)
     {
-        size_t bead = (size_t )W[4*kk];
-        const double * well = W + 4*kk + 1;
-        const double * pos = X + 3*bead;
+        wpos well = W[kk];
+        const double * pos = X + 3*well.bead_idx;
 
-        double r2 = pow(pos[0]-well[0], 2) +
-            pow(pos[1]-well[1], 2) +
-            pow(pos[2]-well[2], 2);
+        double r2 = pow(pos[0]-well.X[0], 2) +
+            pow(pos[1]-well.X[0], 2) +
+            pow(pos[2]-well.X[0], 2);
 
         E += (c0 - K1*exp(K2*r2));
     }

@@ -5,17 +5,24 @@
 # It is recommended that cmake is used (CMakeLists.txt) for most
 # users.
 
-CC = gcc -std=gnu99
+CC = gcc -std=gnu11
 CFLAGS=-Wall -Wextra -D_FILE_OFFSET_BITS=64
 LDFLAGS=
 
 DEBUG?=0
+SAN?=0
+ANA?=0
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g3 \
 -DNOMATLAB \
--fanalyzer \
 -pedantic
+ifeq ($(ANA), 1)
+CFLAGS+=-fanalyzer
+endif
+ifeq ($(SAN), 1)
+CFLAGS+=-fsanitize=address
+endif
 else
 CFLAGS += -O3 \
 -DNDEBUG \

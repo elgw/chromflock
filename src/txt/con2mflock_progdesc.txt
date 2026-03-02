@@ -12,3 +12,6 @@ be as many bins as seems to be required unless "--genome hg19" is used.
 
 Please note that the --matrix option will write out a DENSE contact
 matrix. Use with caution for high resolutions.
+
+To use directly with mflock, please use the --backbone argument to connect
+adjacent beads within the same chromosome.

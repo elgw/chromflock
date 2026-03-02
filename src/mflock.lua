@@ -1,12 +1,24 @@
 -- Lua 5.3.5
 
-function getConfig(iter, newx)
-  -- Parameters:
-  -- iter is current iteration
-  -- newx is 1: if points were placed randomly or,
-  --         0: if points were loaded from a file
+function getConfig(iter, newx, nbead)
+   -- Input arguments
+   --
+   -- iter: the current iteration number
+   -- newx: 1: if points were placed randomly or,
+   --       0: if points were loaded from a file
+   -- nbead: the number of beads used
+   --
+   -- The following variables are read at the end:
+   -- dInteraction
+   -- kCom
+   -- kRad
+   -- fBrown
+   -- kInt
+   -- kBeadWell
+   -- kChrWell
+   -- quit     : 0-> continue, 1-> quit the dynamics.
 
-  maxiter = 8000
+  maxiter = 1500 + 2000000/nbead
 
   ---- proportion of steps taken
   q = iter/maxiter
