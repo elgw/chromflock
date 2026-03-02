@@ -1,17 +1,144 @@
 #include "liveview.h"
 
-/* Forward Declarations */
-static void rot_x(double *, double);
-static void rot_y(double *, double);
-static void rot_z(double *, double);
-static void matmul(double * , double *, double *);
-/* End of Forward Declarations */
+typedef uint32_t u32;
+typedef int64_t i64;
+typedef uint8_t u8;
+
+typedef struct{
+    double X[3];
+    u32 label;
+} bead;
+
+typedef struct {
+    size_t N;
+
+    const uint8_t * L; // labels
+    const double * X; // pointer to "live" data
+
+    bead * beads;
+
+    int window_w;
+    int window_h;
+
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    SDL_Surface * surface;
+    SDL_Texture * texture;
+
+    SDL_Rect * SrcR;
+    SDL_Rect * DestR;
+
+    char * title;
+    int pause;
+
+    size_t nFrames; // number of rendered frames
+
+    int done;
+    double r0;
+    double * Rot; // rotation matrix
+    const elli * E;
+    double * EA;
+    int perspective; // if 0: orthographic projection
+} scene;
+
+typedef struct {
+    u8 r;
+    u8 g;
+    u8 b;
+    u8 a;
+} pixel;
+
+typedef struct {
+    SDL_Texture * texture;
+} bead_graphics;
+
 
 float mousex = 0;
 float mousey = 0;
 int mousedown = 0;
 
-static uint8_t cmap[] = {255,255,255,
+// T = transpose(A), T: 3x3
+static void
+mattrans(double * T, double * A)
+{
+    T[0] = A[0]; T[3] = A[1]; T[6] = A[2];
+    T[1] = A[3]; T[4] = A[4]; T[7] = A[5];
+    T[2] = A[6]; T[5] = A[7]; T[8] = A[8];
+}
+
+// In: X, Y : 3x3 matrices
+// Out: Z = X*Y,
+static void
+matmul(double * Z, const double * X, const double * Y)
+{
+    double T[9] = {0};
+    for(int mm = 0; mm<3; mm++)
+    {
+        for(int nn = 0; nn<3; nn++)
+        {
+            for(int ii = 0; ii<3; ii++)
+            {
+                T[mm+3*nn] += X[ii*3 + mm]*Y[nn*3 + ii];
+            }
+        }
+    }
+    for(int kk = 0; kk < 9; kk++)
+    {
+        Z[kk] = T[kk];
+    }
+    return;
+}
+
+// In: R: 3x3, X: 3x1
+// Out: X=R*X: 3x1
+static void
+rot_point(const double * restrict R, double * restrict X)
+{
+    double x = R[0] * X[0] + R[3]*X[1] + R[6]*X[2];
+    double y = R[1] * X[0] + R[4]*X[1] + R[7]*X[2];
+    double z = R[2] * X[0] + R[5]*X[1] + R[8]*X[2];
+    X[0] = x;
+    X[1] = y;
+    X[2] = z;
+}
+
+// Rotate around x - axis
+// SR = SR*Rx(theta)
+static void
+rot_x(double * SR, double theta)
+{
+    double R[9];
+    R[0] = 1; R[3] = 0;           R[6] = 0;
+    R[1] = 0; R[4] = cos(theta);  R[7] = sin(theta);
+    R[2] = 0; R[5] = -sin(theta); R[8] = cos(theta);
+    matmul(SR, R, SR);
+}
+
+// Rotate around y - axis
+static void
+rot_y(double * SR, const double theta)
+{
+    double R[9];
+    R[0] = cos(theta);  R[3] = 0; R[6] = sin(theta);
+    R[1] = 0;           R[4] = 1; R[7] = 0;
+    R[2] = -sin(theta); R[5] = 0; R[8] = cos(theta);
+    matmul(SR, R, SR);
+}
+
+
+// Rotate around z - axis
+static void
+rot_z(double * SR, const double theta)
+{
+    double R[9];
+    R[0] =  cos(theta); R[3] = sin(theta); R[6] = 0;
+    R[1] = -sin(theta); R[4] = cos(theta); R[7] = 0;
+    R[2] = 0;           R[5] = 0;          R[8] = 1;
+    matmul(SR, R, SR);
+}
+
+
+static double cmap[] = {255,255,255,
     240,163,255,
     0,117,220,
     153,63,0,
@@ -39,40 +166,6 @@ static uint8_t cmap[] = {255,255,255,
     255,255,0,
     255,80,5};
 
-typedef struct {
-    size_t N;
-
-    uint8_t * L; // labels
-    double * X; // pointer to "live" data
-    double * XZ; // [x, y, z, l]
-
-    int window_w;
-    int window_h;
-
-    SDL_Window* window;
-    SDL_Renderer* renderer;
-    SDL_Surface * surface;
-    SDL_Texture * texture;
-
-    SDL_Rect * SrcR;
-    SDL_Rect * DestR;
-
-    char * title;
-    int pause;
-
-    size_t nFrames; // number of rendered frames
-
-    int done;
-    double r0;
-    double * Rot; // rotation matrix
-    elli * E;
-    double * EA;
-} scene;
-
-
-typedef struct {
-    SDL_Texture * texture;
-} bead;
 
 static double min_double(double a, double b)
 {
@@ -90,8 +183,9 @@ static int imin(int a, int b)
     return b;
 }
 
-
-static void drawBead(uint32_t * pixels, int width, int height, int label)
+static void
+drawBead(pixel* pixels,
+         int width, int height, const int label)
 {
 
     if(width != height)
@@ -100,83 +194,88 @@ static void drawBead(uint32_t * pixels, int width, int height, int label)
         exit(0);
     }
 
-    double * RGB = calloc(3, sizeof(double));
-    assert(RGB != NULL);
-    double * HSV = calloc(3, sizeof(double));
-    assert(HSV != NULL);
-    double * HSV2 = calloc(3, sizeof(double));
-    assert(HSV2 != NULL);
-    double * RGB2 = calloc(3, sizeof(double));
-    assert(RGB2 != NULL);
-
-    if(label>24)
+    int color_id = label;
+    color_id = color_id % 32;
+    if(color_id > 24)
     {
-        label = 0;
+        color_id = 0;
     }
 
-    int64_t r = cmap[3*label];
-    int64_t g = cmap[3*label+1];
-    int64_t b = cmap[3*label+2];
+    double base_hsv[4] = {0};
+    double base_rgb[4] = {
+        cmap[3*color_id+0]/255.0,
+        cmap[3*color_id+1]/255.0,
+        cmap[3*color_id+2]/255.0,
+        1.0};
 
-    RGB[0] = (double) r/255.0;
-    RGB[1] = (double) g/255.0;
-    RGB[2] = (double) b/255.0;
+    rgb2hsv(base_rgb, base_hsv);
 
-    rgb2hsv(RGB, HSV);
-
-    r = 255;
-    g = 255;
-    b = 0;
-    int a = 0;
-
-    int br = round((width-1)/2);
+    int br = round((width-1)/2); // bead radius
 
     for(int xx = -br; xx<=br; xx++)
     {
         for(int yy = -br; yy<=br; yy++)
         {
-            double r = sqrt(pow(xx,2) + pow(yy, 2));
-
-            a = 0;
-            if(r <= br)
+            double rad = sqrt(pow(xx,2) + pow(yy, 2));
+            i64 idx = (br+xx)+width*(br+yy); // pixel idx
+            double pixel_hsv[4] = {0};
+            double pixel_rgb[4] = {0};
+            if(rad <= br)
             {
-                memcpy(HSV2, HSV, 3*sizeof(double));
-                HSV2[2] *= sqrt((br-r)/br);
-                hsv2rgb(HSV2, RGB2);
-
-                r= round(RGB2[0]*255.0);
-                g= round(RGB2[1]*255.0);
-                b= round(RGB2[2]*255.0);
-                a=255;
+                memcpy(pixel_hsv, base_hsv, 4*sizeof(double));
+                pixel_hsv[2] *= sqrt((br-rad)/br); // change "value"
+                hsv2rgb(pixel_hsv, pixel_rgb);
+                pixel_rgb[3] = 1.0;
+                if(label >= 32)
+                {
+                    if(rad < br/5.0 )
+                    {
+                        pixel_rgb[0] = 1.0 - pixel_rgb[0];
+                        pixel_rgb[1] = 1.0 - pixel_rgb[1];
+                        pixel_rgb[2] = 1.0 - pixel_rgb[2];
+                    }
+                }
+            } else {
+                pixel_rgb[3] = 0;
             }
 
-            pixels[(br+xx)+width*(br+yy)] = r + 256*g + 256*256*b + 256*256*256*a;
+
+            if(0)
+            {
+                printf("%d, %d : %f %f %f %f\n",
+                       xx, yy,
+                       pixel_rgb[0],
+                       pixel_rgb[1],
+                       pixel_rgb[2],
+                       pixel_rgb[3]);
+            }
+            pixels[idx].r = (u8) (pixel_rgb[0]*255.0);
+            pixels[idx].g = (u8) (pixel_rgb[1]*255.0);
+            pixels[idx].b = (u8) (pixel_rgb[2]*255.0);
+            pixels[idx].a = (u8) (pixel_rgb[3]*255.0);
         }
     }
 
-    free(RGB);
-    free(HSV);
-    free(RGB2);
-    free(HSV2);
+    return;
 }
 
-void bead_init(scene * s, bead * b, int label)
+void
+bead_init(scene * s, bead_graphics * b, int label)
 {
     int width = 51;
     int height = 51;
     int depth = 32;
     int pitch = 4*width;
 
-    uint32_t * pixels = calloc(width*height, sizeof(uint32_t));
+    pixel * pixels = calloc(width*height, sizeof(pixel));
     assert(pixels != NULL);
 
-    memset(pixels, 128, height*width*sizeof(uint32_t));
     drawBead(pixels, width, height, label);
 
-    uint32_t rmask = 0x000000ff;
-    uint32_t gmask = 0x0000ff00;
-    uint32_t bmask = 0x00ff0000;
-    uint32_t amask = 0xff000000;
+    u32 rmask = 0x000000ff;
+    u32 gmask = 0x0000ff00;
+    u32 bmask = 0x00ff0000;
+    u32 amask = 0xff000000;
 
     SDL_Surface* surf = SDL_CreateRGBSurfaceFrom(
         (void*) pixels,
@@ -197,7 +296,7 @@ void bead_init(scene * s, bead * b, int label)
     free(pixels);
 }
 
-void bead_free(bead *b)
+void bead_graphics_free(bead_graphics *b)
 {
     SDL_DestroyTexture(b->texture);
 }
@@ -317,12 +416,17 @@ static void getEvents(scene * s)
                 rot_z(s->Rot, -0.1);
             }
 
-
-
             if (evt.key.keysym.sym == SDLK_ESCAPE)
             {
                 s->done = 1;
             }
+
+            if (evt.key.keysym.sym == SDLK_p)
+            {
+                s->perspective++;
+                s->perspective = s->perspective % 2;
+            }
+
             if (evt.key.keysym.sym == SDLK_SPACE) {
                 s->pause++;
                 if(s->pause == 2)
@@ -337,142 +441,54 @@ static void getEvents(scene * s)
 
 static int zcmp(const void * A, const void * B)
 {
-    double * P = (double * ) A;
-    double * Q = (double * ) B;
+    bead * P = (bead * ) A;
+    bead * Q = (bead * ) B;
 
-    if(P[2] > Q[2])
+    if(P->X[2] > Q->X[2])
         return 1;
-    if(P[2] < Q[2])
+    if(P->X[2] < Q->X[2])
         return -1;
 
     return 0;
 }
 
-static void mattrans(double * T, double * A)
-{
-    T[0] = A[0]; T[3] = A[1]; T[6] = A[2];
-    T[1] = A[3]; T[4] = A[4]; T[7] = A[5];
-    T[2] = A[6]; T[5] = A[7]; T[8] = A[8];
-}
-
-#if FALSE
-static void matshow(double * X)
-{
-    printf("[");
-    for(int mm = 0; mm<3; mm++)
-    {
-        for(int nn = 0; nn<3; nn++)
-        {
-            printf("%f ", X[mm+3*nn]);
-            if(nn+1 < 3)
-            {
-                printf(", ");
-            }
-
-        }
-        printf("\n");
-    }
-    printf("]\n");
-}
-#endif
-
-static void matmul(double * Z, double * X, double * Y)
-{
-    // Z = X*Y, all are 3x3 matrices
-    // X,Y and Z are allowed to point to the same memory
-    double T[9] = {0,0,0,0,0,0,0,0,0};
-    for(int mm = 0; mm<3; mm++)
-    {
-        for(int nn = 0; nn<3; nn++)
-        {
-            for(int ii = 0; ii<3; ii++)
-            {
-                T[mm+3*nn] += X[ii*3 + mm]*Y[nn*3 + ii];
-            }
-        }
-    }
-    memcpy(Z, T, 9*sizeof(double));
-    return;
-}
-
-static void rot_x(double * SR, double theta)
-{
-    // Rotate around x - axis
-    double R[9];
-    R[0] = 1; R[3] = 0;           R[6] = 0;
-    R[1] = 0; R[4] = cos(theta);  R[7] = sin(theta);
-    R[2] = 0; R[5] = -sin(theta); R[8] = cos(theta);
-    matmul(SR, R, SR);
-}
-
-static void rot_y(double * SR, double theta)
-{
-    // Rotate around y - axis
-    double R[9];
-    R[0] = cos(theta);  R[3] = 0; R[6] = sin(theta);
-    R[1] = 0;           R[4] = 1; R[7] = 0;
-    R[2] = -sin(theta); R[5] = 0; R[8] = cos(theta);
-    matmul(SR, R, SR);
-}
-
-
-static void rot_z(double * SR, double theta)
-{
-    // Rotate around z - axis
-    double R[9];
-    R[0] =  cos(theta); R[3] = sin(theta); R[6] = 0;
-    R[1] = -sin(theta); R[4] = cos(theta); R[7] = 0;
-    R[2] = 0;           R[5] = 0;          R[8] = 1;
-    matmul(SR, R, SR);
-}
-
-static void rot_point(double * R, double * X)
-{
-    // Rotate around z - axis
-    double x = R[0] * X[0] + R[3]*X[1] + R[6]*X[2];
-    double y = R[1] * X[0] + R[4]*X[1] + R[7]*X[2];
-    double z = R[2] * X[0] + R[5]*X[1] + R[8]*X[2];
-    X[0] = x;
-    X[1] = y;
-    X[2] = z;
-}
-
-static void copy_sort(scene * s)
+// Make a copy of the input array XYZ
+// and sort it by Z value after it is rotated
+static void
+copy_sort(scene * s)
 {
     for(size_t kk = 0; kk < s->N; kk++)
     {
-        for(size_t idx = 0; idx<3; idx++)
-        {
-            s->XZ[4*kk + idx] = s->X[3*kk + idx];
-        }
-        s->XZ[4*kk + 3] = s->L[kk];
-        rot_point(s->Rot, s->XZ+4*kk);
+        s->beads[kk].X[0] = s->X[3*kk];
+        s->beads[kk].X[1] = s->X[3*kk+1];
+        s->beads[kk].X[2] = s->X[3*kk+2];
+        s->beads[kk].label = s->L[kk];
+        rot_point(s->Rot, s->beads[kk].X);
     }
-
-    qsort(s->XZ, s->N, 4*sizeof(double), zcmp);
+    qsort(s->beads, s->N, sizeof(bead), zcmp);
     return;
 }
 
 
-static void render(scene * s, bead * beads)
+static void
+render(scene * s, const bead_graphics * beads)
 {
-
+    // Only needed if s->X is updated
     if(s->pause == 0)
     {
         copy_sort(s);
     }
 
     SDL_SetRenderDrawColor(s->renderer, 255.0, 255.0, 255.0, SDL_ALPHA_OPAQUE);
-    //SDL_SetRenderDrawColor(s->renderer, 0.0, 0.0, 0.0, SDL_ALPHA_OPAQUE);
     SDL_RenderClear(s->renderer);
 
-
     // Bead radius
-    double bead_radius = s->r0;
+    const double bead_radius = s->r0;
     // In terms of screen pixels
-    int br = round((double) imin(s->window_w, s->window_h)*bead_radius);
+    const int br = round((double) imin(s->window_w, s->window_h)*bead_radius);
 
-    int mid = imin(s->window_w / 2, s->window_h /2);
+    const int mid = imin(s->window_w / 2, s->window_h /2);
+
     // Figure out offset
     int woff = 0;
     int hoff = 0l;
@@ -492,6 +508,8 @@ static void render(scene * s, bead * beads)
     matmul(ER, ER, RT);
     matmul(ER, s->Rot, ER);
 
+    // draw a circle for the domain
+    // actually draws 3 circles to make it thicker
     for(int delta = 0; delta<3; delta++)
     {
         double x0 = -10;
@@ -499,71 +517,70 @@ static void render(scene * s, bead * beads)
 
         for(double theta = 0.01; theta<=6*M_PI; theta = theta+0.02)
         {
-            //      double x = mid+woff+(mid+delta)*sin(theta);
-            //      double y = hoff+mid+(mid+delta)*s->E->b*cos(theta);
-
             double x = cos(theta); double y = sin(theta);
             double scale = // ||x^TAx||
                 x*(ER[0]*x + ER[3]*y) + y*(ER[1]*x + ER[4]*y);
 
             x = x*(mid+delta)/sqrt(scale) + mid + woff;
             y = y*(mid+delta)/sqrt(scale) + mid + hoff;
-            //      printf("Scale: %f (%f, %f)\n", scale, x, y);
 
             if(x0>-10)
                 SDL_RenderDrawLine(s->renderer, round(x0), round(y0), round(x), round(y));
             y0 = y;
             x0 = x;
         }
+    }
 
-        /* Draw beads */
-        for(size_t kk = 0; kk<s->N; kk++)
+    /* Draw beads */
+    for(size_t kk = 0; kk<s->N; kk++)
+    {
+        int label = (int) s->beads[kk].label;
+
+        SDL_Rect SrcR;
+        SDL_Rect DestR;
+
+        SrcR.x = 0;
+        SrcR.y = 0;
+        SrcR.w = 200;
+        SrcR.h = 200;
+
+        SDL_QueryTexture(beads[label].texture, NULL, NULL, &SrcR.w, &SrcR.h);
+
+        DestR.w = br;
+        DestR.h = br;
+        double dest_x = s->beads[kk].X[0];
+        double dest_y = s->beads[kk].X[1];
+
+        if(s->perspective)
         {
-            int label = ((int) s->XZ[4*kk+3] ) % 32;
-            if(label < 26)
-            {
-                SDL_Rect SrcR;
-                SDL_Rect DestR;
-
-                SrcR.x = 0;
-                SrcR.y = 0;
-                SrcR.w = 200;
-                SrcR.h = 200;
-
-                SDL_QueryTexture(beads[label].texture, NULL, NULL, &SrcR.w, &SrcR.h);
-
-
-                DestR.w = br;
-                DestR.h = br;
-                DestR.x = mid + mid*s->XZ[4*kk] - DestR.w/2 + woff;
-                DestR.y = mid + mid*s->XZ[4*kk+1] - DestR.w/2 + hoff;
-
-                // printf("%d %d %d %d\n", DestR.x, DestR.y, DestR.w, DestR.h);
-
-                SDL_RenderCopy(s->renderer, beads[label].texture, &SrcR, &DestR);
-            }
+            // Beads are sorted with the smallest z value first (-1)
+            // and the largest z value last (1) which will be on the top
+            double p = 8.0;
+            dest_x *= (p+1.0)/(p - s->beads[kk].X[2]);
+            dest_y *= (p+1.0)/(p - s->beads[kk].X[2]);
+            DestR.w *= (p+1.0)/(p - s->beads[kk].X[2]);
+            DestR.h *= (p+1.0)/(p - s->beads[kk].X[2]);
         }
 
+        DestR.x = mid + mid*dest_x - DestR.w/2 + woff;
+        DestR.y = mid + mid*dest_y - DestR.w/2 + hoff;
+
+        SDL_RenderCopy(s->renderer, beads[label].texture, &SrcR, &DestR);
     }
+
 
     SDL_RenderPresent(s->renderer);
     s->nFrames++;
 }
 
-void * liveview_t(void * conf)
-{
-    liveXLview * xlconf = (liveXLview * ) conf;
-    liveview(xlconf->X, xlconf->L, xlconf->N, &xlconf->quit, xlconf->r0, xlconf->E);
-    return NULL;
-}
 
 int
-liveview(double * X,
-         uint8_t * L,
-         size_t N,
+liveview(const double * X,
+         const uint8_t * L,
+         const size_t N,
          volatile int * quit,
-         double r0,
-         elli * E)
+         const double r0,
+         const elli * E)
 {
     scene * s = calloc(1, sizeof(scene));
     assert(s != NULL);
@@ -571,7 +588,7 @@ liveview(double * X,
     s->X = X;
     s->N = N;
     s->r0 = r0;
-    s->XZ = calloc(s->N*4, sizeof(double));
+    s->beads = calloc(s->N, sizeof(bead));
     assert(s->XZ != NULL);
     s->X = X;
     s->L = L;
@@ -595,18 +612,19 @@ liveview(double * X,
     gInit(s);
 
     // Initialize beads
-    bead * beads = calloc(26, sizeof(bead));
+    bead_graphics * tbeads = calloc(64, sizeof(bead_graphics));
     assert(beads != NULL);
-    for(int bb = 0; bb<26; bb++)
+    for(int bb = 0; bb<64; bb++)
     {
-        bead_init(s, beads+bb, bb);
+        bead_init(s, tbeads+bb, bb);
     }
 
+    // main loop
     while(s->done == 0 && quit[0] == 0)
     {
-        render(s, beads);
+        render(s, tbeads);
         getEvents(s);
-        usleep(1000000.0/24.0);
+        usleep(1000000.0/60.0);
     }
 
     fprintf(stdout, "Rendered %zu times\n", s->nFrames);
@@ -614,12 +632,12 @@ liveview(double * X,
     SDL_DestroyRenderer(s->renderer);
     SDL_DestroyWindow(s->window);
 
-    for(int bb = 0; bb<26; bb++)
+    for(int bb = 0; bb<64; bb++)
     {
-        bead_free(&beads[bb]);
+        bead_graphics_free(&tbeads[bb]);
     }
-
-    free(s->XZ);
+    free(tbeads);
+    free(s->beads);
     free(s->title);
     free(s);
 

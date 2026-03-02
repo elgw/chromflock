@@ -16,7 +16,7 @@ project(chromflock
   VERSION 0.4.5
   LANGUAGES C)
 
-include(ExternalProject)X
+include(ExternalProject)
 
 set (CMAKE_C_STANDARD 11)
 

@@ -528,8 +528,14 @@ static void mflock_summary(mflock_t * p)
 }
 
 
-static void mflock_read_contact_pairs(mflock_t * p)
+static void
+mflock_read_contact_pairs(mflock_t * p)
 {
+    if(p->contact_pairs_file == NULL)
+    {
+        mflock_logwrite(p, 1, "Pairwise interactions -- no file specified\n");
+        return;
+    }
     mflock_logwrite(p, 1, "Reading pairwise interactions from %s\n",
                     p->contact_pairs_file);
     uint64_t nCP = 0;
@@ -783,7 +789,7 @@ static void mflock_show(mflock_t * p, FILE * f)
 
     if(p->contact_pairs_file == NULL)
     {
-        fprintf(f, "   Contact Pairs file not specified (REQUIRED!)\n");
+        fprintf(f, "   Contact Pairs file not specified\n");
     } else {
         fprintf(f, "   Contacts Pairs: %s\n", p->contact_pairs_file);
     }
@@ -1020,6 +1026,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "bead-wells",    required_argument, NULL,   'W' },
         { "absolute",      required_argument, NULL,   'P' },
         /* Settings */
+        { "backbone",      no_argument,       NULL,   'b' },
         { "diploid",       no_argument,       NULL,   'D' },
         { "maxiter",       required_argument, NULL,   'n' },
         { "maxtime",       required_argument, NULL,   't' },
@@ -1049,12 +1056,15 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "aA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
+                            "abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
         case 'a':
             p->liveView = 1;
+            break;
+        case 'b':
+            p->create_backbone = 1;
             break;
         case 'A':
             ea = atof(optarg);
@@ -1105,7 +1115,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         case 'p':
             free(p->contact_pairs_file);
             p->contact_pairs_file = strdup(optarg);
-            assert(p->contact_pairs_file != NULL);
             break;
         case 'P':
             free(p->bead_apos_file);
@@ -1184,12 +1193,6 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             p->ofoldername[strlen(p->ofoldername)+1] = '\0';
             p->ofoldername[strlen(p->ofoldername)] = '/';
         }
-    }
-
-    if(p->contact_pairs_file == NULL)
-    {
-        fprintf(stderr, "WARNING: Contacts file not set\n");
-        return MFLOCK_ARGS_ERR;
     }
 
     int efail = 0;
@@ -1453,6 +1456,28 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     mflock_read_contact_pairs(mf);
 
+    if(mf->create_backbone)
+    {
+        if(mf->I == NULL)
+        {
+            mf->I = calloc(2*mf->n_beads, sizeof(u32));
+        } else {
+            mf->I = realloc(mf->I, 2*(mf->n_pairs+mf->n_beads)*sizeof(u32));
+        }
+        int n_backbone = 0;
+        for(size_t kk = 0; kk + 1 < mf->n_beads; kk++)
+        {
+            if(mf->L[kk] == mf->L[kk+1])
+            {
+                mf->I[2*mf->n_pairs + 0] = kk;
+                mf->I[2*mf->n_pairs + 1] = kk + 1;
+                mf->n_pairs++;
+                n_backbone++;
+            }
+        }
+        printf("Added %d backbone contacts\n", n_backbone);
+    }
+
     mflock_load_radial_constraints(mf);
 
     mflock_load_bead_wells(mf);
@@ -1680,6 +1705,7 @@ static void mflock_run(mflock_t * p)
     /* Start molecular dynamics */
     mflock_logwrite(p, 1, " >> Solving ... \n");
 
+
 #ifdef SDL
     if(p->liveView == 1)
     {
@@ -1709,6 +1735,11 @@ static void mflock_run(mflock_t * p)
         mflock_dynamics(p);
     }
 #else
+    if(p->liveView == 1)
+    {
+        printf("WARNING: Can't open the live view (--live) since the program was not "
+               "linked to SDL2\n\n");
+    }
     mflock_dynamics(p);
 #endif
 

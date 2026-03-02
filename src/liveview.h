@@ -10,56 +10,15 @@
 #include "hsvrgb.h"
 #include "ellipsoid.h"
 
-/* Idea:
- * Create a light weight renderer that can be plugged in anywhere to monitor the status of some
- * matrix
- *
- *  - Use pthreads to run separately
- *  - Update window whenever the appointed data is changed
- *    or use some kind of signalling.
- *    Also add a blocking command to destroy the window (before the data is removed).
- *
- *
- * Example:
-
-#include <liveview.h>
-...
-
-  liveXLview xlview;
-  xlview.X = X;
-  xlview.L = L;
-  xlview.N = N;
-  xlview.quit = 0;
-  xlview.r0 = 0.04; // bead radius
-
-  pthread_t th;
-  pthread_create(&th, // thread
-      NULL, // pthread_attrib_t
-      liveview_t, // function
-      &xlview); // arg
-
-// Do some stuff that updates X
+// SDL2 based bead viewer
 //
-  xlview.quit = 1;
-  pthread_join(th, NULL);
-*/
-
-
-typedef struct {
-  size_t N; // Number of points
-  double * X; // Coordinates, 3XN
-  uint8_t * L; // N Labels
-  double r0; // bead radius
-  volatile int quit; // Closes when quit = 1;
-  elli * E;
-} liveXLview;
-
-void * liveview_t(void * conf);
+// Has to be run from the main thread
+// Busy waiting/drawing
 
 int
-liveview(double * X,
-         uint8_t * L,
-         size_t N,
-         volatile int * quit,
-         double radius,
-         elli * E);
+liveview(const double * XYX, // 3xN coordinates
+         const uint8_t * labels, // N labels
+         size_t n_bead,
+         volatile int * quit, // Set to 1 to quit and deallocate
+         double radius, // bead radius
+         const elli * E); // set to NULL if spherical domain

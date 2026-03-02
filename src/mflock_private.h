@@ -44,6 +44,7 @@ typedef struct {
     int diploid; /* Cast the labels to diploid format */
     uint8_t * L; // chr labels per bead
     double * R; // wanted radii together with kRad
+    int create_backbone;
 
     char * bead_apos_file; // file provided by --absolute
     bpos * bead_apos; // absolute bead positions provided by --absolute

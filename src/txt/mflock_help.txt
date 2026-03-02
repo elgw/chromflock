@@ -24,7 +24,12 @@ Optional arguments
 	file with initial coordinates. Unless provided the beads will be placed
         randomly within the simulation domain.
 --diploid
-	Interpret/cast the labels for a diploid structure by duplication
+	Interpret/cast the labels for a diploid structure by duplication.
+        If L are the labels in the range [1, ...], L2 = [L, L+32] and
+        n_beads = 2*nbeads. I.e. the 2nd copy of chr1 will have label 1+32 etc.
+--backbone
+        Create backbone contacts by connecting adjacent beads of the same
+        chromosome.
 --seed N, -s N
 	seed for random number generator (defaults to random)
 --radii <file>, -r <file>
