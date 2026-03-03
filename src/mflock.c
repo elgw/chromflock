@@ -215,6 +215,7 @@ mflock_dynamics(mflock_t * restrict p)
     fconf.r0 = p->r0;
     fconf.E = NULL;
     fconf.Es = NULL;
+    fconf.diploid = p->diploid;
     if(p->E != NULL)
     {
         /* add ellipse parameters otherwise sphere domain */
@@ -340,7 +341,7 @@ mflock_dynamics(mflock_t * restrict p)
          */
         if( p->n_bead_wells > 0 )
         {
-            bead_wells_gradient(&fconf, p->bead_wells, p->n_bead_wells, X, g);
+            bead_wells_gradient(&fconf, p->n_beads, p->bead_wells, p->n_bead_wells, X, g);
         }
 
         /* 2.3 Dampening */
@@ -502,10 +503,39 @@ static void mflock_summary(mflock_t * p)
         double r02 = pow(2.0*p->r0, 2.0);
         for(size_t kk = 0; kk < p->n_bead_wells; kk++)
         {
+            int filled = 0;
             size_t accepts = p->bead_wells[kk].bead_idx;
             double * WX = (double*) &p->bead_wells[kk];
             double distance = eudist3p2(WX, X + 3*accepts);
-            if(distance < r02)
+            #if 0
+            printf("Well %zu (%f, %f, %f) accepts %zu: distance: %f\n", kk,
+                   p->bead_wells[kk].P.x,
+                   p->bead_wells[kk].P.y,
+                   p->bead_wells[kk].P.z,
+                   accepts, distance/(2.0*r02));
+            #endif
+            if(distance < 2.0*r02)
+            {
+                filled = 1;
+            }
+            if(p->diploid == 1)
+            {
+                accepts += p->n_beads/2;
+                distance = eudist3p2(WX, X + 3*accepts);
+                #if 0
+                printf("     %zu (%f, %f, %f) accepts %zu: distance: %f\n", kk,
+                       p->bead_wells[kk].P.x,
+                       p->bead_wells[kk].P.y,
+                       p->bead_wells[kk].P.z,
+                       accepts, distance/(2.0*r02));
+                #endif
+                if(distance < 2.0*r02)
+                {
+                    filled = 1;
+                }
+            }
+
+            if(filled > 0)
             {
                 n_filled++;
             }
@@ -653,8 +683,9 @@ static int mflock_load_bead_labels(mflock_t * p)
         p->L = load_bead_labels_from_npy(p->lfname, &nbead);
         if(p->L == NULL)
         {
-            fprintf(stderr, "Failed to read labels from %s\n",
+            fprintf(stderr, "Failed to read labels from %s\n\n",
                     p->lfname);
+            exit(EXIT_FAILURE);
         }
         p->n_beads = nbead;
     } else {
@@ -1334,7 +1365,7 @@ static void mflock_load_bead_wells(mflock_t * mf)
             exit(EXIT_FAILURE);
         }
 
-        mf->bead_wells = calloc(n_bead_wells*4, sizeof(double));
+        mf->bead_wells = calloc(n_bead_wells, sizeof(wpos));
         assert(mf->bead_wells != NULL);
         mf->n_bead_wells = n_bead_wells;
         wpos * wells = (wpos *) mf->bead_wells;

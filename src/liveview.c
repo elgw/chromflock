@@ -10,7 +10,7 @@ typedef struct{
 } bead;
 
 typedef struct {
-    size_t N;
+    size_t N; // number of beads
 
     const uint8_t * L; // labels
     const double * X; // pointer to "live" data
@@ -39,6 +39,7 @@ typedef struct {
     const elli * E;
     double * EA;
     int perspective; // if 0: orthographic projection
+    int show_lines;
 } scene;
 
 typedef struct {
@@ -427,6 +428,12 @@ static void getEvents(scene * s)
                 s->perspective = s->perspective % 2;
             }
 
+            if (evt.key.keysym.sym == SDLK_l)
+            {
+                s->show_lines++;
+                s->show_lines = s->show_lines % 2;
+            }
+
             if (evt.key.keysym.sym == SDLK_SPACE) {
                 s->pause++;
                 if(s->pause == 2)
@@ -531,43 +538,80 @@ render(scene * s, const bead_graphics * beads)
         }
     }
 
-    /* Draw beads */
-    for(size_t kk = 0; kk<s->N; kk++)
+    if(s->show_lines == 1)
     {
-        int label = (int) s->beads[kk].label;
-
-        SDL_Rect SrcR;
-        SDL_Rect DestR;
-
-        SrcR.x = 0;
-        SrcR.y = 0;
-        SrcR.w = 200;
-        SrcR.h = 200;
-
-        SDL_QueryTexture(beads[label].texture, NULL, NULL, &SrcR.w, &SrcR.h);
-
-        DestR.w = br;
-        DestR.h = br;
-        double dest_x = s->beads[kk].X[0];
-        double dest_y = s->beads[kk].X[1];
-
-        if(s->perspective)
+        for(size_t kk = 0; kk+1 < s->N; kk++)
         {
-            // Beads are sorted with the smallest z value first (-1)
-            // and the largest z value last (1) which will be on the top
-            double p = 8.0;
-            dest_x *= (p+1.0)/(p - s->beads[kk].X[2]);
-            dest_y *= (p+1.0)/(p - s->beads[kk].X[2]);
-            DestR.w *= (p+1.0)/(p - s->beads[kk].X[2]);
-            DestR.h *= (p+1.0)/(p - s->beads[kk].X[2]);
+            // quite silly without a z-buffer or similar
+            // also silly with 1 px thick lines
+            if(s->L[kk] != s->L[kk+1])
+                continue;
+            int label = s->L[kk] % 32;
+            size_t i0 = 3*kk;
+            size_t i1 = 3*(kk+1);
+            const double * X = s->X;
+            double X0[3] = {X[i0], X[i0+1], X[i0+2]};
+            double X1[3] = {X[i1], X[i1+1], X[i1+2]};
+            rot_point(s->Rot, X0);
+            rot_point(s->Rot, X1);
+
+            SDL_SetRenderDrawColor(s->renderer,
+                                   (u8) cmap[3*label],
+                                   (u8) cmap[3*label+1],
+                                   (u8) cmap[3*label+2], 255);
+
+            // project to screen
+            X0[0] = mid + mid*X0[0] - br/2 + woff;
+            X1[0] = mid + mid*X1[0] - br/2 + woff;
+            X0[1] = mid + mid*X0[1] - br/2 + hoff;
+            X1[1] = mid + mid*X1[1] - br/2 + hoff;
+            //printf("%f, %f -- %f, %f\n", X0[0], X0[1], X1[0], X1[1]);
+            SDL_RenderDrawLine(s->renderer,
+                               round(X0[0]), round(X0[1]),
+                               round(X1[0]), round(X1[1]));
         }
-
-        DestR.x = mid + mid*dest_x - DestR.w/2 + woff;
-        DestR.y = mid + mid*dest_y - DestR.w/2 + hoff;
-
-        SDL_RenderCopy(s->renderer, beads[label].texture, &SrcR, &DestR);
     }
 
+    /* Draw beads */
+    if(s->show_lines == 0)
+    {
+        for(size_t kk = 0; kk<s->N; kk++)
+        {
+            int label = (int) s->beads[kk].label;
+
+            SDL_Rect SrcR;
+            SDL_Rect DestR;
+
+            SrcR.x = 0;
+            SrcR.y = 0;
+            SrcR.w = 200;
+            SrcR.h = 200;
+
+            SDL_QueryTexture(beads[label].texture, NULL, NULL, &SrcR.w, &SrcR.h);
+
+            DestR.w = br;
+            DestR.h = br;
+            double dest_x = s->beads[kk].X[0];
+            double dest_y = s->beads[kk].X[1];
+
+            if(s->perspective)
+            {
+                // Beads are sorted with the smallest z value first (-1)
+                // and the largest z value last (1) which will be on the top
+                const double p = 7.0;
+                const double ps = p/(p - s->beads[kk].X[2]); // projective scaling
+                dest_x  *= ps;
+                dest_y  *= ps;
+                DestR.w *= ps;
+                DestR.h *= ps;
+            }
+
+            DestR.x = mid + mid*dest_x - DestR.w/2 + woff;
+            DestR.y = mid + mid*dest_y - DestR.w/2 + hoff;
+
+            SDL_RenderCopy(s->renderer, beads[label].texture, &SrcR, &DestR);
+        }
+    }
 
     SDL_RenderPresent(s->renderer);
     s->nFrames++;
@@ -624,7 +668,7 @@ liveview(const double * X,
     {
         render(s, tbeads);
         getEvents(s);
-        usleep(1000000.0/60.0);
+        // usleep(1000000.0/60.0);
     }
 
     fprintf(stdout, "Rendered %zu times\n", s->nFrames);

@@ -16,7 +16,7 @@
 // Busy waiting/drawing
 
 int
-liveview(const double * XYX, // 3xN coordinates
+liveview(const double * XYX, // 3xN coordinates -- a pointer into mflock
          const uint8_t * labels, // N labels
          size_t n_bead,
          volatile int * quit, // Set to 1 to quit and deallocate

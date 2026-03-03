@@ -39,6 +39,8 @@ typedef struct {
     // TODO: add temporary buffers here
     // TODO: add pointers to data here
     // TODO: add nX as well (which should be called nbead )
+
+    int diploid;
 } mflock_func_t;
 
 /**
@@ -97,6 +99,7 @@ void grad3(
 */
 void
 bead_wells_gradient(const mflock_func_t * restrict fconf,
+                    const size_t n_bead,
                          const wpos * restrict W,
                          const size_t nW,
                          const double * restrict X,
@@ -116,6 +119,7 @@ bead_wells_gradient(const mflock_func_t * restrict fconf,
  * @return sum of W(r) for the wells.
  */
 double bead_wells_error(const mflock_func_t * restrict fconf,
+                        const size_t n_bead,
                         const wpos * restrict W,
                         const size_t nW,
                         const double * restrict X);

@@ -46,14 +46,14 @@ static size_t hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
-    #ifndef NDEBUG
+#ifndef NDEBUG
     if(isfinite(v) != 1)
     {
         fprintf(stderr, "ERROR in %s, line %d\n", __FILE__, __LINE__);
         fprintf(stderr, "X=%f, v = %f\n", X, v);
         exit(EXIT_FAILURE);
     }
-    #endif
+#endif
 
     if(v<=0)
         return 0;
@@ -220,14 +220,14 @@ double errRepulsion(const double * restrict D,
  * @param N the number of dots
  * @param d ???
  * @param kVol The force magnitude
-*/
+ */
 
 static double
 gradRepulsion(const double * restrict D,
-                            double * restrict G,
-                            const size_t N,
-                            const double d,
-                            const double kVol)
+              double * restrict G,
+              const size_t N,
+              const double d,
+              const double kVol)
 {
 
     assert(isfinite(d));
@@ -979,37 +979,78 @@ void grad4(double * restrict X,
 
 void
 bead_wells_gradient(const mflock_func_t * restrict fconf,
-                         const wpos * restrict W,
-                         const size_t nW,
-                         const double * restrict X,
-                         double * restrict G)
+                    const size_t n_bead,
+                    const wpos * restrict W,
+                    const size_t nW,
+                    const double * restrict X,
+                    double * restrict G)
 {
     double sigma = fconf->r0;
     double K1 = 1.0 / sigma; // 1.0 / pow(sigma, 3) / sqrt(2.0*M_PI);
     K1 *= fconf->kBeadWell;
     double K2 = -0.5/pow(sigma, 2);
 
-    for(size_t kk = 0; kk < nW; kk++)
+    if(fconf->diploid == 0)
     {
-        const wpos well = W[kk];
-        const double * pos = X + 3*well.bead_idx;
-
-        double r2 = pow(pos[0]-well.X[0], 2) +
-            pow(pos[1]-well.X[1], 2) +
-            pow(pos[2]-well.X[2], 2);
-
-        double K3 = K1*exp(K2*r2);
-        if(0){
-        printf("%zu: (%f, %f, %f) -> (%f, %f, %f) (%f)\n",
-               well.bead_idx,
-               pos[0], pos[1], pos[2],
-               well.P.x, well.P.y, well.P.z,
-               K3);
-        }
-        for(size_t ii = 0; ii< 3; ii++)
+        for(size_t kk = 0; kk < nW; kk++)
         {
-            double delta_i = pos[ii]-well.X[ii];
-            G[3*well.bead_idx+ii] += delta_i*K3;
+            const wpos well = W[kk];
+            const double * pos = X + 3*well.bead_idx;
+
+            double r2 = pow(pos[0]-well.X[0], 2) +
+                pow(pos[1]-well.X[1], 2) +
+                pow(pos[2]-well.X[2], 2);
+
+            double K3 = K1*exp(K2*r2);
+            if(0){
+                printf("%zu: (%f, %f, %f) -> (%f, %f, %f) (%f)\n",
+                       well.bead_idx,
+                       pos[0], pos[1], pos[2],
+                       well.P.x, well.P.y, well.P.z,
+                       K3);
+            }
+            for(size_t ii = 0; ii< 3; ii++)
+            {
+                double delta_i = pos[ii]-well.X[ii];
+                G[3*well.bead_idx+ii] += delta_i*K3;
+            }
+        }
+    } else {
+        assert(fconf->diploid == 1);
+        for(size_t kk = 0; kk < nW; kk++)
+        {
+            const wpos well = W[kk];
+
+            const double * posA = X + 3*well.bead_idx;
+
+            double r2A = pow(posA[0]-well.X[0], 2) +
+                pow(posA[1]-well.X[1], 2) +
+                pow(posA[2]-well.X[2], 2);
+
+            const double * posB = X + 3*(well.bead_idx + n_bead/2);
+
+            double r2B = pow(posB[0]-well.X[0], 2) +
+                pow(posB[1]-well.X[1], 2) +
+                pow(posB[2]-well.X[2], 2);
+
+            const double * pos = posA;
+            double r2 = r2A;
+
+            // index of bead that should receive the gradient
+            size_t idx = well.bead_idx;
+            if(r2B < r2A)
+            {
+                r2 = r2B;
+                pos = posB;
+                idx += n_bead/2;
+            }
+
+            double K3 = K1*exp(K2*r2);
+            for(size_t ii = 0; ii< 3; ii++)
+            {
+                double delta_i = pos[ii]-well.X[ii];
+                G[3*idx+ii] += delta_i*K3;
+            }
         }
     }
     return;
@@ -1017,6 +1058,7 @@ bead_wells_gradient(const mflock_func_t * restrict fconf,
 
 double
 bead_wells_error(const mflock_func_t * restrict fconf,
+                 const size_t n_bead,
                  const wpos * restrict W,
                  const size_t nW,
                  const double * restrict X)
@@ -1028,19 +1070,40 @@ bead_wells_error(const mflock_func_t * restrict fconf,
     const double c0 = fconf->kBeadWell; // / sigma / sqrt(2.0*M_PI);
 
     double K1 = 1.0; // 1.0 / sigma / sqrt(2.0*M_PI);
-
     K1 *= fconf->kBeadWell;
     double K2 = -0.5/pow(sigma, 2);
-    for(size_t kk = 0; kk < nW; kk++)
+
+    if(fconf->diploid == 0)
     {
-        wpos well = W[kk];
-        const double * pos = X + 3*well.bead_idx;
 
-        double r2 = pow(pos[0]-well.X[0], 2) +
-            pow(pos[1]-well.X[0], 2) +
-            pow(pos[2]-well.X[0], 2);
+        for(size_t kk = 0; kk < nW; kk++)
+        {
+            wpos well = W[kk];
+            const double * pos = X + 3*well.bead_idx;
 
-        E += (c0 - K1*exp(K2*r2));
+            double r2 = pow(pos[0]-well.X[0], 2) +
+                pow(pos[1]-well.X[0], 2) +
+                pow(pos[2]-well.X[0], 2);
+
+            E += (c0 - K1*exp(K2*r2));
+        }
+    } else {
+        assert(fconf->diploid == 1);
+        for(size_t kk = 0; kk < nW; kk++)
+        {
+            wpos well = W[kk];
+            const double * posA = X + 3*well.bead_idx;
+            double r2A = pow(posA[0]-well.X[0], 2) +
+                pow(posA[1]-well.X[0], 2) +
+                pow(posA[2]-well.X[0], 2);
+            const double * posB = X + 3*(well.bead_idx+n_bead/2);
+            double r2B = pow(posB[0]-well.X[0], 2) +
+                pow(posB[1]-well.X[0], 2) +
+                pow(posB[2]-well.X[0], 2);
+            double r2 = r2A;
+            r2 > r2B ? r2 = r2A : 0;
+            E += (c0 - K1*exp(K2*r2));
+        }
     }
     return E;
 }
