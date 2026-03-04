@@ -1249,7 +1249,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
     return MFLOCK_ARGS_OK;
 }
 
-static mflock_t *  mflock_new(void)
+static mflock_t * mflock_new(void)
 {
     mflock_t * p = calloc(1, sizeof(mflock_t));
     assert(p != NULL);

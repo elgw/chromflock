@@ -9,6 +9,9 @@ typedef struct{
     u32 label;
 } bead;
 
+#define BEAD_WIDTH 51
+#define BEAD_HEIGHT 51
+
 typedef struct {
     size_t N; // number of beads
 
@@ -263,8 +266,8 @@ drawBead(pixel* pixels,
 void
 bead_init(scene * s, bead_graphics * b, int label)
 {
-    int width = 51;
-    int height = 51;
+    int width = BEAD_WIDTH;
+    int height = BEAD_HEIGHT;
     int depth = 32;
     int pitch = 4*width;
 
@@ -517,6 +520,7 @@ render(scene * s, const bead_graphics * beads)
 
     // draw a circle for the domain
     // actually draws 3 circles to make it thicker
+    // TODO: use SDL_RnederDrawLines
     for(int delta = 0; delta<3; delta++)
     {
         double x0 = -10;
@@ -561,10 +565,10 @@ render(scene * s, const bead_graphics * beads)
                                    (u8) cmap[3*label+2], 255);
 
             // project to screen
-            X0[0] = mid + mid*X0[0] - br/2 + woff;
-            X1[0] = mid + mid*X1[0] - br/2 + woff;
-            X0[1] = mid + mid*X0[1] - br/2 + hoff;
-            X1[1] = mid + mid*X1[1] - br/2 + hoff;
+            X0[0] = mid + mid*X0[0] + woff;
+            X1[0] = mid + mid*X1[0] + woff;
+            X0[1] = mid + mid*X0[1] + hoff;
+            X1[1] = mid + mid*X1[1] + hoff;
             //printf("%f, %f -- %f, %f\n", X0[0], X0[1], X1[0], X1[1]);
             SDL_RenderDrawLine(s->renderer,
                                round(X0[0]), round(X0[1]),
@@ -584,8 +588,8 @@ render(scene * s, const bead_graphics * beads)
 
             SrcR.x = 0;
             SrcR.y = 0;
-            SrcR.w = 200;
-            SrcR.h = 200;
+            SrcR.w = BEAD_WIDTH;
+            SrcR.h = BEAD_HEIGHT;
 
             SDL_QueryTexture(beads[label].texture, NULL, NULL, &SrcR.w, &SrcR.h);
 
