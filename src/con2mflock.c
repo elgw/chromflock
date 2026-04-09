@@ -37,6 +37,7 @@ typedef struct options {
     /* Output files */
     char * label_file;
     char * contact_file;
+    char * contact_file_raw;
     u32 * contacts;
     i64 nlines;
     int gen_matrix;
@@ -55,6 +56,7 @@ opts * opts_new(void)
     s->chr_reads = calloc(50, sizeof(i64));
     s->label_file = strdup("c2m_labels.npy");
     s->contact_file = strdup("c2m_contacts.npy");
+    s->contact_file_raw = strdup("c2m_contacts_nonbinned.npy");
     s->matrix_file = strdup("c2m_matrix.npy");
     s->genome = strdup("T2T");
     s->verbose = 1;
@@ -103,6 +105,13 @@ typedef struct {
     int val; // 'h'
     char * help; // help message
 } cmdopt;
+
+typedef struct {
+    u32 chrA;
+    u32 posA;
+    u32 chrB;
+    u32 posB;
+} rcontact;
 
 static void show_help(char * progname, cmdopt * options)
 {
@@ -503,6 +512,63 @@ int cmp_u32_pair(const void * _A, const void * _B)
 
 }
 
+int cmp_rcontact(const void * _A, const void * _B)
+{
+    rcontact * A = (rcontact*) _A;
+    rcontact * B = (rcontact*) _B;
+
+    // first key: chr id
+    if(A->chrA < B->chrA)
+    {
+        return -1;
+    }
+
+    if(A->chrA > B->chrA)
+    {
+        return 1;
+    }
+    // A->chrA == B->chrA
+
+    // 2nd key: position
+    if(A->posA < B->posA)
+    {
+        return -1;
+    }
+
+    if(A->posA > B->posA)
+    {
+        return 1;
+    }
+
+    // A->chrA == B->chrA
+    // A->posA == B->posA
+
+    // 3rd key: chrB
+    if(A->chrB < B->chrB)
+    {
+        return -1;
+    }
+
+    if(A->chrB > B->chrB)
+    {
+        return 1;
+    }
+
+    // 4th key: posB
+    if(A->posB < B->posB)
+    {
+        return -1;
+    }
+
+    if(A->posB > B->posB)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+
 static void
 write_contacts(opts * s)
 {
@@ -635,6 +701,101 @@ write_contacts(opts * s)
     return;
 }
 
+/* Write "raw" contacts in the format
+ * [[chr_id, pos, chr_id, pos], ... ]
+ * i.e. without referring to any specific binning
+ */
+static void
+write_contacts_raw(opts * s)
+{
+    assert(s->n_chr > 0);
+    assert(s->nlines > 0);
+
+    if(s->verbose > 0)
+    {
+        printf("Writing contacts to %s\n", s->contact_file);
+    }
+
+    gzl_state * gzl = gzl_open(s->infile, 1024);
+
+    if(gzl == NULL)
+    {
+        gzl_destroy(gzl);
+        printf("Failed to read %s\n", s->infile);
+        exit(EXIT_FAILURE);
+    }
+
+    size_t n_cont_alloc = n_cont_alloc = s->nlines*2;
+    rcontact * contacts = calloc(n_cont_alloc, sizeof(rcontact));
+
+    i64 line = 0;
+    i64 contact_id = 0;
+    char * L = NULL;
+    int gzl_error;
+
+    while( (L = (char*) gzl_get_line(gzl, &gzl_error) ) )
+    {
+        line++;
+        i64 chr1, chr2, pos1, pos2;
+        if(s->pairs_format)
+        {
+            if(L[0] == '#')
+            {
+                continue;
+            }
+            parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
+        } else {
+            if(parse_con_line(L, &chr1, &pos1, &chr2, &pos2))
+            {
+                printf("Unable to parse a line #%ld\n", line+1);
+                exit(EXIT_FAILURE);
+            }
+        }
+        if((chr1 > s->n_chr) || (chr2 > s->n_chr))
+        {
+            printf("Input error on line %ld\n", line);
+            printf("chr1=%ld, chr2=%ld\n", chr1, chr2);
+            assert(0);
+        }
+
+        contacts[contact_id].chrA = chr1;
+        contacts[contact_id].posA = pos1;
+        contacts[contact_id].chrB = chr2;
+        contacts[contact_id].posB = pos2;
+        contact_id++;
+    }
+    gzl_destroy(gzl);
+
+    const i64 n_contact = contact_id;
+    printf("Sorting contacts\n");
+    qsort(contacts, n_contact, sizeof(rcontact), cmp_rcontact);
+
+    printf("Removing duplicates\n");
+    i64 wpos = 0;
+    for(i64 kk = 1; kk < n_contact; kk++)
+    {
+        if(cmp_rcontact(contacts + kk-1, contacts + kk) != 0)
+        {
+            memcpy(s->contacts+wpos, s->contacts+kk, sizeof(rcontact));
+            wpos++;
+        }
+    }
+    const i64 n_unique_contact = wpos;
+    printf("Keeping %ld / %ld\n", n_unique_contact, n_contact);
+
+    printf("Writing contacts to %s\n", s->contact_file_raw);
+
+    if(write_u32(s->contact_file_raw, (u32*) contacts, 4, wpos))
+    {
+        printf("Could not write to %s\n", s->contact_file_raw);
+        exit(EXIT_FAILURE);
+    }
+
+    free(contacts);
+    return;
+}
+
+
 static void write_matrix(opts * s)
 {
     printf("Writing contact map to %s\n", s->matrix_file);
@@ -742,6 +903,9 @@ int con2mflock(int argc, char ** argv)
      * - writes in a format that chromflock can read
      */
     write_contacts(s);
+
+    /* Simply read the contacts, sort them, remove duplicates and write as npy file */
+    write_contacts_raw(s);
 
     /* Generate a dense contact matrix, not advised for high resolutions */
     if(s->gen_matrix)

@@ -557,6 +557,49 @@ static void mflock_summary(mflock_t * p)
     return;
 }
 
+/* Check that the list of contacts is sorted and that there are no duplicates */
+static void
+check_bead_contacts(const u32 * pairs, i64 npairs,
+                    const int verbose, const i64 nbead)
+{
+    if(verbose > 1)
+    {
+        printf("Validating %ld contact constraints\n", npairs);
+    }
+    for(i64 kk = 0; kk+1 < npairs; kk++)
+    {
+        if(pairs[2*kk] > pairs[2*(kk+1)])
+        {
+            printf("Contact pairs not sorted\n");
+            exit(EXIT_FAILURE);
+        }
+        if(pairs[2*kk] == pairs[2*(kk+1)])
+        {
+            if(pairs[2*kk + 1] == pairs[2*(kk+1)+1])
+            {
+                printf("Contact pairs contains a duplicate\n");
+                exit(EXIT_FAILURE);
+            }
+            if(pairs[2*kk + 1] > pairs[2*(kk+1) + 1])
+            {
+                printf("Contact pairs not sorted\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    for(i64 kk = 0; kk < 2*npairs; kk++)
+    {
+        if(pairs[kk] >= nbead)
+        {
+            printf("Error: A contact refers to bead %u but there are only %ld\n", pairs[kk], nbead);
+            exit(EXIT_FAILURE);
+        }
+    }
+    if(verbose > 1)
+    {
+        printf("Contact pairs seems ok\n");
+    }
+}
 
 static void
 mflock_read_contact_pairs(mflock_t * p)
@@ -593,12 +636,20 @@ mflock_read_contact_pairs(mflock_t * p)
         }
         p->n_pairs = nCP;
     }
+
+    check_bead_contacts(p->I, p->n_pairs, p->verbose, p->n_beads);
+
     mflock_logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
     return;
 }
 
 static void mflock_init_coordinates(mflock_t * p)
 {
+    if(p->verbose > 2)
+    {
+        printf("init coordinates\n");
+        printf("   expecting %zu points\n", p->n_beads);
+    }
     p->newx = 0;
     if(p->xfname != NULL)
     {
@@ -643,6 +694,10 @@ static void mflock_init_coordinates(mflock_t * p)
             free(E);
         }
         mflock_logwrite(p, 1, "X[0] = %f\n", p->beads[0]);
+    }
+    if(p->verbose > 2)
+    {
+        printf("   coordinates loaded\n");
     }
     return;
 }
@@ -1515,14 +1570,30 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     if(mf->bead_apos_file != NULL)
     {
+        // bpos*
         mf->bead_apos = mflock_load_bead_apos(mf->bead_apos_file,
                                               &mf->n_bead_apos);
+
         if(mf->bead_apos == NULL)
         {
             fprintf(stderr,
                     "Unable to load absolut bead positions from %s\n",
                     mf->bead_apos_file);
             exit(EXIT_FAILURE);
+        }
+        // Check that the apos refers to existing beads
+        for(i64 kk = 0; kk < mf->n_bead_apos; kk++)
+        {
+            if(mf->bead_apos[kk].bead_id >= mf->n_beads)
+            {
+                fprintf(stderr,
+                        "Error: absolute position %ld refers to bead %d, "
+                        "but there are only %ld beads\n",
+                        kk+1, // one indexed
+                        mf->bead_apos[kk].bead_id+1, // one-indexed
+                        mf->n_beads);
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
@@ -1573,7 +1644,8 @@ void mflock_free(mflock_t * p)
 }
 
 
-static void mflock_set_bead_size(mflock_t * p)
+static void
+mflock_set_bead_size(mflock_t * p)
 {
     if(p->r0 < 0)
     {

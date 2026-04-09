@@ -637,7 +637,6 @@ liveview(const double * X,
     s->N = N;
     s->r0 = r0;
     s->beads = calloc(s->N, sizeof(bead));
-    assert(s->XZ != NULL);
     s->X = X;
     s->L = L;
     s->done = 0;
@@ -661,7 +660,7 @@ liveview(const double * X,
 
     // Initialize beads
     bead_graphics * tbeads = calloc(64, sizeof(bead_graphics));
-    assert(beads != NULL);
+    assert(tbeads != NULL);
     for(int bb = 0; bb<64; bb++)
     {
         bead_init(s, tbeads+bb, bb);

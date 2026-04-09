@@ -28,7 +28,7 @@ typedef uint32_t u32;
 typedef uint8_t u8;
 typedef int64_t i64;
 
-/* For holding absolute bead position information used by mflock (--absolute) */
+/* For holding absolute bead position used by mflock (--absolute) */
 typedef struct {
     u32 bead_id;
     float x;
