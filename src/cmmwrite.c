@@ -125,7 +125,7 @@ cmmwrite_general(const char * fname,
         g = (double) cmap[3*chr+1]/255.0;
         b = (double) cmap[3*chr+2]/255.0;
 
-        printf("%u(%d) -> %f, %f, %f\n", chr, chr % 32, r, g, b);
+        //printf("%u(%d) -> %f, %f, %f\n", chr, chr % 32, r, g, b);
 
         sprintf(line, "<marker id=\"%zu\" x=\"%.3f\" y=\"%.3f\" z=\"%.3f\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\" />\n",
                 kk,
