@@ -1770,21 +1770,27 @@ static void mflock_write_cmm(const mflock_t * p)
         return;
     }
     const double * restrict X = p->beads;
+    u8 * cmap = NULL;
+    if(p->cmm_cmap != NULL)
+    {
+        cmap = load_cmap(p->cmm_cmap);
+    }
     if(p->cmmz == 1)
     {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, NULL);
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, NULL);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
         free(cmmfile);
     }
+    free(cmap);
     return;
 }
 

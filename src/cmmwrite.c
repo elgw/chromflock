@@ -49,6 +49,8 @@ static u8 * default_cmap(void)
     return cmap;
 }
 
+// if a colormap is provided,
+// it should have 256 colors (set whatever isn't used to whatever you want)
 static int
 cmmwrite_general(const char * fname,
                  const double * D, size_t nD, double radius,
