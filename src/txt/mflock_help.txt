@@ -79,6 +79,10 @@ General settings
         The program will write a cmm file that can be visualized with ChimeraX.
 --cmmz, -z
 	write compressed cmm files (gzip), also enables --cmm
+--cmap file.npy
+       Use a custom colormap when saving the cmm file, this file
+       should be a 256x3 numpy array of datatype uint8. Each row l specifies
+       the color to use for any bead of label l.
 --live
 	enable live monitoring (only when compiled with SDL)
 --help, -h
