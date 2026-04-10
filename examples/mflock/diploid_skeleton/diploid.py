@@ -22,12 +22,12 @@ labels = np.zeros(round(np.sum(nbeads)))
 
 bstart = 0
 for chr in range(0, nchr):
-    bstart = bstart + nbeads[chr]
     labels[bstart:bstart+nbeads[chr]] = chr+1
+    bstart = bstart + nbeads[chr]
 
 labels = labels[0:len(labels)//2]
 
-labels.astype('uint8').tofile(folder + '/labels.u8')
+np.save('labels.npy', labels.astype('uint8'))
 
 P = []
 # Create the backbone contact pairs
@@ -42,7 +42,7 @@ shutil.copyfile('../../../src/mflock.lua', folder + '/mflock.lua')
 
 with open(folder + '/run_me.sh', 'w') as fid:
     fid.write('set -e\n')
-    fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.u8 --dconf mflock.lua --outFolder ./ --live --diploid\n');
+    fid.write('../../../bin/mflock --contact-pairs contact_pairs.u32 -L labels.npy --dconf mflock.lua --outFolder ./ --live --diploid --cmm\n');
 
 os.chmod(folder + '/run_me.sh', stat.S_IRWXU)
 
