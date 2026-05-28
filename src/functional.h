@@ -40,6 +40,12 @@ typedef struct {
     // TODO: add pointers to data here
     // TODO: add nX as well (which should be called nbead )
 
+    // Position of top and bottom planes that restricts the domain.
+    // When set to >1, respectively <-1 these are ignored. The strenght
+    // will be kDom
+    double top_plane;
+    double bottom_plane;
+
     int diploid;
 } mflock_func_t;
 

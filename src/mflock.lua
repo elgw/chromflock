@@ -38,6 +38,14 @@ function getConfig(iter, newx, nbead)
     end
   end
 
+  --- Top and bottom planes that restrict the simulation domain
+  -- Can be used to shape the nuclei a little, i.e. to have a flat top
+  -- and/or bottom.  top_plane has no effect when set >= 1,
+  -- bottom_plane has no effect when set <= -1.
+
+  top_plane = 1
+  bottom_plane = -1
+
   ---- Domain force, kDom
   -- Force that keeps bead in domain
   kDom = 1.0

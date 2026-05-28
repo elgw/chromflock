@@ -839,6 +839,28 @@ void grad3(const double * restrict X,
         }
     }
 
+    // Top and bottom restrictions
+    if(C->top_plane < 1.0) {
+
+        for(size_t kk = 0; kk<nX; kk++) {
+
+            if( X[3*kk + 2] > C->top_plane ) {
+                G[3*kk + 2] -= C->kDom*(C->top_plane - X[kk*3 + 2]);
+            }
+        }
+    }
+
+    if(C->bottom_plane > -1.0) {
+
+        for(size_t kk = 0; kk<nX; kk++) {
+
+            if( X[3*kk + 2] < C->bottom_plane ) {
+                G[3*kk + 2] -= C->kDom*(C->bottom_plane - X[kk*3 + 2]);
+            }
+        }
+    }
+
+
     if(C->E != NULL) // Ellipsoidal domain
     {
         for(size_t kk = 0; kk<nX; kk++)

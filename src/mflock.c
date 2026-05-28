@@ -216,6 +216,8 @@ mflock_dynamics(mflock_t * restrict p)
     fconf.E = NULL;
     fconf.Es = NULL;
     fconf.diploid = p->diploid;
+    fconf.top_plane = 2.0;
+    fconf.bottom_plane = -2.0;
     if(p->E != NULL)
     {
         /* add ellipse parameters otherwise sphere domain */
@@ -289,6 +291,8 @@ mflock_dynamics(mflock_t * restrict p)
         fconf.kRad = lua_get_float(L, "kRad");
         fconf.kBeadWell = lua_get_float(L, "kBeadWell");
         fconf.kChrWell = lua_get_float(L, "kChrWell");
+        fconf.top_plane = lua_get_float(L, "top_plane");
+        fconf.bottom_plane = lua_get_float(L, "bottom_plane");
         p->compress = lua_get_float(L, "kCom");
         double Fb = lua_get_float(L, "fBrown");
         luaquit = lua_get_int(L, "quit");
