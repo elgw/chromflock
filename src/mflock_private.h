@@ -52,6 +52,7 @@ typedef struct {
 
     // Geometry
     // Sphere if E isn't set.
+    mflock_geometry_type geometry;
     double r0; // bead radius
     double volq;
     elli * E; // Ellipse

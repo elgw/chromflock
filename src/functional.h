@@ -1,10 +1,5 @@
 #pragma once
-
-/**
- * @file functional.h
- * @author Erik Wernersson
- * @date 2020-2023
- */
+#pragma once
 
 #include <assert.h>
 #include <math.h>
@@ -20,9 +15,27 @@
 #include "ellipsoid.h"
 #include "cf_util.h"
 
-/**
- * @brief Settings for the energy landscape
-*/
+typedef uint32_t u32;
+typedef double f64;
+
+typedef enum {
+    MFLOCK_SPHERE = 0,
+    MFLOCK_BOX,
+    MFLOCK_ELLIPSOID
+} mflock_geometry_type;
+
+// TODO: Re-use buffers!
+typedef struct {
+    int nDiv; // number of buckets per dimension
+    size_t nH; // number of buckets [nDiv^3]
+    u32 * S; // elements per bucket [nH]
+    u32 * B; // buckets [nH]
+    u32 * C; // start position of each bucket [nH+1]
+    f64 * E; // oh, we actually move the points, and not just references to them
+    // actually makes sense, according to benchmarks.
+} countsort_buffers;
+
+// Settings for the energy landscape
 typedef struct {
     double r0; /**< bead radius */
     double dInteraction; /**<  Wanted interaction distance */
@@ -32,6 +45,9 @@ typedef struct {
     double kRad; /**< For radial constraints, using R */
     double kBeadWell; /**< Force that attract specific beads to specific locations */
     double kChrWell; /**< Force that attract beads in specific chromosomes to specific locations */
+
+    mflock_geometry_type geometry;
+
     elli * E; /**< Ellipsoidal geometry if non-NULL */
     elli * Es; /**<  smaller ellipse defining a "safe region" */
 
@@ -45,7 +61,6 @@ typedef struct {
     // will be kDom
     double top_plane;
     double bottom_plane;
-
     int diploid;
 } mflock_func_t;
 
@@ -58,7 +73,7 @@ typedef struct {
  * @param R preferred radial positions
  * @param P list of connected beads (pairs)
  * @param C the settings
-*/
+ */
 double err3(
     const double * restrict X,
     const size_t nX,
@@ -102,14 +117,14 @@ void grad3(
  * @param W wells [4 x nW]
  * @param nW
  * @param[out] G gradient vector, will be written to
-*/
+ */
 void
 bead_wells_gradient(const mflock_func_t * restrict fconf,
                     const size_t n_bead,
-                         const wpos * restrict W,
-                         const size_t nW,
-                         const double * restrict X,
-                         double * restrict G);
+                    const wpos * restrict W,
+                    const size_t nW,
+                    const double * restrict X,
+                    double * restrict G);
 
 /** @brief Attract beads to designated wells
  *
@@ -132,7 +147,7 @@ double bead_wells_error(const mflock_func_t * restrict fconf,
 
 /**
  * @brief Reference implementation for err3
-*/
+ */
 double err2(
     double * X,
     size_t nX,
@@ -144,7 +159,7 @@ double err2(
 /**
  * @brief Like err2 but using a matrix, A, to define the beads that
  * should be in contact.
-*/
+ */
 double err(
     double * X,
     size_t nX,
@@ -167,7 +182,7 @@ void grad(
 /** @brief Older version of grad3, kept for reference.
  *
  * Does not know about ellipsoidal geometry.
-*/
+ */
 void grad2(
     double * X,
     size_t nX,

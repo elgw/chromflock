@@ -42,7 +42,8 @@ static double eudist3(const double * A, const double * B)
     return sqrt(eudist3sq(A, B));
 }
 
-static size_t hash_coord(const int nDiv, const double X)
+static size_t
+hash_coord(const int nDiv, const double X)
 {
     double v = (X+1)/2 * nDiv;
 
@@ -63,27 +64,29 @@ static size_t hash_coord(const int nDiv, const double X)
 }
 
 
-static size_t hash(const size_t nDiv, const double * restrict X)
+static size_t
+hash(const size_t nDiv, const double * restrict X)
 {
 
-    size_t h = hash_coord(nDiv, X[0]) +
+    return hash_coord(nDiv, X[0]) +
         nDiv*hash_coord(nDiv, X[1]) +
         nDiv*nDiv*hash_coord(nDiv, X[2]);
-
-    return h;
 }
 
 
-double errRepulsion(const double * restrict D,
-                    const size_t N,
-                    const double d)
-{
-
-    // D: coordinates of the dots [d0_x, d0_y, d0_z, d1_x, d1_y, ... dN-1_z]
-    // N: Number of dots
-    // d: capture distance between bead centers
-
-    // NOTE: Will crash if D contains nan or inf values.
+// D: coordinates of the dots [d0_x, d0_y, d0_z, d1_x, d1_y, ... dN-1_z]
+// N: Number of dots
+// d: capture distance between bead centers
+//
+// NOTE:
+// - Will crash if D contains nan or inf values.
+//
+// - If points are outside of the domain, they will be assigned to
+// - edge buckets
+double
+errRepulsion(const double * restrict D,
+             const size_t N,
+             const double d) {
 
 #ifndef NDEBUG
     // Verify that D was actually allocated
@@ -99,21 +102,16 @@ double errRepulsion(const double * restrict D,
     double d2 = pow(d,2);
 
     // 1. Counting -- Figure out how many elements per bucket
+    // there will be (2/nDiv)^3 buckets in total since the domain
+    // is [-1, 1]^3
     int nDiv = cbrt(N/8);
     nDiv < 1 ? nDiv = 1 : 0;
-
-    // i.e. bucket side length is 2/nDiv which can be related to d.
-    // You can figure out optimal nDiv vs d and N by
-    // running functinal_optimal_nDiv (while changing nDiv here)
-    // For 3300 points: 9 or 10
-    // For 33000 points: 15 about 30% faster than using 9
 
     size_t nH = nDiv*nDiv*nDiv;
     uint32_t * S = calloc(nH, sizeof(uint32_t));
     assert(S != NULL);
 
-    for(size_t kk = 0; kk<N; kk++)
-    {
+    for(size_t kk = 0; kk<N; kk++) {
         S[hash(nDiv, D+3*kk)]++;
     }
 
@@ -177,10 +175,10 @@ double errRepulsion(const double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t cc = hc_min; cc <= hc_max; cc++)
-            for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t aa = ha_min; aa <= ha_max; aa++)
-                {
+        for(size_t cc = hc_min; cc <= hc_max; cc++) {
+            for(size_t bb = hb_min; bb <= hb_max; bb++) {
+                for(size_t aa = ha_min; aa <= ha_max; aa++) {
+
 
                     // hash or index of the bucket to compare against
                     size_t hash =
@@ -202,6 +200,8 @@ double errRepulsion(const double * restrict D,
                         }
                     }
                 }
+            }
+        }
     }
 
     free(B);
@@ -319,10 +319,9 @@ gradRepulsion(const double * restrict D,
         size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
         size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
 
-        for(size_t cc = hc_min; cc <= hc_max; cc++)
-            for(size_t bb = hb_min; bb <= hb_max; bb++)
-                for(size_t aa = ha_min; aa <= ha_max; aa++)
-                {
+        for(size_t cc = hc_min; cc <= hc_max; cc++) {
+            for(size_t bb = hb_min; bb <= hb_max; bb++) {
+                for(size_t aa = ha_min; aa <= ha_max; aa++) {
 
                     size_t hash =
                         aa +
@@ -358,6 +357,8 @@ gradRepulsion(const double * restrict D,
                         }
                     }
                 }
+            }
+        }
     }
 
 
@@ -773,29 +774,29 @@ void grad3(const double * restrict X,
     memset(G, 0, nX*3*sizeof(double));
 
     /* Radial positioning */
-    if(C->E == NULL) // Spherical domain
-    {
-        if(C->kRad > 0)
+    if(C->kRad > 0 & R != NULL) {
+        if(C->geometry == MFLOCK_ELLIPSOID)
         {
-            assert(R != NULL);
-            for(size_t kk = 0; kk<nX; kk++)
-            {
-                if(isfinite(R[kk]) == 1)
-                {
-                    double r = norm3(X+kk*3);
-                    double re = 0;
-                    // if(r > 0)
-                    re = 2*1/r*(r-R[kk]);
-                    for(int idx = 0; idx<3; idx++)
-                    {
-                        G[3*kk+idx] += C->kRad*X[kk*3+idx]*re;
-                    }
+            printf("Warning: Using radial constrains with ellipsoidal geometry"
+                   "is not implemented yet. Will give you weird results\n");
+            // Obviously we need to convert the radial values to something else
+            // in this case.
+        }
+        for(size_t kk = 0; kk<nX; kk++) {
+            if(isfinite(R[kk]) == 1) {
+                double r = norm3(X+kk*3);
+                double re = 0;
+                // if(r > 0)
+                re = 2*1/r*(r-R[kk]);
+                for(int idx = 0; idx<3; idx++) {
+                    G[3*kk+idx] += C->kRad*X[kk*3+idx]*re;
                 }
             }
         }
     }
 
-    if(C->E != NULL) // Ellipsoidal domain
+
+    if(C->geometry == MFLOCK_ELLIPSOID)
     {
         if(C->kRad > 0)
         {
@@ -822,8 +823,7 @@ void grad3(const double * restrict X,
     }
 
     /* --- Keep inside domain --- */
-
-    if(C->E == NULL) // Spherical domain
+    if(C->geometry == MFLOCK_SPHERE)
     {
         for(size_t kk = 0; kk<nX; kk++)
         {

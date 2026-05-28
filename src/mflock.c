@@ -218,6 +218,7 @@ mflock_dynamics(mflock_t * restrict p)
     fconf.diploid = p->diploid;
     fconf.top_plane = 2.0;
     fconf.bottom_plane = -2.0;
+    fconf.geometry = p->geometry;
     if(p->E != NULL)
     {
         /* add ellipse parameters otherwise sphere domain */
@@ -226,6 +227,7 @@ mflock_dynamics(mflock_t * restrict p)
                             p->E->a - fconf.r0,
                             p->E->b - fconf.r0,
                             p->E->c - fconf.r0);
+        fconf.geometry == MFLOCK_ELLIPSOID;
     }
 
     fconf.nIPairs = p->n_pairs; /* Only for err2 */
@@ -1128,6 +1130,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "cmap",          required_argument, NULL,   '1' },
         { "defaults",      no_argument,       NULL,   'd' },
         /* Geometry */
+        { "box",           no_argument,       NULL,   'X' },
         { "radius",        required_argument, NULL,   'R' },
         { "vq",            required_argument, NULL,   'Q' },
         { "ea",            required_argument, NULL,   'A' },
@@ -1147,7 +1150,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "1:abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
+                            "1:abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:TuX",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1163,12 +1166,15 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             break;
         case 'A':
             ea = atof(optarg);
+            p->geometry == MFLOCK_ELLIPSOID;
             break;
         case 'B':
             eb = atof(optarg);
+            p->geometry == MFLOCK_ELLIPSOID;
             break;
         case 'c':
             p->write_cmm = 1;
+            p->geometry == MFLOCK_ELLIPSOID;
             break;
         case 'C':
             ec = atof(optarg);
@@ -1248,6 +1254,9 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             return MFLOCK_ARGS_QUIT;
         case 'h':
             return(1);
+        case 'X':
+            p->geometry = MFLOCK_BOX;
+            break;
         case 'z':
             p->write_cmm = 1;
             p->cmmz = 1;
