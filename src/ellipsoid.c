@@ -1,6 +1,7 @@
 #include "ellipsoid.h"
 
-static double eudist3(const double * a, const double * b)
+static double
+eudist3(const double * a, const double * b)
 {
     return sqrt(
         pow(a[0]-b[0], 2) +
@@ -18,17 +19,18 @@ static double eudist3(const double * a, const double * b)
   }
 */
 
-static double norm3(const double * a)
+static double
+norm3(const double * a)
 {
     return sqrt(
-        pow(a[0],2) +
-        pow(a[1],2) +
-        pow(a[2],2));
+        pow(a[0], 2) +
+        pow(a[1], 2) +
+        pow(a[2], 2));
 }
 
 elli * elli_new(double a, double b, double c)
 {
-    elli * E = malloc(sizeof(elli));
+    elli * E = calloc(1, sizeof(elli));
     assert(E != NULL);
     E->a=a;
     E->a2=pow(a,2);
@@ -41,10 +43,11 @@ elli * elli_new(double a, double b, double c)
     return E;
 }
 
-void elli_show(elli * E)
+void elli_print(FILE * fid, elli * E)
 {
-    printf("Ellipse: x^2/a^2 + y^2/b^2 + z^2/c^2 = 1, maxiter: %zu, eps: %e\n", E->maxiter, E->eps);
-    printf("         a=%f, b=%f, c=%f, volume=%f\n",
+    fprintf(fid, "Ellipse: x^2/a^2 + y^2/b^2 + z^2/c^2 = 1, maxiter: %zu, eps: %e\n",
+           E->maxiter, E->eps);
+    fprintf(fid, "         a=%f, b=%f, c=%f, volume=%f\n",
            E->a, E->b, E->c, elli_vol(E));
     return;
 }
@@ -68,7 +71,8 @@ double elli_vol(elli * E)
     return 4.0/3.0*M_PI*E->a*E->b*E->c;
 }
 
-double elli_radius(elli * E, double * p)
+double
+elli_radius(const elli * E, const double * p)
 {
 
     double t = sqrt( 1.0/(  pow(p[0]/E->a, 2)
@@ -79,66 +83,65 @@ double elli_radius(elli * E, double * p)
     return 1.0/t;
 }
 
-double elli_pdist(elli * E, double * p)
+double
+elli_dist_p(const elli * E,
+           const double * restrict p,
+           double * restrict X)
 {
 
-    // Distance from point to surface
-    // by projection through origo
-    double t = sqrt( 1.0/(  pow(p[0]/E->a, 2)
-                            + pow(p[1]/E->b, 2)
-                            + pow(p[2]/E->c, 2)
-                         ));
-
-    double ip[] = {0,0,0};
-    for(int kk = 0; kk<3; kk++)
-        ip[kk] = t*p[kk];
+    double _ip[] = {0,0,0};
+    double * ip;
+    if(X == NULL) {
+        ip = _ip;
+    } else {
+        ip = X;
+    }
+    memcpy(ip, p, 3*sizeof(double));
+    elli_project(E, ip);
 
     return eudist3(p, ip);
 }
 
-double elli_getScale(const elli * restrict E, const double * restrict X)
+double
+elli_getScale(const elli * restrict E, const double * restrict X)
 {
     return sqrt(elli_getScale2(E, X));
 }
 
-double elli_getScale2(const elli * restrict E, const double * restrict X)
+double
+elli_getScale2(const elli * restrict E, const double * restrict X)
 {
     return pow(X[0]/E->a,2) + pow(X[1]/E->b,2) + pow(X[2]/E->c,2);
 }
 
-void elli_scale(elli * E, double * X)
+void
+elli_project(const elli * E, double * X)
 {
     double z = sqrt(pow(X[0]/E->a,2) + pow(X[1]/E->b,2) + pow(X[2]/E->c,2));
     if(z == 0)
     {
         X[0] = 0; X[1] = 0; X[2] = 0;
     } else {
-        X[0]*=1/z; X[1]*=1/z; X[2]*=1/z;
+        X[0]*=1.0/z; X[1]*=1.0/z; X[2]*=1.0/z;
     }
 }
 
-void elli_scale2(elli * E, double * X)
-{
-    // Two-step scaling
-    double X0[3];
-    memcpy(X0, X, 3*sizeof(double));
-    elli_scale(E, X);
-    double n[3];
-    elli_nnormal(E, X, n);
-    double d = eudist3(X0, X);
-    double X1[3];
-    for(int ll = 0; ll<3; ll++)
-        X1[ll] = X[ll] + d*n[ll];
-    for(int ll = 0; ll<3; ll++)
-        X[ll] += (X0[ll]-X1[ll]);
 
-}
-
-void elli_nnormal(elli * E, double * X, double * N)
+void elli_normal(const elli * E,
+                 const double * restrict X,
+                 double * restrict N)
 {
     N[0] = 2.0*X[0]/pow(E->a,2);
     N[1] = 2.0*X[1]/pow(E->b,2);
     N[2] = 2.0*X[2]/pow(E->c,2);
+}
+
+void
+elli_nnormal(const elli * E,
+             const double * restrict X,
+             double * restrict N)
+{
+    elli_normal(E, X, N);
     double n = norm3(N);
     for(int kk = 0; kk<3; kk++)
     {
@@ -146,16 +149,10 @@ void elli_nnormal(elli * E, double * X, double * N)
     }
 }
 
-void elli_normal(elli * E, double * X, double * N)
-{
-    N[0] = 2.0*X[0]/pow(E->a,2);
-    N[1] = 2.0*X[1]/pow(E->b,2);
-    N[2] = 2.0*X[2]/pow(E->c,2);
-}
-
-static double f_div_df(const double l,
-                       const double * restrict E,
-                       const double * restrict P)
+static double
+f_div_df(const double l,
+         const double * restrict E,
+         const double * restrict P)
 {
     double f = 0;
     double df = 0;
@@ -174,7 +171,8 @@ static double f_div_df(const double l,
     return f/df;
 }
 
-static double elli_dgistR_fun(double * E, double * P, double alpha)
+static double
+elli_dgistR_fun(const double * E, const double * P, double alpha)
 {
     double a = E[0];
     double b = E[1];
@@ -196,9 +194,12 @@ static double elli_dgistR_fun(double * E, double * P, double alpha)
     return f/df;
 }
 
-double elli_gdistR(elli * restrict ellipse, double * restrict P, double * restrict X)
+double
+elli_gdistR(const elli * ellipse,
+            const double * restrict P,
+            double * restrict X)
 {
-    /* Root finding method, see John C. Hart, 1994 */
+
     double E[3];
     E[0] = ellipse->a;
     E[1] = ellipse->b;
@@ -228,9 +229,10 @@ double elli_gdistR(elli * restrict ellipse, double * restrict P, double * restri
     return 0;
 }
 
-double elli_gdistL(elli * restrict ellipse,
-                   const double * restrict P,
-                   double * restrict Y)
+double
+elli_gdistL(const elli * ellipse,
+            const double * restrict P,
+            double * restrict Y)
 {
 
     const double eps = ellipse->eps;
@@ -261,7 +263,7 @@ double elli_gdistL(elli * restrict ellipse,
     }
 
 //  printf("%e\n", l1);
-    if(norm3(P)>norm3(Y))
+    if(norm3(P) > norm3(Y))
     {
         return eudist3(P, Y);
     } else {
@@ -269,19 +271,11 @@ double elli_gdistL(elli * restrict ellipse,
     }
 }
 
-double elli_gdist(elli * ellipse, double * P, double * Y)
+double
+elli_gdist(const elli * ellipse,
+           const double * restrict P,
+           double * restrict Y)
 {
-    /* Following Bektas 2015
-     * Using The Newton-Raphson method.
-     *
-     * Note that for interior points, there are potentially infinite number of solutions
-     * due to the way that the problem is posed. I.e., only looking at the direction of the normals.
-     * The solution is only guaranteed to be a shortest distance if P is outside of the ellipse
-     *
-     * See also this library:
-     * https://tcg.mae.cornell.edu/pubs/Pope_FDA_08.pdf
-     */
-
     // Most iterations to be used
     const size_t maxiter = ellipse->maxiter; // 40
     // Abort when max(fabs(deltaX)) is less than this value
@@ -438,455 +432,28 @@ double elli_gdist(elli * ellipse, double * P, double * Y)
     }
 #endif
 
-    if(Y!=NULL)
-    { Y[0] = X[0]; Y[1] = X[1]; Y[2] = X[2]; }
+    if(Y != NULL) {
+        Y[0] = X[0];
+        Y[1] = X[1];
+        Y[2] = X[2];
+    }
 
     return dist;
 }
 
-/* Don't compile this when building object files */
-#ifdef standalone
-
-static double sprod(double * a, double * b)
+double
+elli_gdistS(const elli * E,
+            const double * P)
 {
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+    double x2 = pow(P[0], 2);
+    double y2 = pow(P[1], 2);
+    double z2 = pow(P[2], 2);
+
+    // F(x)
+    double num = x2/E->a2 + y2/E->b2 + z2/E->c2 - 1.0;
+    // ||grad F(x)||
+    double den = 2*sqrt(x2/(E->a2*E->a2)
+                        + y2/(E->b2*E->b2)
+                        + z2/(E->c2*E->c2));
+    return - num/den;
 }
-
-
-static double compare_sphere(double r)
-{
-    double p[] = {.99, .99, .99};
-    // Compare with sphere
-    elli * E = elli_new(r, r, r);
-    assert(fabs(elli_vol(E) - pow(r,3)*4.0/3.0*M_PI) < 1e-9);
-    for(size_t kk = 0; kk<10000; kk++)
-    {
-        p[0] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-        p[1] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-        p[2] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-
-        // Classifies inside/outside correctly
-        double d = norm3(p);
-        if(d<r)
-            assert(elli_isInside(E, p) == 1);
-        if(d>r)
-            assert(elli_isInside(E, p) == 0);
-
-        // Distances to surface
-        double de = elli_pdist(E, p);
-        double dg = elli_gdist(E, p, NULL);
-
-        if( fabs(fabs(de) - fabs(r-norm3(p))) > 1e-6)
-        {
-            printf("elli_pdist = %f, |1-||p||| = %f\n", de, fabs(r-norm3(p)));
-            assert(0);
-        }
-
-        if( fabs(fabs(dg) - fabs(r-norm3(p))) > 1e-5)
-        {
-            printf("elli_gdist = %f, |1-||p||| = %f\n", dg, fabs(r-norm3(p)));
-            assert(0);
-        }
-
-        // Radius
-        double re = elli_radius(E, p);
-        if( fabs(re - norm3(p)/r) > 1e-6)
-        {
-            printf("Radius mismatch:\n");
-            elli_show(E);
-            printf("p = %f %f %f\n", p[0], p[1], p[2]);
-            printf("re=%f, norm(p)/r=%f\n", re, norm3(p)/r);
-            assert(0);
-        }
-
-    }
-    free(E);
-    return 0;
-}
-
-void geodesic_random()
-{
-    /* Random points for ellipse that has different axes
-     * elli_gdist has it's own debugging method as long as
-     * NDEBUG isn't defined
-     */
-
-    elli * E = elli_new(2, 1.1, 1);
-    double p[3];
-    double r = 5; // max radius
-    printf("\n");
-    for(size_t kk = 0; kk<10000; kk++)
-    {
-        //    printf("\r %zu", kk); fflush(stdout);
-        p[0] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-        p[1] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-        p[2] = r*(2.0*(rand()/ (double) RAND_MAX) - 1.0);
-        elli_gdist(E, p, NULL);
-    }
-}
-
-double * getPointsOnSphere(size_t N)
-{
-    double * P = malloc(3*N*sizeof(double));
-    assert(P != NULL);
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        int gotPoint = 0;
-        while(gotPoint == 0)
-        {
-            double * X = P+3*kk;
-            for(int ll = 0; ll<3; ll++)
-                X[ll] = (2.0*(double) rand()/ (double) RAND_MAX) - 1.0;
-
-            double n = norm3(X);
-            if(n<=1 && n>0)
-            {
-                for(int ll = 0; ll<3 ; ll++)
-                    X[ll] /= n;
-                gotPoint = 1;
-            }
-        }
-    }
-    return P;
-}
-
-static double clockdiff(struct timespec* start, struct timespec * finish)
-{
-
-    double elapsed = (finish->tv_sec - start->tv_sec);
-    elapsed += (finish->tv_nsec - start->tv_nsec) / 1000000000.0;
-    return elapsed;
-}
-
-void smalltest()
-{
-    /* Test smaller ellipse as primary distance test
-     */
-
-    printf("--> Smaller ellipsoid as lower primary distance check\n");
-
-    srand(time(NULL));
-    double delta = 0.02;
-    double a = 1.7; double b = 1; double c = 1;
-    elli * E = elli_new(a, b, c);
-    elli * Ei = elli_new(a - delta, b - delta, c - delta);
-    printf("    E = %f %f %f\n", E->a, E->b, E->c);
-    printf("    Ed = %f %f %f = E - %f\n", Ei->a, Ei->b, Ei->c, delta);
-    printf("    Testing that f(p) < d for p \\ in Ed\n");
-
-
-
-    E->maxiter = 1000;
-//  elli_show(E);
-//  elli_show(Ei);
-    for(size_t kk = 0; kk<20000; kk++)
-    {
-        double X[3];
-        double Y[3];
-        X[0] = (double) rand()/ (double) RAND_MAX;
-        X[1] = (double) rand()/ (double) RAND_MAX;
-        X[2] = (double) rand()/ (double) RAND_MAX;
-        elli_scale(Ei, X); // scale X to be on Ei
-        double d = elli_gdistR(E, X, Y);
-        if(d>=delta)
-        {
-            printf("No, for point %zu:", kk);
-            printf("delta: %f d(xi, E) = %f\n", delta, eudist3(X,Y));
-            assert(0);
-        }
-    }
-    printf("    @");
-    free(E);
-    free(Ei);
-
-}
-
-int main(int argc, char ** argv)
-{
-#ifdef NDEBUG
-    printf("Please turn on debugging or some checks will not be performed!\n");
-#endif
-
-
-    smalltest();
-
-    if(argc == 4)
-    {
-        /* Test speed vs precision for a specific ellipse
-         * N points on the ellipsoid are generated. Then they are
-         * displaced along the normal and it is checked how well the
-         * methods find back the original point.
-         */
-        size_t N = 1e7;
-        double dist = 2*0.08; // distance from E
-        size_t iterlast = 7; // For method with variable number of iterations
-        double X[6];
-        for(int kk = 1; kk<4; kk++)
-        {
-            X[kk-1] = atof(argv[kk]);
-        }
-        elli * E = elli_new(X[0], X[1], X[2]);
-
-        E->eps = 1e-5;
-        printf("eps: %e\n", E->eps);
-
-        printf("Generating %zu random points on a sphere\n", N);
-        double * P = getPointsOnSphere(N);
-        assert(P != NULL);
-        printf("Moving points from sphere to ellipse\n");
-        for(size_t kk = 0; kk<N; kk++){
-            elli_scale(E, P+3*kk);}
-
-        printf("Generating reference points around the ellipse surface\n");
-        double * Q = malloc(3*N*sizeof(double));
-        assert(Q != NULL);
-        for(size_t kk = 0; kk<N; kk++)
-        {
-            double normal[3];
-            elli_nnormal(E, P+3*kk, normal);
-            for(size_t ll = 0; ll<3; ll++)
-            {
-                if(1) // ll>N/2)
-                {
-                    Q[3*kk+ll] = P[3*kk+ll] - dist*normal[ll];
-                } else {
-                    Q[3*kk+ll] = P[3*kk+ll] + dist*normal[ll];
-                }
-            }
-        }
-
-        // Allocate space for output
-        double * Y = malloc(3*N*sizeof(double));
-        assert(Y != NULL);
-
-        /* Now we have pairs (P_i, Q_i) such that P_i is the closest
-         * point to Q_i on E
-         * */
-        struct timespec tstart;
-        struct timespec tend;
-
-        printf("Method    \tmaxerr    \trelerr    \tangerr    \tt       \ttpp\n");
-
-        // 1X scaling
-        clock_gettime(CLOCK_REALTIME, &tstart);
-        double maxerror = 0;
-        double maxnerror = 0;
-
-        for(size_t kk = 0; kk<N; kk++)
-        {
-            memcpy(Y+3*kk, Q+3*kk, 3*sizeof(double));
-            elli_scale(E, Y+3*kk);
-        }
-        clock_gettime(CLOCK_REALTIME, &tend);
-
-        for(size_t kk = 0; kk<N; kk++)
-        {
-            double error = eudist3(P+3*kk, Y+3*kk);
-            double nP[3];
-            double nPE[3];
-            elli_nnormal(E, P+3*kk, nP);
-            elli_nnormal(E, Y+3*kk, nPE);
-            double nerror = 360.0/M_PI*acos(sprod(nP, nPE));
-            if(nerror > maxnerror)
-                maxnerror = nerror;
-
-            if(error > maxerror)
-                maxerror = error;
-        }
-        printf("scaling1");
-        printf("\t%e\t%f", maxerror,100.0*maxerror/dist);
-        printf("\t%e", maxnerror);
-        double ttotal = clockdiff(&tstart, &tend);
-        printf("\t%e\t%e\n", ttotal, N/ttotal);
-
-        // Scaling x2
-        clock_gettime(CLOCK_REALTIME, &tstart);
-        maxerror = 0;
-        maxnerror = 0;
-        for(size_t kk = 0; kk<N; kk++)
-        {
-            memcpy(Y+3*kk, Q+3*kk, 3*sizeof(double));
-            elli_scale2(E, Y+3*kk);
-        }
-        clock_gettime(CLOCK_REALTIME, &tend);
-
-        for(size_t kk = 0; kk<N; kk++)
-        {
-            double error = eudist3(P+3*kk, Y+3*kk);
-            double nP[3];
-            double nPE[3];
-            elli_nnormal(E, P+3*kk, nP);
-            elli_nnormal(E, Y+3*kk, nPE);
-            double nerror = 360.0/M_PI*acos(sprod(nP, nPE));
-            if(nerror > maxnerror)
-                maxnerror = nerror;
-            if(error > maxerror)
-                maxerror = error;
-        }
-        printf("scaling2");
-        printf("\t%e\t%e", maxerror,100.0*maxerror/dist);
-        printf("\t%e", maxnerror);
-        ttotal = clockdiff(&tstart, &tend);
-        printf("\t%e\t%e\n", ttotal, N/ttotal);
-
-        for(size_t ii = 1; ii<iterlast;  ii++)
-        {
-            if(ii + 1 == iterlast)
-            { E->maxiter = 99; }
-            else { E->maxiter = ii; }
-
-            clock_gettime(CLOCK_REALTIME, &tstart);
-            maxerror = 0;
-            maxnerror = 0;
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                elli_gdist(E, Q+3*kk, Y+3*kk);
-            }
-            clock_gettime(CLOCK_REALTIME, &tend);
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                double error = eudist3(P+3*kk, Y+3*kk);
-                if(error > maxerror)
-                    maxerror = error;
-
-                double nP[3];
-                double nPE[3];
-                elli_nnormal(E, P+3*kk, nP);
-                elli_nnormal(E, Y+3*kk, nPE);
-                double nerror = 360.0/M_PI*acos(sprod(nP, nPE));
-                if(nerror > maxnerror)
-                    maxnerror = nerror;
-
-            }
-            printf("bektas-%zu", E->maxiter);
-            printf("\t%e\t%f", maxerror,100.0*maxerror/dist);
-            printf("\t%e", maxnerror);
-            ttotal = clockdiff(&tstart, &tend);
-            printf("\t%e\t%e\n", ttotal, N/ttotal);
-        }
-
-        for(size_t ii = 1; ii<iterlast;  ii++)
-        {
-            if(ii + 1 == iterlast)
-            { E->maxiter = 99; }
-            else { E->maxiter = ii; }
-
-            clock_gettime(CLOCK_REALTIME, &tstart);
-            maxerror = 0;
-            maxnerror = 0;
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                elli_gdistL(E, Q+3*kk, Y+3*kk);
-            }
-            clock_gettime(CLOCK_REALTIME, &tend);
-
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                double error = eudist3(P+3*kk, Y+3*kk);
-                if(!isfinite(error))
-                    error = 99e99;
-
-                if(0)
-                    printf("P=%f %f %f Y = %f %f %f\n",
-                           P[3*kk], P[3*kk+1], P[3*kk+2],
-                           Y[3*kk], Y[3*kk+1], Y[3*kk+2]);
-
-                if(error > maxerror)
-                    maxerror = error;
-
-                double nP[3];
-                double nPE[3];
-                elli_nnormal(E, P+3*kk, nP);
-                elli_nnormal(E, Y+3*kk, nPE);
-                double nerror = 360.0/M_PI*acos(sprod(nP, nPE));
-                if(nerror > maxnerror)
-                    maxnerror = nerror;
-
-            }
-            printf("lagrange%zu", E->maxiter);
-            printf("\t%e\t%f", maxerror,100.0*maxerror/dist);
-            printf("\t%e", maxnerror);
-            ttotal = clockdiff(&tstart, &tend);
-            printf("\t%e\t%e\n", ttotal, N/ttotal);
-        }
-
-        for(size_t ii = 1; ii<iterlast;  ii++)
-        {
-            if(ii + 1 == iterlast)
-            { E->maxiter = 99; }
-            else { E->maxiter = ii; }
-
-
-            clock_gettime(CLOCK_REALTIME, &tstart);
-            maxerror = 0;
-            maxnerror = 0;
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                elli_gdistR(E, Q+3*kk, Y+3*kk);
-            }
-            clock_gettime(CLOCK_REALTIME, &tend);
-
-            for(size_t kk = 0; kk<N; kk++)
-            {
-                double error = eudist3(P+3*kk, Y+3*kk);
-                if(!isfinite(error))
-                    error = 99e99;
-
-                if(0)
-                    printf("P=%f %f %f Y = %f %f %f\n",
-                           P[3*kk], P[3*kk+1], P[3*kk+2],
-                           Y[3*kk], Y[3*kk+1], Y[3*kk+2]);
-
-                if(error > maxerror)
-                    maxerror = error;
-
-                double nP[3];
-                double nPE[3];
-                elli_nnormal(E, P+3*kk, nP);
-                elli_nnormal(E, Y+3*kk, nPE);
-                double nerror = 360.0/M_PI*acos(sprod(nP, nPE));
-                if(nerror > maxnerror)
-                    maxnerror = nerror;
-            }
-            printf("polynomial%zu", E->maxiter);
-            printf("\t%e\t%f", maxerror,100.0*maxerror/dist);
-            printf("\t%e", maxnerror);
-            ttotal = clockdiff(&tstart, &tend);
-            printf("\t%e\t%e\n", ttotal, N/ttotal);
-        }
-
-
-        free(Q);
-        free(E);
-        free(Y);
-        return 0;
-    }
-
-
-    if(argc == 7)
-    {
-        double X[6];
-        for(int kk = 1; kk<7; kk++)
-        {
-            X[kk-1] = atof(argv[kk]);
-        }
-        elli * E = elli_new(X[0], X[1], X[2]);
-        double Y[3];
-        double d = elli_gdist(E, X+3, Y);
-        printf("d = %.10f\n", d);
-        printf("Y = [%.10f %.10f %.10f]\n", Y[0], Y[1], Y[2]);
-        exit(1);
-    }
-
-    for(double r = .8; r<1.2; r=r+0.01)
-    {
-        compare_sphere(r);
-    }
-
-    geodesic_random();
-
-    printf("All tests passed\n");
-    return 0;
-}
-
-#endif

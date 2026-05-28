@@ -1,4 +1,4 @@
-CC=gcc -std=gnu99 -Wall -Wextra
+CC=gcc -std=gnu99 -Wall -Wextra -pedantic
 
 CFLAGS = -DNOMATLAB -DMAIN
 
@@ -29,8 +29,8 @@ all: functional_ut cmmwrite liveview hsvrgb ellipsoid functional_optimal_nDiv wi
 wio_ut: wio.c wio.h makefile
 	$(CC) $(CFLAGS) wio_ut.c wio.c -o wio_ut -lz
 
-ellipsoid:
-	$(CC) $(CFLAGS) ellipsoid.c -lm -o ellipsoid_ut -Dstandalone
+ellipsoid_ut:
+	$(CC) $(CFLAGS) ellipsoid.c ellipsoid_ut.c -lm -o ellipsoid_ut
 
 FILESfu = ellipsoid.c functional_ut.c functional.c cf_util.o
 functional_ut: $(FILESfu)
