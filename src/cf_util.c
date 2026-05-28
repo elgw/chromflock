@@ -622,3 +622,46 @@ int write_u32_to_npy(const char * fname,
         return -1;
     }
 }
+
+uint8_t * load_cmap(const char * fname)
+{
+    npio_t * npy = npio_load(fname);
+    if(npy == NULL)
+    {
+        return NULL;
+    }
+    if(npy->ndim != 2)
+    {
+        printf("The color map is not a 2D array\n");
+        free(npy);
+        return NULL;
+    }
+
+    if(npy->shape[1] != 3)
+    {
+        printf("The color map has the wrong shape, expected 256x3, got %dx%d\n",
+               npy->shape[1], npy->shape[0]);
+        free(npy);
+        return NULL;
+    }
+
+    if(npy->shape[0] != 256)
+    {
+        printf("The color map has the wrong shape, expected 256x3, got %dx%d\n",
+               npy->shape[1], npy->shape[0]);
+        free(npy);
+        return NULL;
+    }
+
+    if(npy->dtype != NPIO_U8)
+    {
+        printf("The color map has the wrong data type, should be uint8\n");
+        free(npy);
+        return NULL;
+    }
+
+    uint8_t * cmap = npy->data;
+    npy->data = NULL;
+    free(npy);
+    return cmap;
+}

@@ -183,3 +183,5 @@ int write_u32_to_raw(const char * fname,
 int write_u32_to_npy(const char * fname,
                      u32 * data,
                      i64 M, i64 N);
+
+uint8_t * load_cmap(const char * fname);

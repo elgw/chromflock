@@ -1121,6 +1121,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "live",          no_argument,       NULL,   'a' },
         { "cmm",           no_argument,       NULL,   'c' },
         { "cmmz",          no_argument,       NULL,   'z' },
+        { "cmap",          required_argument, NULL,   '1' },
         { "defaults",      no_argument,       NULL,   'd' },
         /* Geometry */
         { "radius",        required_argument, NULL,   'R' },
@@ -1142,10 +1143,14 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
+                            "1:abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:Tu",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
+        case '1':
+            free(p->cmm_cmap);
+            p->cmm_cmap = strdup(optarg);
+            break;
         case 'a':
             p->liveView = 1;
             break;
@@ -1639,6 +1644,7 @@ void mflock_free(mflock_t * p)
     free(p->bead_wells);
     free(p->bead_apos);
     free(p->bead_apos_file);
+    free(p->cmm_cmap);
     free(p);
     return;
 }
@@ -1764,21 +1770,27 @@ static void mflock_write_cmm(const mflock_t * p)
         return;
     }
     const double * restrict X = p->beads;
+    u8 * cmap = NULL;
+    if(p->cmm_cmap != NULL)
+    {
+        cmap = load_cmap(p->cmm_cmap);
+    }
     if(p->cmmz == 1)
     {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
         free(cmmfile);
     }
+    free(cmap);
     return;
 }
 

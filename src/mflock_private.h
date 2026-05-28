@@ -91,6 +91,7 @@ typedef struct {
 
     int write_cmm;
     int cmmz;
+    char * cmm_cmap;
 
     FILE * logf;
 

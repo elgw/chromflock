@@ -33,6 +33,7 @@
  * @param P 2xnP list of connected beads
  * @param nP number of pairs
  * @param L bead labels which will be used for coloring using the built-in colormap
+ * @param cmap A 3 x 256 array containing a RGB colormap. Can be null.
  *
  * All input parameters are required.
  *
@@ -44,7 +45,8 @@ int cmmwrite(const char * fname,
              double radius,
              const uint32_t * P,
              size_t nP,
-             const uint8_t * L);
+             const uint8_t * L,
+             const uint8_t * cmap);
 
 /* @brief as cmmwrite but will write to a cmm.gz file using libz
  */
@@ -54,4 +56,5 @@ int cmmwritez(const char * fname,
               double radius,
               const uint32_t * P,
               size_t nP,
-              const uint8_t * L);
+              const uint8_t * L,
+              const uint8_t * cmap);
