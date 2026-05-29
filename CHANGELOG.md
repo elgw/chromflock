@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.4.6
+- Unit box geometry ($[-1,1]^3$) can be enabled with `--box` command
+  line argument to mflock.
+- Two new parameters in `mflock.lua`: `top_plane`, and `bottom_plane`
+  which can be used to add max and min z-constraints. If you want to
+  use an old configuration script with newer versions of chromflock,
+  simply add these variables to the old script.
+
 # 0.4.5
 - Writes/reads coordinates as Numpy .npy files by default, resulting in
   approximately 50% smaller files and hopefully both faster and safer
