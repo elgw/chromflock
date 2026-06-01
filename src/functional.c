@@ -774,7 +774,7 @@ void grad3(const double * restrict X,
     memset(G, 0, nX*3*sizeof(double));
 
     /* Radial positioning */
-    if(C->kRad > 0 & R != NULL) {
+    if( (C->kRad > 0) & (R != NULL)) {
         if(C->geometry == MFLOCK_ELLIPSOID)
         {
             printf("Warning: Using radial constrains with ellipsoidal geometry"

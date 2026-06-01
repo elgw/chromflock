@@ -227,7 +227,7 @@ mflock_dynamics(mflock_t * restrict p)
                             p->E->a - fconf.r0,
                             p->E->b - fconf.r0,
                             p->E->c - fconf.r0);
-        fconf.geometry == MFLOCK_ELLIPSOID;
+        fconf.geometry = MFLOCK_ELLIPSOID;
     }
 
     fconf.nIPairs = p->n_pairs; /* Only for err2 */
@@ -1166,15 +1166,15 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             break;
         case 'A':
             ea = atof(optarg);
-            p->geometry == MFLOCK_ELLIPSOID;
+            p->geometry = MFLOCK_ELLIPSOID;
             break;
         case 'B':
             eb = atof(optarg);
-            p->geometry == MFLOCK_ELLIPSOID;
+            p->geometry = MFLOCK_ELLIPSOID;
             break;
         case 'c':
             p->write_cmm = 1;
-            p->geometry == MFLOCK_ELLIPSOID;
+            p->geometry = MFLOCK_ELLIPSOID;
             break;
         case 'C':
             ec = atof(optarg);

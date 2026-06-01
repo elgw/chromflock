@@ -80,6 +80,7 @@ void opts_free(opts * s)
     return;
 }
 
+// chr1 -> 0, chr2 -> 1 ... chrX->22, chrY -> 23
 i64 parse_chr_id(const char * S)
 {
     const char * P = S;
@@ -150,7 +151,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
         {"mfile",      required_argument,  NULL, 'M',
          "Set the file name for the matrix output file, also enables --matrix"},
         {"genome",     required_argument,  NULL, 'g',
-         "Default: 'T2T', other possible options: 'hg19'. For other genome please add them to the source."},
+         "A csv file specifying the genome, i.e. has the columns 'chr_name', and 'chr_size'"},
         {"backbone",   no_argument,        NULL, 'b',
          "Also write 'backbone' contacts, i.e. connect adjacent bins within each chromosome to the contact list (not to the --mfile)"},
         {"verbose",    required_argument,  NULL, 'v',
@@ -295,63 +296,234 @@ parse_pairs_line(char * L, i64 * chr1, i64 * pos1, i64 * chr2, i64 * pos2)
     return 0;
 }
 
-// GRCh38.p14
-// https://www.ncbi.nlm.nih.gov/grc/human/data
-i64 chr_size_hg38[] =
-    {248956422, 242193529, 198295559, 190214555,
-     181538259, 170805979, 159345973, 145138636,
-     138394717, 133797422, 135086622, 133275309,
-     114364328, 107043718, 101991189,  90338345,
-     83257441,   80373285,  58617616,  64444167,
-     46709983,   50818468, 156040895,  57227415}; // 21, 22, X, Y
+typedef enum {
+    parse_chr_header,
+    parse_chr_size
+} parse_chr_state;
 
-// T2T-CHM13v1.1
-// https://www.ncbi.nlm.nih.gov/datasets/genome/GCA_009914755.3/
-i64 chr_size_CHM13[] =
-    {248387328, 242696752, 201105948, 193574945, // 1-4
-     182045439, 172126628, 160567428, 146259331, // 5-8
-     150617247, 134758134, 135127769, 133324548, // 9-12
-     113566686, 101161492,  99753195,  96330374, // 13-16
-     84276897,  80542538,  61707364,  66210255, // 17-20
-     45090682,  51324926, 154259566};           // 21, 22, X
-
-static void get_chr_size(opts * s)
+static void
+trim_whitespace(char * str)
 {
-    // based on the the --genome
-    // Sets:
+    if(str == NULL)
+    {
+        return;
+    }
+    size_t n = strlen(str);
+    size_t first = 0;
+    size_t last = n;
+    if(n == 0)
+    {
+        return;
+    }
+
+    // Look for whitespaces from the beginning
+    char * start = str;
+    while(*start != '\0')
+    {
+        if(*start == ' ')
+        {
+            first++;
+            start++;
+        } else {
+            break;
+        }
+    }
+
+    // Look for whitespaces from the end
+    char * end = str+n-1;
+    while(end >= start)
+    {
+        char token = end[0];
+        int ws = 0;
+        switch(token)
+        {
+        case ' ':
+            ws = 1;
+            break;
+        case '\n':
+            ws = 1;
+            break;
+        case '\r':
+            ws = 1;
+            break;
+        }
+        if(ws)
+        {
+            last--;
+            end--;
+        } else {
+            break;
+        }
+    }
+
+    // copy from first to last
+    //printf("first=%zu last=%zu\n", first, last);
+    size_t wpos = 0;
+    for(size_t kk = first; kk < last; kk++)
+    {
+        str[wpos++] = str[kk];
+    }
+    str[wpos] = '\0';
+    return;
+}
+
+
+static int
+parse_chr_definition_header(const char * _line,
+                            int * chr_name_col,
+                            int * chr_size_col)
+{
+    char * line = strdup(_line);
+    int col = 0;
+    char * sub = NULL;
+    int has_chr_name = 0;
+    int has_chr_size = 0;
+    while( (sub = strsep(&line, ",")) )
+    {
+        trim_whitespace(sub);
+        if(strcmp(sub, "chr_name") == 0)
+        {
+            *chr_name_col = col;
+            has_chr_name = 1;
+        }
+        if(strcmp(sub, "chr_size") == 0)
+        {
+            *chr_size_col = col;
+            has_chr_size = 1;
+        }
+        col++;
+    }
+    free(line);
+
+    if(has_chr_size*has_chr_name == 1)
+    {
+        return 0;
+    }
+    return -1;
+}
+
+static int
+parse_chr_name(const char * sub)
+{
+    // Excepts an 'r' before the number of letter
+    return parse_chr_id(sub);
+}
+
+static int
+parse_chr_definition_data(const char * _line,
+                          int chr_name_col,
+                          int * chr_id,
+                          int chr_size_col,
+                          int * chr_size)
+{
+    //printf("chr_name_col: %d, chr_size_col: %d\n", chr_name_col, chr_size_col);
+    char * line = strdup(_line);
+    int col = 0;
+    char * sub = NULL;
+    int got_chr = 0;
+    int got_size = 0;
+    while( (sub = strsep(&line, ",")) )
+    {
+        //printf("sub%d: %s\n", col, sub);
+        if(col == chr_name_col)
+        {
+            *chr_id = parse_chr_name(sub);
+            got_chr = 1;
+        }
+        if(col == chr_size_col)
+        {
+            *chr_size = atoi(sub);
+            got_size = 1;
+        }
+        col++;
+    }
+    free(line);
+
+    if(got_chr*got_size == 1) {
+        return 0;
+    } else {
+        printf("Unparsable line: '%s'\n", _line);
+        return -1;
+    }
+}
+
+static int get_chr_size(opts * s)
+{
+    // Parse the s->genome file (csv)
+    // which needs to have the column "chr_name", and "chr_size"
     //
-    // s->chr_sizes_bp
-    // s->chr_sizes_bin
-    // s->n_bin
-    // s->n_chr
-    // s->labels
 
-    assert(s->genome != NULL);
-    int chr_size_fixed = 0;
-
-    if(strcmp(s->genome, "hg19") == 0)
+    if(s->genome == NULL)
     {
-        for(i64 kk = 0 ; kk < 23; kk++)
-        {
-            s->chr_size_bp[kk] = chr_size_hg38[kk];
-        }
-        chr_size_fixed = 1;
-        s->n_chr = 23;
-    }
-    if(strcmp(s->genome, "T2T") == 0)
-    {
-        for(i64 kk = 0 ; kk < 23; kk++)
-        {
-            s->chr_size_bp[kk] = chr_size_CHM13[kk];
-        }
-        chr_size_fixed = 1;
-        s->n_chr = 23;
-    }
-
-    if(chr_size_fixed == 0)
-    {
-        printf("There are no chromosome sizes available for '%s'n", s->genome);
+        fprintf(stderr, "--genome not set\n");
         exit(EXIT_FAILURE);
+    }
+
+    FILE * fid = fopen(s->genome, "r");
+
+    if(fid == NULL)
+    {
+        fprintf(stderr, "failed to open %s\n", s->genome);
+        perror("get_chr_size");
+        exit(EXIT_FAILURE);
+    }
+
+    char * line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+
+    int chr_name_col = -1;
+    int chr_size_col = -1;
+    int chr_id, chr_size;
+
+    parse_chr_state state = parse_chr_header;
+    while ((nread = getline(&line, &len, fid)) != -1) {
+        switch(state)
+        {
+        case parse_chr_header:
+            if (nread < 3)
+            {
+                continue;
+            }
+            if(line[0] == '#')
+            {
+                continue;
+            }
+            if(parse_chr_definition_header(line, &chr_name_col, &chr_size_col)) {
+                printf("%s is not a valid csv header\n", line);;
+                goto quit1;
+            } else {
+                state = parse_chr_size;
+            }
+            break;
+        case parse_chr_size:
+            if(nread < 3)
+            {
+                continue;
+            }
+            if(line[0] == '#'){
+                continue;
+            }
+            if(parse_chr_definition_data(line,
+                                         chr_name_col, &chr_id,
+                                         chr_size_col, &chr_size)) {
+                printf("Unable to parse '%s'\n", line);
+            } else {
+                printf("chr_id = %d, chr_size = %d\n", chr_id, chr_size);
+                s->chr_size_bp[chr_id] = chr_size;
+                if(1 + chr_id > s->n_chr)
+                {
+                    s->n_chr = 1+chr_id;
+                }
+            }
+            break;
+        }
+    }
+
+    printf("s->n_chr = %ld\n", s->n_chr);
+    for(int kk = 0; kk < s->n_chr; kk++)
+    {
+        printf("Chr #%d : %ld\n", kk, s->chr_size_bp[kk]);
     }
 
     for(i64 kk = 0; kk < s->n_chr; kk++)
@@ -373,10 +545,17 @@ static void get_chr_size(opts * s)
         }
     }
 
-    return;
+    return 0;
+
+ quit1:
+    fclose(fid);
+    free(line);
+    return -1;
 }
 
-static i64 get_dataset_size(const opts * s)
+
+static i64
+get_dataset_size(const opts * s)
 {
     // Side effects:
     // Sets s->n_lines
@@ -428,18 +607,18 @@ static i64 get_dataset_size(const opts * s)
         s->chr_reads[chr1]++;
         s->chr_reads[chr2]++;
 
-            if(s->chr_size_bp[chr1] < pos1)
-            {
-                fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                        chr1, pos1, s->chr_size_bp[chr1]);
-                exit(EXIT_FAILURE);
-            }
-            if(s->chr_size_bp[chr2] < pos2)
-            {
-                fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                        chr2, pos2, s->chr_size_bp[chr2]);
-                exit(EXIT_FAILURE);
-            }
+        if(s->chr_size_bp[chr1] < pos1)
+        {
+            fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
+                    chr1, pos1, s->chr_size_bp[chr1]);
+            exit(EXIT_FAILURE);
+        }
+        if(s->chr_size_bp[chr2] < pos2)
+        {
+            fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
+                    chr2, pos2, s->chr_size_bp[chr2]);
+            exit(EXIT_FAILURE);
+        }
 
         nlines++;
     }
@@ -887,7 +1066,13 @@ int con2mflock(int argc, char ** argv)
 
     parse_command_line(argc, argv, s);
 
-    get_chr_size(s);
+    if(get_chr_size(s))
+    {
+        printf("Unable to determine the chromosome sizes from %s\n",
+               s->genome);
+        exit(EXIT_FAILURE);
+    }
+
 
     // Check how many lines of input
     s->nlines = get_dataset_size(s);
