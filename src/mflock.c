@@ -513,13 +513,13 @@ static void mflock_summary(mflock_t * p)
             size_t accepts = p->bead_wells[kk].bead_idx;
             double * WX = (double*) &p->bead_wells[kk];
             double distance = eudist3p2(WX, X + 3*accepts);
-            #if 0
+#if 0
             printf("Well %zu (%f, %f, %f) accepts %zu: distance: %f\n", kk,
                    p->bead_wells[kk].P.x,
                    p->bead_wells[kk].P.y,
                    p->bead_wells[kk].P.z,
                    accepts, distance/(2.0*r02));
-            #endif
+#endif
             if(distance < 2.0*r02)
             {
                 filled = 1;
@@ -528,13 +528,13 @@ static void mflock_summary(mflock_t * p)
             {
                 accepts += p->n_beads/2;
                 distance = eudist3p2(WX, X + 3*accepts);
-                #if 0
+#if 0
                 printf("     %zu (%f, %f, %f) accepts %zu: distance: %f\n", kk,
                        p->bead_wells[kk].P.x,
                        p->bead_wells[kk].P.y,
                        p->bead_wells[kk].P.z,
                        accepts, distance/(2.0*r02));
-                #endif
+#endif
                 if(distance < 2.0*r02)
                 {
                     filled = 1;
@@ -705,24 +705,42 @@ static void mflock_init_coordinates(mflock_t * p)
     {
         printf("   coordinates loaded\n");
     }
+
+    if(p->cmm_cmap != NULL)
+    {
+        mflock_logwrite(p, 2, "Loading color map from %s\n", p->cmm_cmap);
+        p->cmap = load_cmap(p->cmm_cmap);
+    }
+
     return;
 }
 
 static void mflock_validate_labels(const mflock_t * p)
 {
-    int ok = 1;
-    for(size_t kk = 0; kk< p->n_beads; kk++)
+    // Check how many polymers there are
+    int npoly = 1;
+    for(size_t kk = 1; kk< p->n_beads; kk++)
     {
-        if(p->L[kk] > 31 || p->L[kk] == 0)
+        if(p->L[kk-1] != p->L[kk])
         {
-            ok = 0;
+            npoly++;
         }
     }
-    if( ! ok )
+
+
+    mflock_logwrite(p, 1,
+                    "%d polymers found in the labels\n", npoly);
+
+
+    if( npoly > 55 )
     {
-        mflock_logwrite(p, 0,
-                        "The labels are not as expected. Any label l "
-                        "should satisfy 0 < L < 32\n");
+        if(p->verbose > 0)
+        {
+            printf("Found %d polymers / %d places where L[kk] != L[kk+1]. This probably "
+                   "indicates that the label array is not constructed as expected by the "
+                   "program.",
+                   npoly, npoly-1);
+        }
     }
     return;
 }
@@ -879,9 +897,24 @@ static void mflock_show(mflock_t * p, FILE * f)
     fprintf(f, "    random seed: %zu\n", p->rseed);
     fprintf(f, "    write compresseed cmm: %d\n", p->cmmz);
 
+    fprintf(f, "    geometry: ");
+    switch(p->geometry)
+    {
+    case MFLOCK_BOX:
+        fprintf(f, "Box [-1, 1]^3\n");
+        break;
+    case MFLOCK_SPHERE:
+        fprintf(f, "Sphere; radius = 1, center = (0, 0, 0))\n");
+        break;
+    case MFLOCK_ELLIPSOID:
+        assert(p->E != NULL);
+        fprintf(f, "Ellipsoid; axes = %f, %f, %f, center =  (0, 0, 0)\n",
+                p->E->a, p->E->b, p->E->c);
+        break;
+    }
     if(p->contact_pairs_file == NULL)
     {
-        fprintf(f, "   Contact Pairs file not specified\n");
+        fprintf(f, "    Contact Pairs file not specified\n");
     } else {
         fprintf(f, "   Contacts Pairs: %s\n", p->contact_pairs_file);
     }
@@ -934,6 +967,10 @@ static void mflock_show(mflock_t * p, FILE * f)
     fprintf(f, "    diploid=%s\n", cf_YES_NO(p->diploid));
 
     fprintf(f, "    live view=%s\n", cf_YES_NO(p->liveView));
+
+    if(p->liveView) {
+        fprintf(f, "    auto close=%s\n", cf_YES_NO(p->live_auto_close));
+    }
 
     fprintf(f, "    verbose level: %d\n", p->verbose);
     fprintf(f, "\n");
@@ -1028,7 +1065,7 @@ static void test_read_write_csv(void)
     }
     close(fd);
 
-    if(write_bead_coordinates_to_csv(tmpfile, X, nbead, NULL))
+    if(write_bead_coordinates_to_csv(tmpfile, X, nbead, MFLOCK_SPHERE, NULL))
     {
         exit(EXIT_FAILURE);
     }
@@ -1125,6 +1162,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "seed",          required_argument, NULL,   's' },
         { "verbose",       required_argument, NULL,   'v' },
         { "live",          no_argument,       NULL,   'a' },
+        { "liveclose",     no_argument,       NULL,   'e' },
         { "cmm",           no_argument,       NULL,   'c' },
         { "cmmz",          no_argument,       NULL,   'z' },
         { "cmap",          required_argument, NULL,   '1' },
@@ -1150,7 +1188,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "1:abA:B:cC:Dw:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:TuX",
+                            "1:abA:B:cC:De:w:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:TuX",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -1174,10 +1212,10 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             break;
         case 'c':
             p->write_cmm = 1;
-            p->geometry = MFLOCK_ELLIPSOID;
             break;
         case 'C':
             ec = atof(optarg);
+            p->geometry = MFLOCK_ELLIPSOID;
             break;
         case 'i':
             printf("mflock (chromflock version %s)\n", cf_version);
@@ -1189,6 +1227,10 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
             return MFLOCK_ARGS_QUIT;
         case 'D':
             p->diploid = 1;
+            break;
+        case 'e':
+            p->liveView = 1;
+            p->live_auto_close = 1;
             break;
         case 'W':
             free(p->fname_bead_wells);
@@ -1342,6 +1384,7 @@ static mflock_t * mflock_new(void)
     p->verbose = 1;
     p->newx = 1;
     p->write_cmm = 0;
+    p->geometry = MFLOCK_SPHERE;
 
     /* Create a suggestion for the output folder */
     if(p->ofoldername == NULL)
@@ -1544,10 +1587,8 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     /* We load the labels first to determine how many beads there
      * are (or 2X if --diploid is set) */
     mflock_load_bead_labels(mf);
-    if(mf->verbose > 0)
-    {
-        printf("n_beads = %zu\n", mf->n_beads);
-    }
+    mflock_logwrite(mf, 1, "n_beads = %zu\n", mf->n_beads);
+
 
     /* Once we know how many beads we can set their radius based on the
      * volume quotient (or do nothing if it was given at the command line) */
@@ -1579,7 +1620,7 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
                 n_backbone++;
             }
         }
-        printf("Added %d backbone contacts\n", n_backbone);
+        mflock_logwrite(mf, 2, "Added %d backbone contacts\n", n_backbone);
     }
 
     mflock_load_radial_constraints(mf);
@@ -1658,6 +1699,7 @@ void mflock_free(mflock_t * p)
     free(p->bead_apos);
     free(p->bead_apos_file);
     free(p->cmm_cmap);
+    free(p->cmap);
     free(p);
     return;
 }
@@ -1666,51 +1708,64 @@ void mflock_free(mflock_t * p)
 static void
 mflock_set_bead_size(mflock_t * p)
 {
-    if(p->r0 < 0)
-    {
-        double vq = p->volq;
-        if(p->verbose > 1)
-        {
-            printf("Bead radius not set, setting total bead volume to %f%%\n", 100*vq);
-        }
-        double Vd = 4.0/3.0*M_PI;
-        if(p->E != NULL)
-        {
-            Vd = elli_vol(p->E);
-        }
-        p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->n_beads*M_PI) );
-
-        if(p->verbose > 2)
-        {
-            double Vbeads = p->n_beads*pow(p->r0,3)*M_PI*4.0/3.0;
-            printf("Vd: %f, Vbeads: %f, Vbeads/Vd = %f\n", Vd, Vbeads, Vbeads/Vd);
-            assert(fabs(Vbeads/Vd - vq)<1e-5);
-        }
+    if(p->r0 > 0) {
+        return;
     }
+
+    double vq = p->volq;
+
+    mflock_logwrite(p, 2,
+                    "Bead radius not given, setting total bead volume to %.2f%%\n",
+                    100*vq);
+
+    double Vd = 4.0/3.0*M_PI;
+    if(p->E != NULL)
+    {
+        Vd = elli_vol(p->E);
+    }
+    p->r0 = cbrt( 3.0*vq*Vd / (4.0*p->n_beads*M_PI) );
+
+
+    double Vbeads = p->n_beads*pow(p->r0,3)*M_PI*4.0/3.0;
+    mflock_logwrite(p, 2,
+                    "Vd: %f, Vbeads: %f, Vbeads/Vd = %f\n",
+                    Vd, Vbeads, Vbeads/Vd);
+    assert(fabs(Vbeads/Vd - vq)<1e-5);
+    return;
 }
 
-/** @brief write to both stdout and to the log file if p->verbose >= level */
-static void mflock_logwrite(const mflock_t * p, int level, const char *fmt, ...)
+// Write both to std out and to the log file (p->logfile)
+// Always writes to the log file
+// Write to stdout if p->verbose >= level
+// When level == 0, a "WARNING: " will be pre-pended to the message
+static void
+mflock_logwrite(const mflock_t * p,
+                int level,
+                const char *fmt, ...)
 {
+    va_list args, args2;
+    va_start(args, fmt);
+    va_copy(args2, args);
 
-    if(p->verbose >= level)
-    {
-        va_list args, args2;
-        va_start(args, fmt);
-        va_copy(args2, args);
+    // Write to terminal
+    if(p->verbose >= level) {
         fprintf(stdout, "    ");
+
         if(level == 0) {
-            fprintf(stdout, "WARNING: "); }
-        vfprintf(stdout, fmt, args);
-        va_end(args);
-        if(p->logf != NULL)
-        {
-            vfprintf(p->logf, fmt, args2);
-        } else {
-            printf("Log file not available\n");
+            fprintf(stdout, "WARNING: ");
         }
-        va_end(args2);
+        vfprintf(stdout, fmt, args);
     }
+
+    // Write to log file
+    if(p->logf != NULL) {
+        if(level == 0) {
+            fprintf(p->logf, "WARNING: ");
+        }
+        vfprintf(p->logf, fmt, args2);
+    }
+    va_end(args2);
+    va_end(args);
     return;
 }
 
@@ -1751,17 +1806,19 @@ static int mflock_save_coordinates(mflock_t * p)
         mflock_logwrite(p, 1, "Columns: x, y, z, r\n");
     }
 
-    // TODO: Check file extension as well.
+
     if(p->use_csv)
     {
         return write_bead_coordinates_to_csv(p->xoutfname,
                                              p->beads,
                                              p->n_beads,
+                                             p->geometry,
                                              p->E);
     } else {
         return write_bead_coordinates_to_npy(p->xoutfname,
                                              p->beads,
                                              p->n_beads,
+                                             p->geometry,
                                              p->E);
     }
 
@@ -1771,7 +1828,11 @@ static int mflock_save_coordinates(mflock_t * p)
 /* Wrapper if starting the main loop from a thread */
 static void * solve_t(void * args)
 {
-    mflock_dynamics((mflock_t *) args);
+    mflock_t * p = (mflock_t *) args;
+    mflock_dynamics(p);
+    if(p->live_auto_close) {
+        p->quit_live_view = 1;
+    }
     return NULL;
 }
 
@@ -1783,27 +1844,23 @@ static void mflock_write_cmm(const mflock_t * p)
         return;
     }
     const double * restrict X = p->beads;
-    u8 * cmap = NULL;
-    if(p->cmm_cmap != NULL)
-    {
-        cmap = load_cmap(p->cmm_cmap);
-    }
+
     if(p->cmmz == 1)
     {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, p->cmap);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, cmap);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, p->cmap);
         free(cmmfile);
     }
-    free(cmap);
+
     return;
 }
 
@@ -1837,7 +1894,7 @@ static void mflock_run(mflock_t * p)
 #ifdef SDL
     if(p->liveView == 1)
     {
-        int quit = 0;
+
 
         /* SDL likes to be in the main thread so we run mflock
            dynamics in a secondary.  */
@@ -1857,14 +1914,14 @@ static void mflock_run(mflock_t * p)
             E = p->E;
         }
 
-        liveview(p->beads, p->L, p->n_beads, &quit, p->r0, E);
+        liveview(p->beads, p->L, p->n_beads,
+                 &p->quit_live_view, p->r0, E, p->cmap);
         pthread_join(th, NULL);
     } else {
         mflock_dynamics(p);
     }
 #else
-    if(p->liveView == 1)
-    {
+    if(p->liveView == 1) {
         printf("WARNING: Can't open the live view (--live) since the program was not "
                "linked to SDL2\n\n");
     }
@@ -1905,7 +1962,7 @@ int mflock(int argc, char ** argv)
 
     mflock_init(mf, argc, argv);
 
-    if(mf->verbose>0)
+    if(mf->verbose > 1)
     {
         mflock_show(mf, stdout);
     }

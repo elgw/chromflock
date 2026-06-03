@@ -142,7 +142,7 @@ rot_z(double * SR, const double theta)
 }
 
 
-static double cmap[] = {255,255,255,
+static u8 cmap0[81] = {255,255,255, // 27 x 3 colors
     240,163,255,
     0,117,220,
     153,63,0,
@@ -170,6 +170,7 @@ static double cmap[] = {255,255,255,
     255,255,0,
     255,80,5};
 
+static u8 * cmap = NULL;
 
 static double min_double(double a, double b)
 {
@@ -624,14 +625,31 @@ render(scene * s, const bead_graphics * beads)
 
 int
 liveview(const double * X,
-         const uint8_t * L,
+         const u8 * L,
          const size_t N,
          volatile int * quit,
          const double r0,
-         const elli * E)
+         const elli * E,
+         const u8 * xcmap)
 {
     scene * s = calloc(1, sizeof(scene));
     assert(s != NULL);
+
+    cmap = calloc(256*3, sizeof(u8));
+    assert(cmap != NULL);
+
+    if(xcmap == NULL)
+    {
+        for(int kk = 0; kk < 27*3; kk++)
+        {
+            cmap[kk] = cmap0[kk];
+        }
+    } else {
+        for(int kk = 0; kk < 256*3; kk++)
+        {
+            cmap[kk] = xcmap[kk];
+        }
+    }
 
     s->X = X;
     s->N = N;
@@ -663,11 +681,11 @@ liveview(const double * X,
     assert(tbeads != NULL);
     for(int bb = 0; bb<64; bb++)
     {
-        bead_init(s, tbeads+bb, bb);
+        bead_init(s, &tbeads[bb], bb);
     }
 
     // main loop
-    while(s->done == 0 && quit[0] == 0)
+    while(s->done == 0 && *quit == 0)
     {
         render(s, tbeads);
         getEvents(s);
@@ -676,17 +694,19 @@ liveview(const double * X,
 
     fprintf(stdout, "Rendered %zu times\n", s->nFrames);
 
-    SDL_DestroyRenderer(s->renderer);
-    SDL_DestroyWindow(s->window);
-
     for(int bb = 0; bb<64; bb++)
     {
         bead_graphics_free(&tbeads[bb]);
     }
+
+    SDL_DestroyRenderer(s->renderer);
+    SDL_DestroyWindow(s->window);
+
     free(tbeads);
     free(s->beads);
     free(s->title);
     free(s);
+    free(cmap);
 
     return EXIT_SUCCESS;
 }

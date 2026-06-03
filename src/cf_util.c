@@ -395,7 +395,8 @@ int
 write_bead_coordinates_to_csv(const char * fname,
                               const double * X,
                               const i64 nbead,
-                              const elli * geometry)
+                              const mflock_geometry_type geometry,
+                              const elli * ell)
 {
     FILE * fid = fopen(fname, "w");
     if(fid == NULL)
@@ -406,11 +407,11 @@ write_bead_coordinates_to_csv(const char * fname,
     for(i64 kk = 0; kk<nbead; kk++)
     {
         double radius;
-        if(geometry == NULL)
+        if(ell == NULL)
         {
             radius = norm3d(X+3*kk);
         } else {
-            radius = elli_getScale(geometry, X+3*kk);
+            radius = elli_getScale(ell, X+3*kk);
         }
 
         int nwritten = fprintf(fid, "%f, %f, %f, %f\n",
@@ -436,7 +437,8 @@ fail_write:
 int write_bead_coordinates_to_npy(const char * fname,
                                   const double * X,
                                   const i64 nbead,
-                                  const elli * geometry)
+                                  const mflock_geometry_type geometry,
+                                  const elli * ell)
 {
     float * C = calloc(4*nbead, sizeof(float));
     if(C == NULL)
@@ -454,11 +456,11 @@ int write_bead_coordinates_to_npy(const char * fname,
             C[4*kk + ll] = X[3*kk + ll];
         }
         double radius;
-        if(geometry == NULL)
+        if(ell == NULL)
         {
             radius = norm3d(X+3*kk);
         } else {
-            radius = elli_getScale(geometry, X+3*kk);
+            radius = elli_getScale(ell, X+3*kk);
         }
         if(radius > 1.0)
         {
@@ -623,7 +625,7 @@ int write_u32_to_npy(const char * fname,
     }
 }
 
-uint8_t * load_cmap(const char * fname)
+u8 * load_cmap(const char * fname)
 {
     npio_t * npy = npio_load(fname);
     if(npy == NULL)
@@ -633,7 +635,7 @@ uint8_t * load_cmap(const char * fname)
     if(npy->ndim != 2)
     {
         printf("The color map is not a 2D array\n");
-        free(npy);
+        npio_free(npy);
         return NULL;
     }
 
@@ -641,7 +643,7 @@ uint8_t * load_cmap(const char * fname)
     {
         printf("The color map has the wrong shape, expected 256x3, got %dx%d\n",
                npy->shape[1], npy->shape[0]);
-        free(npy);
+        npio_free(npy);
         return NULL;
     }
 
@@ -649,19 +651,19 @@ uint8_t * load_cmap(const char * fname)
     {
         printf("The color map has the wrong shape, expected 256x3, got %dx%d\n",
                npy->shape[1], npy->shape[0]);
-        free(npy);
+        npio_free(npy);
         return NULL;
     }
 
     if(npy->dtype != NPIO_U8)
     {
         printf("The color map has the wrong data type, should be uint8\n");
-        free(npy);
+        npio_free(npy);
         return NULL;
     }
 
     uint8_t * cmap = npy->data;
     npy->data = NULL;
-    free(npy);
+    npio_free(npy);
     return cmap;
 }

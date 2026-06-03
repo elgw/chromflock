@@ -7,6 +7,10 @@
   which can be used to add max and min z-constraints. If you want to
   use an old configuration script with newer versions of chromflock,
   simply add these variables to the old script.
+- `--liveclose` option added, will close the live view window at the
+  end of iterations.
+- Live view uses the supplied color map.
+- Less clutter in the terminal output at default verbosity level.
 
 # 0.4.5
 - Writes/reads coordinates as Numpy .npy files by default, resulting in

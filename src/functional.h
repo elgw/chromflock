@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 
 #include <assert.h>
 #include <math.h>
@@ -18,11 +17,6 @@
 typedef uint32_t u32;
 typedef double f64;
 
-typedef enum {
-    MFLOCK_SPHERE = 0,
-    MFLOCK_BOX,
-    MFLOCK_ELLIPSOID
-} mflock_geometry_type;
 
 // TODO: Re-use buffers!
 typedef struct {

@@ -87,6 +87,8 @@ General settings
        the color to use for any bead of label l.
 --live
 	enable live monitoring (only when compiled with SDL)
+--liveclose
+        As --live but closes the window at the end of the simulation.
 --help, -h
 	show this help message. For more info see 'man mflock'
 --defaults, -d

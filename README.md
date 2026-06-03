@@ -23,7 +23,7 @@ There are no pre built packages for chromflock so build it from
 source! If all dependencies are installed it should be simple as:
 
 ``` shell
-cd cd src/lua-5.3.5/
+cd src/lua-5.3.5/
 make linux
 cd ../../
 mkdir build

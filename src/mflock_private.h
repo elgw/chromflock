@@ -21,6 +21,7 @@
 #include "lualib.h"
 #include "lauxlib.h"
 // TODO: Offer alternative for non x86-systems
+#define NORMAL
 #include "fast_prng/normal.h"
 
 #ifdef SDL
@@ -93,6 +94,7 @@ typedef struct {
     int write_cmm;
     int cmmz;
     char * cmm_cmap;
+    u8 * cmap;
 
     FILE * logf;
 
@@ -100,6 +102,8 @@ typedef struct {
     int verbose;
     double compress; // compress chromosomes by attracting them to their COMs
     int liveView;
+    int live_auto_close;
+    volatile int quit_live_view;
 
     /* Name of lua script to handle the beads dynamics */
     char * luaDynamicsFile;

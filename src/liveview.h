@@ -21,4 +21,5 @@ liveview(const double * XYX, // 3xN coordinates -- a pointer into mflock
          size_t n_bead,
          volatile int * quit, // Set to 1 to quit and deallocate
          double radius, // bead radius
-         const elli * E); // set to NULL if spherical domain
+         const elli * E, // set to NULL if spherical domain
+         const uint8_t * cmap); // set to 0 for the default color map

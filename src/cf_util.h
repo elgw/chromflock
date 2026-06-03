@@ -24,6 +24,13 @@
 
 #include "ellipsoid.h"
 
+
+typedef enum {
+    MFLOCK_SPHERE = 0,
+    MFLOCK_BOX,
+    MFLOCK_ELLIPSOID
+} mflock_geometry_type;
+
 typedef uint32_t u32;
 typedef uint8_t u8;
 typedef int64_t i64;
@@ -107,13 +114,15 @@ int
 write_bead_coordinates_to_csv(const char * fname,
                               const double * X,
                               const int64_t nbead,
-                              const elli * geometry);
+                              const mflock_geometry_type geometry,
+                              const elli * ellipsoid);
 
 int
 write_bead_coordinates_to_npy(const char * fname,
                                   const double * X,
                                   const int64_t nbead,
-                                  const elli * geometry);
+                              const mflock_geometry_type geometry,
+                                  const elli * ellipsoid);
 
 /* Read nbead rows from a csv
  * Does not expect a header rows
