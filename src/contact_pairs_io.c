@@ -1,4 +1,5 @@
 #include "contact_pairs_io.h"
+#include <limits.h>
 
 uint32_t *
 contact_pairs_from_matrix(const uint8_t * restrict W,
