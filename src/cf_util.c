@@ -45,7 +45,7 @@ const char* cf_YES_NO(int v)
 void bpos_print(FILE * fid, bpos * P)
 {
     fprintf(fid, "#=%u (x=%f, y=%f, z=%f)\n", P->bead_id,
-           P->x, P->y, P->z);
+            P->x, P->y, P->z);
 }
 
 char * cf_timestr()
@@ -152,7 +152,7 @@ load_bead_coordinates_from_csv(const char * fname,
     free(line);
     return 0;
 
-parsing_error:
+ parsing_error:
     fclose(fid);
     fprintf(stderr, "Failed to read line %zu from %s\n", ll+1, fname);
     free(line);
@@ -209,7 +209,7 @@ load_bead_coordinates_from_npy(const char * fname,
     npio_free(npy);
     return 0;
 
-fail_data:
+ fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -267,7 +267,7 @@ load_bead_apos_from_npy(const char * fname,
     }
     fprintf(stderr, "Invalid data format, expected F32\n");
 
-fail_data:
+ fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -322,7 +322,7 @@ load_bead_contacts_from_npy(const char * fname, int * _ncont)
         return C;
     }
 
-fail_data:
+ fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -375,7 +375,7 @@ load_bead_labels_from_npy(const char * fname, int * _nbead)
         return L;
     }
 
-fail_data:
+ fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -428,11 +428,12 @@ write_bead_coordinates_to_csv(const char * fname,
     fclose(fid);
     return 0;
 
-fail_write:
+ fail_write:
     fprintf(stderr, "An error occurred while writing to %s\n", fname);
     fclose(fid);
     return -1;
 }
+
 
 int write_bead_coordinates_to_npy(const char * fname,
                                   const double * X,
@@ -449,6 +450,8 @@ int write_bead_coordinates_to_npy(const char * fname,
         return -1;
     }
 
+    i64 n_outside = 0;
+
     for(i64 kk = 0; kk<nbead; kk++)
     {
         for(i64 ll = 0; ll < 3; ll++)
@@ -456,18 +459,46 @@ int write_bead_coordinates_to_npy(const char * fname,
             C[4*kk + ll] = X[3*kk + ll];
         }
         double radius;
-        if(ell == NULL)
-        {
-            radius = norm3d(X+3*kk);
-        } else {
+        if( (ell != NULL) & geometry == MFLOCK_ELLIPSOID) {
             radius = elli_getScale(ell, X+3*kk);
+        } else {
+            radius = norm3d(X+3*kk);
         }
-        if(radius > 1.0)
-        {
-            printf("Warning bead %ld has radius=%f\n", kk, radius);
-        }
+
         C[4*kk + 3] = radius;
+
+        switch(geometry)
+        {
+        case MFLOCK_SPHERE:
+        case MFLOCK_ELLIPSOID:
+            if(radius > 1.0)
+            {
+                n_outside++;
+            }
+            break;
+        case MFLOCK_BOX:
+            {
+                int inside = 1;
+                for(int bb = 0; bb < 3; bb++)
+                {
+                    if(C[bb] > 1.0 | C[bb] < -1.0) {
+                        inside = 0;
+                    }
+                }
+
+                if(inside == 0)
+                {
+                    n_outside++;
+                }
+            }
+        }
     }
+
+    if(n_outside > 0)
+    {
+        printf("Warning %ld beads are outside of the domain\n", n_outside);
+    }
+
     int shape[2] = {nbead, 4};
 
     i64 status = npio_write(fname, 2,
@@ -562,9 +593,9 @@ write_bead_labels_to_npy(const char * fname,
     assert(labels != NULL);
     int shape[] = {nbin};
     i64 nwritten =  npio_write(fname,
-                      1, shape,
-                      (const void *) labels,
-                      NPIO_U8, NPIO_U8);
+                               1, shape,
+                               (const void *) labels,
+                               NPIO_U8, NPIO_U8);
     if(nwritten > 0)
     {
         return 0;
@@ -614,9 +645,9 @@ int write_u32_to_npy(const char * fname,
 
     int shape[] = {N, M}; // flip dimensions
     i64 nwritten = npio_write(fname,
-                      2, shape,
-                      (const void *) data,
-                      NPIO_U32, NPIO_U32);
+                              2, shape,
+                              (const void *) data,
+                              NPIO_U32, NPIO_U32);
     if(nwritten > 0)
     {
         return 0;
