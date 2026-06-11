@@ -459,7 +459,7 @@ int write_bead_coordinates_to_npy(const char * fname,
             C[4*kk + ll] = X[3*kk + ll];
         }
         double radius;
-        if( (ell != NULL) & geometry == MFLOCK_ELLIPSOID) {
+        if( (ell != NULL) & (geometry == MFLOCK_ELLIPSOID)) {
             radius = elli_getScale(ell, X+3*kk);
         } else {
             radius = norm3d(X+3*kk);
@@ -481,7 +481,7 @@ int write_bead_coordinates_to_npy(const char * fname,
                 int inside = 1;
                 for(int bb = 0; bb < 3; bb++)
                 {
-                    if(C[bb] > 1.0 | C[bb] < -1.0) {
+                    if((C[bb] > 1.0) | (C[bb] < -1.0)) {
                         inside = 0;
                     }
                 }

@@ -761,12 +761,16 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, mflock_f
     return;
 }
 
-void grad3(const double * restrict X,
-           const size_t nX,
-           const double * restrict R,
-           const uint32_t * restrict I,
-           double * restrict G,
-           const mflock_func_t * restrict C)
+void
+grad3(const double * restrict X,
+      const size_t nX,
+      const double * restrict R,
+      const uint32_t * restrict I,
+      uint8_t * restrict active_pair,
+      const uint32_t * restrict backbone,
+      const size_t n_backbone,
+      double * restrict G,
+      const mflock_func_t * restrict C)
 {
 
     double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
@@ -888,10 +892,77 @@ void grad3(const double * restrict X,
     }
 
     // Wanted interactions
+    if(active_pair == NULL)
+    {
     for(size_t pp = 0; pp < C->nIPairs; pp++)
     {
         size_t kk = I[pp*2];
         size_t ll = I[pp*2+1];
+
+        double d = eudist3(X+3*kk, X+3*ll);
+        assert(kk != ll);
+#ifndef NDEBUG
+        if( !(d>0) )
+        {
+            printf("Strange distance between interacting points!\n");
+            printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
+            printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
+            exit(1);
+        }
+#endif
+        if(d > C->dInteraction && d > 1e-6)
+        {
+            for(int idx = 0; idx<3; idx++)
+            {
+                G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+            }
+        }
+    }
+    } else {
+        for(size_t pp = 0; pp < C->nIPairs; pp++)
+        {
+
+
+            size_t kk = I[pp*2];
+            size_t ll = I[pp*2+1];
+
+            double d = eudist3(X+3*kk, X+3*ll);
+            assert(kk != ll);
+#ifndef NDEBUG
+            if( !(d>0) )
+            {
+                printf("Strange distance between interacting points!\n");
+                printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
+                printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
+                exit(1);
+            }
+#endif
+
+            if(active_pair[pp] == 0){
+                if(d < 3.0*C->r0) {
+                    active_pair[pp] = 1;
+                    printf("Activated contact pair %zu\n", pp);
+                }
+            }
+
+            if(active_pair[pp] == 1) {
+            if(d > C->dInteraction && d > 1e-6)
+            {
+                for(int idx = 0; idx<3; idx++)
+                {
+                    G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                    G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                }
+            }
+            }
+        }
+    }
+    // backbone
+    for(size_t pp = 0; pp < n_backbone; pp++)
+    {
+        size_t kk = backbone[pp*2];
+        size_t ll = backbone[pp*2+1];
 
         double d = eudist3(X+3*kk, X+3*ll);
         assert(kk != ll);

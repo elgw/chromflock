@@ -46,6 +46,7 @@ typedef struct {
     elli * Es; /**<  smaller ellipse defining a "safe region" */
 
     size_t nIPairs; /**< Number of interaction pairs */
+
     // TODO: add temporary buffers here
     // TODO: add pointers to data here
     // TODO: add nX as well (which should be called nbead )
@@ -91,6 +92,9 @@ void grad3(
     const size_t nX,
     const double * restrict R,
     const uint32_t * restrict I, // List of interactions pairs
+    uint8_t * restrict active_pair,
+    const uint32_t * restrict backbone,
+    const size_t n_backbone,
     double * restrict G,
     const mflock_func_t * restrict C
     );

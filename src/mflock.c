@@ -312,6 +312,9 @@ mflock_dynamics(mflock_t * restrict p)
               p->n_beads,
               p->R,
               p->I,
+              p->active_pair,
+              p->backbone,
+              p->n_backbone,
               g,
               &fconf);
 
@@ -464,6 +467,15 @@ static void mflock_summary(mflock_t * p)
     mflock_logwrite(p, 1, "    Total time: %zu s\n", p->time_final);
     mflock_logwrite(p, 1, "    Final gradient norm: %e\n", p->grad_final);
     mflock_logwrite(p, 1, "    Final total error: %e\n", p->err_final);
+    size_t n_auto_used = 0;
+    if(p->autocontacts){
+        for(i64 kk = 0; kk < p->n_pairs; kk++) {
+            if(p->active_pair[kk] == 1) {
+                n_auto_used++;
+            }
+        }
+    }
+    mflock_logwrite(p, 1, "    Used %ld / %zu contact pairs\n", n_auto_used, p->n_pairs);
 
     // X: mean, max, min
     double mex = 0, mey = 0, mez = 0;
@@ -646,6 +658,7 @@ mflock_read_contact_pairs(mflock_t * p)
     check_bead_contacts(p->I, p->n_pairs, p->verbose, p->n_beads);
 
     mflock_logwrite(p, 1, "Read %lu contacts pairs\n", nCP);
+
     return;
 }
 
@@ -1145,6 +1158,7 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         { "test",          no_argument,       NULL,   'T' },
         /* Data */
         { "contact-pairs", required_argument, NULL,   'p' },
+        { "autocontacts",  no_argument,       NULL,   '2' },
         { "xFile",         required_argument, NULL,   'x' },
         { "coordinates",   required_argument, NULL,   'x' },
         { "rFile",         required_argument, NULL,   'r' },
@@ -1188,13 +1202,16 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "1:abA:B:cC:De:w:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:TuX",
+                            "12:abA:B:cC:De:w:x:r:n:p:P:t:R:v:o:hMs:L:zcdQ:l:W:TuX",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
         case '1':
             free(p->cmm_cmap);
             p->cmm_cmap = strdup(optarg);
+            break;
+        case '2':
+            p->autocontacts = 1;
             break;
         case 'a':
             p->liveView = 1;
@@ -1543,6 +1560,66 @@ static void mflock_load_bead_wells(mflock_t * mf)
     return;
 }
 
+static void
+mflock_update_autocontacts(mflock_t * mf)
+{
+    double dist2_th = pow(mf->r0*3.0, 2.0);
+    int n_activated = 0;
+    for(size_t pp = 0; pp < mf->n_pairs; pp++)
+    {
+        u32 * pair = mf->I + 2*pp;
+        double dist2 = eudist3p2(mf->beads + 3*pair[0], mf->beads + 3*pair[1]);
+
+        if(dist2 < dist2_th)
+        {
+            mf->active_pair[pp] = 1;
+            n_activated++;
+        }
+    }
+    mflock_logwrite(mf, 2, "Activated %d / %zu contact pairs\n", n_activated, mf->n_pairs);
+    return;
+}
+
+static void mflock_init_autopairs(mflock_t * mf)
+{
+    if(mf->autocontacts == 0) {
+        mflock_logwrite(mf, 2, "No autocontacts\n");
+        return; // unwanted
+    }
+
+    mflock_logwrite(mf, 2, "Initializing autocontacts\n");
+    mf->active_pair = calloc(mf->n_pairs, sizeof(u8));
+
+    if(mf->newx == 0) {
+        mflock_update_autocontacts(mf);
+    }
+    return;
+}
+
+
+static void mflock_init_backbone(mflock_t * mf)
+{
+    if(mf->create_backbone == 0) {
+        return;
+    }
+
+    mf->backbone = malloc(2*mf->n_beads*sizeof(u32));
+
+    int n_backbone = 0;
+    for(size_t kk = 0; kk + 1 < mf->n_beads; kk++)
+    {
+        if(mf->L[kk] == mf->L[kk+1])
+        {
+            mf->backbone[2*n_backbone + 0] = kk;
+            mf->backbone[2*n_backbone + 1] = kk + 1;
+            n_backbone++;
+        }
+    }
+    mf->n_backbone = n_backbone;
+    mflock_logwrite(mf, 2, "Added %d backbone contacts\n", mf->n_backbone);
+    return;
+ }
+
 static void mflock_init(mflock_t * mf, int argc, char ** argv)
 {
     mflock_set_and_create_output_folder(mf);
@@ -1601,27 +1678,13 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     mflock_read_contact_pairs(mf);
 
-    if(mf->create_backbone)
-    {
-        if(mf->I == NULL)
-        {
-            mf->I = calloc(2*mf->n_beads, sizeof(u32));
-        } else {
-            mf->I = realloc(mf->I, 2*(mf->n_pairs+mf->n_beads)*sizeof(u32));
-        }
-        int n_backbone = 0;
-        for(size_t kk = 0; kk + 1 < mf->n_beads; kk++)
-        {
-            if(mf->L[kk] == mf->L[kk+1])
-            {
-                mf->I[2*mf->n_pairs + 0] = kk;
-                mf->I[2*mf->n_pairs + 1] = kk + 1;
-                mf->n_pairs++;
-                n_backbone++;
-            }
-        }
-        mflock_logwrite(mf, 2, "Added %d backbone contacts\n", n_backbone);
-    }
+    // Activate pairs based on distance in current
+    // structure
+    // TODO: Split to init and update
+    mflock_init_autopairs(mf);
+
+    // Add contacts between adjacent beads (--backbone)
+    mflock_init_backbone(mf);
 
     mflock_load_radial_constraints(mf);
 
@@ -1683,6 +1746,7 @@ void mflock_free(mflock_t * p)
 {
     free(p->R);
     free(p->I);
+    free(p->backbone);
     free(p->L);
     free(p->contact_pairs_file);
     free(p->lfname);
@@ -1700,6 +1764,7 @@ void mflock_free(mflock_t * p)
     free(p->bead_apos_file);
     free(p->cmm_cmap);
     free(p->cmap);
+    free(p->active_pair);
     free(p);
     return;
 }
@@ -1851,13 +1916,13 @@ static void mflock_write_cmm(const mflock_t * p)
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
 
-        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, p->cmap);
+        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->backbone, p->n_backbone, p->L, p->cmap);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->I, p->n_pairs, p->L, p->cmap);
+        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->backbone, p->n_backbone, p->L, p->cmap);
         free(cmmfile);
     }
 
@@ -1866,6 +1931,8 @@ static void mflock_write_cmm(const mflock_t * p)
 
 static void mflock_close_log(mflock_t * p)
 {
+
+
     char * time_str = cf_timestr();
     fprintf(p->logf, "\nmflock finished: %s\n", time_str);
     free(time_str);

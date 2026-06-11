@@ -38,14 +38,31 @@
 #include "mflock_help.h"
 
 typedef struct {
-    uint32_t * I; // List with pairwise distances
-    size_t n_pairs; // Number of pairs in I
-    double * beads; /* Bead coordinates */
+    uint32_t * I; // List with pairwise contacts
+    // Number of pairs in I, note that the backbone contacts
+    // will be added to this list as well, and increase n_pairs
+    // beyond the initial value (if --backbone is used).
+    size_t n_pairs;
+
+    // List of backbone contacts
+    // possibly treated different from the
+    // contact pairs in future version
+    uint32_t * backbone;
+    size_t n_backbone;
+
+
+    double * beads; // Bead coordinates
     size_t n_beads; // number of points
-    int diploid; /* Cast the labels to diploid format */
+    int diploid; // Cast the labels to diploid format
     uint8_t * L; // chr labels per bead
     double * R; // wanted radii together with kRad
     int create_backbone;
+
+    // keep contacts disabled until the beads are found in proximity
+    // active_pair is a n_pairs long array which indicates if a contact is
+    // activated or not
+    int autocontacts;
+    u8 * active_pair;
 
     char * bead_apos_file; // file provided by --absolute
     bpos * bead_apos; // absolute bead positions provided by --absolute

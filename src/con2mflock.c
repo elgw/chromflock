@@ -509,7 +509,9 @@ static int get_chr_size(opts * s)
                                          chr_size_col, &chr_size)) {
                 printf("Unable to parse '%s'\n", line);
             } else {
-                printf("chr_id = %d, chr_size = %d\n", chr_id, chr_size);
+                if(s->verbose > 0) {
+                    printf("chr_id = %d, chr_size = %d\n", chr_id, chr_size);
+                }
                 s->chr_size_bp[chr_id] = chr_size;
                 if(1 + chr_id > s->n_chr)
                 {
@@ -520,12 +522,14 @@ static int get_chr_size(opts * s)
         }
     }
 
-    printf("s->n_chr = %ld\n", s->n_chr);
-    for(int kk = 0; kk < s->n_chr; kk++)
+    if(s->verbose > 0)
     {
-        printf("Chr #%d : %ld\n", kk, s->chr_size_bp[kk]);
+        printf("s->n_chr = %ld\n", s->n_chr);
+        for(int kk = 0; kk < s->n_chr; kk++)
+        {
+            printf("Chr #%d : %ld\n", kk, s->chr_size_bp[kk]);
+        }
     }
-
     for(i64 kk = 0; kk < s->n_chr; kk++)
     {
         s->chr_size_bin[kk] = s->chr_size_bp[kk] / s->resolution;
@@ -547,7 +551,7 @@ static int get_chr_size(opts * s)
 
     return 0;
 
- quit1:
+quit1:
     fclose(fid);
     free(line);
     return -1;
@@ -629,14 +633,16 @@ get_dataset_size(const opts * s)
         exit(EXIT_FAILURE);
     }
 
-    printf("Read %ld lines\n", nlines);
-    printf(" #,      Size,    Reads,    Bins\n");
+    if(s->verbose > 1) {
+        printf("Read %ld lines\n", nlines);
+        printf(" #,      Size,    Reads,    Bins\n");
 
-    for(i64 kk = 0; kk < s->n_chr; kk++)
-    {
-        printf("%2ld, %9ld, %8ld, %7ld\n", kk+1,
-               s->chr_size_bp[kk], s->chr_reads[kk],
-               (s->resolution + s->chr_size_bp[kk])/s->resolution);
+        for(i64 kk = 0; kk < s->n_chr; kk++)
+        {
+            printf("%2ld, %9ld, %8ld, %7ld\n", kk+1,
+                   s->chr_size_bp[kk], s->chr_reads[kk],
+                   (s->resolution + s->chr_size_bp[kk])/s->resolution);
+        }
     }
     gzl_destroy(gzl);
     free(L);
@@ -650,7 +656,9 @@ get_dataset_size(const opts * s)
 static void
 write_labels(const opts * s)
 {
-    printf("Writing labels to %s\n", s->label_file);
+    if(s->verbose > 0) {
+        printf("Writing labels to %s\n", s->label_file);
+    }
 
     // write to disk
     if(write_bead_labels(s->label_file, s->labels, s->n_bin))
@@ -851,11 +859,14 @@ write_contacts(opts * s)
             }
         }
     }
-
-    printf("Sorting contacts\n");
+    if(s->verbose > 0) {
+        printf("Sorting contacts\n");
+    }
     qsort(s->contacts, s->nlines, 2*sizeof(u32), cmp_u32_pair);
 
-    printf("Removing duplicates\n");
+    if(s->verbose > 0){
+        printf("Removing duplicates\n");
+    }
     i64 wpos = 0;
     for(i64 kk = 1; kk < s->nlines; kk++)
     {
@@ -865,9 +876,10 @@ write_contacts(opts * s)
             wpos++;
         }
     }
-    printf("Keeping %ld / %ld\n", wpos, s->nlines);
-
-    printf("Writing contacts to %s\n", s->contact_file);
+    if(s->verbose > 0) {
+        printf("Keeping %ld / %ld\n", wpos, s->nlines);
+        printf("Writing contacts to %s\n", s->contact_file);
+    }
 
     if(write_u32(s->contact_file, s->contacts, 2, wpos))
     {
@@ -946,10 +958,15 @@ write_contacts_raw(opts * s)
     gzl_destroy(gzl);
 
     const i64 n_contact = contact_id;
-    printf("Sorting contacts\n");
+    if(s->verbose > 0) {
+        printf("Sorting contacts\n");
+    }
     qsort(contacts, n_contact, sizeof(rcontact), cmp_rcontact);
 
-    printf("Removing duplicates\n");
+
+    if(s->verbose > 0){
+        printf("Removing duplicates\n");
+    }
     i64 wpos = 0;
     for(i64 kk = 1; kk < n_contact; kk++)
     {
@@ -959,10 +976,12 @@ write_contacts_raw(opts * s)
             wpos++;
         }
     }
-    const i64 n_unique_contact = wpos;
-    printf("Keeping %ld / %ld\n", n_unique_contact, n_contact);
 
-    printf("Writing contacts to %s\n", s->contact_file_raw);
+    const i64 n_unique_contact = wpos;
+    if(s->verbose > 0) {
+        printf("Keeping %ld / %ld\n", n_unique_contact, n_contact);
+        printf("Writing contacts to %s\n", s->contact_file_raw);
+    }
 
     if(write_u32(s->contact_file_raw, (u32*) contacts, 4, wpos))
     {
@@ -977,7 +996,10 @@ write_contacts_raw(opts * s)
 
 static void write_matrix(opts * s)
 {
-    printf("Writing contact map to %s\n", s->matrix_file);
+    if(s->verbose > 0)
+    {
+        printf("Writing contact map to %s\n", s->matrix_file);
+    }
 
     size_t nchr = s->n_chr;
     if(nchr >= 50)
@@ -993,7 +1015,9 @@ static void write_matrix(opts * s)
 
     i64 N = s->n_bin;
 
-    printf("Matrix size: %ld x %ld\n", N, N);
+    if(s->verbose > 0) {
+        printf("Matrix size: %ld x %ld\n", N, N);
+    }
 
     u32 * M = calloc(N*N, sizeof(u32));
 
@@ -1045,8 +1069,9 @@ static void write_matrix(opts * s)
             M[ll + N*kk] = reads;
         }
     }
-
-    printf("Writing to %s\n", s->matrix_file);
+    if(s->verbose > 0) {
+        printf("Writing to %s\n", s->matrix_file);
+    }
     if(write_u32(s->matrix_file, M, N, N))
     {
         printf("Failed to write to %s!\n", s->matrix_file);
@@ -1098,7 +1123,9 @@ int con2mflock(int argc, char ** argv)
         write_matrix(s);
     }
 
+    if(s->verbose > 0) {
+        printf("done\n");
+    }
     opts_free(s);
-    printf("done\n");
     return EXIT_SUCCESS;
 }
