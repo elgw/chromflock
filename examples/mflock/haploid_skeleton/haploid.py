@@ -4,6 +4,17 @@ import numpy as np
 import os, sys, stat
 import shutil
 
+import sys
+# caution: path[0] is reserved for script path (or '' in REPL)
+sys.path.insert(1, '../../')
+
+import numpy as np
+import subprocess
+import chromflock_common
+
+mflock = chromflock_common.find_mflock()
+chr_sizes = common.chr_sizes
+
 resolution = 1e6;
 folder = f'./'
 labels_out = 'labels.npy'
@@ -11,10 +22,7 @@ pairs_out = 'pairs.npy'
 
 print(f"Approximately {resolution} basepairs per bead")
 
-
-chr_sizes = np.array([247249719, 242951149, 199501827, 191273063, 180857866, 170899992, 158821424, 146274826, 140273252, 135374737, 134452384, 132349534, 114142980, 106368585, 100338915, 88827254, 78774742, 76117153, 63811651, 62435964, 46944323, 49691432, 154913754])
 nchr = len(chr_sizes)
-
 
 nbeads = np.int64(chr_sizes/resolution);
 
@@ -47,4 +55,7 @@ shutil.copyfile('../../..//src/mflock.lua', folder + '/mflock.lua')
 
 print("Run the follow command to continue:")
 print("")
-print(f"mflock --contact-pairs {pairs_out} -L {labels_out} --dconf mflock.lua --outFolder ./ --live --cmm\n");
+print(f"{mflock} --contact-pairs {pairs_out} -L {labels_out} --dconf mflock.lua --outFolder ./ --live --cmm\n");
+print("")
+print("should give the same results as")
+print(f"{mflock} --backbone -L {labels_out} --dconf mflock.lua --outFolder ./ --live --cmm\n");

@@ -11,7 +11,9 @@ Required arguments
 	(2X if --diploid is set)
 
 --contact-pairs <file>
-	File with contact pairs (uint32, uint32). The indexing is 0-based.
+       	File with contact pairs (uint32, uint32). The indexing is
+        0-based. Can either be a file with raw data or a .npy file
+        with a [n, 2] array with np.uint32 format.
 
 --config mflock.lua
 	lua script that configures the dynamics dynamics. A template can be
@@ -31,6 +33,9 @@ Optional arguments
 --backbone
         Create backbone contacts by connecting adjacent beads of the same
         chromosome.
+--autocontacts
+        Do not enforce the --contact-pairs, enable them first when the beads
+        are found to be in proximity.
 --seed N, -s N
 	seed for random number generator (defaults to random)
 --radii <file>, -r <file>
@@ -55,7 +60,7 @@ any of the --ea, --eb and/or --ec parameters are set.
         Set the domain to be the a box, [-1, 1]^3.
 --volq vq, -Q vq
 	volume quotient (bead volume/domain volume), this is the preferred way
-        to control the bead size.
+        to control the bead size. Default value: 0.2.
 --radius r0, -R r0
 	Explicitly set the bead radius if you for some reason don't want to use
         the --volq option.

@@ -13,6 +13,7 @@ function getConfig(iter, newx, nbead)
    -- kCom
    -- kRad
    -- fBrown
+   -- kBackbone
    -- kInt
    -- kBeadWell
    -- kChrWell
@@ -33,7 +34,7 @@ function getConfig(iter, newx, nbead)
   -- q >= 0.8         OFF again, to avoid overlapping beads etc
   kCom = 0
   if newx == 1 then
-    if q > 0.2 and q < 0.8 then
+    if q > 0.2 and q < 0.6 then
       kCom = 1
     end
   end
@@ -66,6 +67,9 @@ function getConfig(iter, newx, nbead)
   ---- Interaction force, kInt
   -- attracts beads that should be in contact (according to W)
   kInt = 0.5*(1.0 + math.sin( (q - .5)*math.pi )) -- from 0 to 1
+
+  --- Backbone force, kBackbone
+  kBackbone = kInt * 4
 
   ---- Bead specific wells
   -- attracts specific beads to specific 3D coordinates (wells).

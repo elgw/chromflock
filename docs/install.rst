@@ -42,6 +42,13 @@ On Ubuntu 22.04 these packages can be installed by
 
    Please check the Lua documentation if you are on another platform.
 
+On Fedora 42
+
+.. code:: shell
+
+   sudo dnf install sdl2-compat-devel
+
+
 Typical build and install
 -------------------------
 
