@@ -36,6 +36,7 @@ typedef struct {
     double kVol; /**< Force prohibiting volumetric overlap */
     double kDom; /**< The force that keeps the beads in the domain */
     double kInt; /**< Attraction force for bead pairs */
+    double kBackbone; //
     double kRad; /**< For radial constraints, using R */
     double kBeadWell; /**< Force that attract specific beads to specific locations */
     double kChrWell; /**< Force that attract beads in specific chromosomes to specific locations */

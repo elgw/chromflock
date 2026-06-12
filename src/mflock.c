@@ -290,6 +290,7 @@ mflock_dynamics(mflock_t * restrict p)
         fconf.kDom = lua_get_float(L, "kDom");
         fconf.kVol = lua_get_float(L, "kVol");
         fconf.kInt = lua_get_float(L, "kInt");
+        fconf.kBackbone = lua_get_float(L, "kBackbone");
         fconf.kRad = lua_get_float(L, "kRad");
         fconf.kBeadWell = lua_get_float(L, "kBeadWell");
         fconf.kChrWell = lua_get_float(L, "kChrWell");
@@ -303,6 +304,7 @@ mflock_dynamics(mflock_t * restrict p)
         if(p->verbose > 10)
         {
             printf("kInteraction: %f\n", fconf.kInt);
+            printf("kBackbone:    %f\n", fconf.kBackbone);
             printf("dInteraction: %f\n", fconf.dInteraction);
         }
 
