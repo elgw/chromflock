@@ -6,9 +6,6 @@
  * @date 2020-2023
  */
 
-
-#define _GNU_SOURCE
-
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>

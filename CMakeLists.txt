@@ -44,7 +44,7 @@ set(mflock_SOURCES
   src/ellipsoid.c
   src/contact_pairs_io.c
   src/cf_util.c
-  src/npio.c
+  src/npio/npio.c
 )
 
 set(aflock_SOURCES
@@ -54,7 +54,7 @@ set(aflock_SOURCES
   src/cf_util.c
   src/ellipsoid.c
   src/oscp.c
-  src/npio.c
+  src/npio/npio.c
 )
 
 set(chromflock_SOURCES
@@ -68,7 +68,7 @@ set(chromflock_SOURCES
     src/balance.c
     src/cf_util.c
     src/contact_pairs_io.c
-    src/npio.c
+    src/npio/npio.c
     src/con2mflock.c
     src/gzl.c
   )

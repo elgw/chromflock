@@ -53,8 +53,7 @@ Optional arguments
 Geometry
 ========
 
-By default the simulation domain is a sphere with radius 1, it remains so unless
-any of the --ea, --eb and/or --ec parameters are set.
+By default the simulation domain is a sphere with radius 1.
 
 --box
         Set the domain to be the a box, [-1, 1]^3.
@@ -66,7 +65,7 @@ any of the --ea, --eb and/or --ec parameters are set.
         the --volq option.
 
 These arguments will make the simulation domain switch to an
-ellipsoidal. It is required that ea >= eb >= ec >0.
+ellipsoidal. It is required that 1 >= ea >= eb >= ec > 0.
 
 --ea ea
 	Major axis of ellipsoid

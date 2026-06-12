@@ -88,7 +88,7 @@ obj/chromflock_init.o \
 obj/balance.o \
 obj/cf_util.o \
 obj/ellipsoid.o \
-obj/npio.o \
+obj/npio/npio.o \
 obj/contact_pairs_io.o \
 obj/gzl.o \
 obj/con2mflock.o \
@@ -126,7 +126,7 @@ src/oscp.c \
 obj/ellipsoid.o \
 obj/cf_util.o \
 obj/contact_pairs_io.o \
-obj/npio.o
+obj/npio/npio.o
 
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)
@@ -136,6 +136,9 @@ TXTDIR = src/txt
 OBJDIR = obj
 
 $(OBJDIR)/%.o : $(SRCDIR)/%.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(OBJDIR)/%.o : $(SRCDIR)/npio/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 

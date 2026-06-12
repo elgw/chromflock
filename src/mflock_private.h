@@ -50,7 +50,6 @@ typedef struct {
     uint32_t * backbone;
     size_t n_backbone;
 
-
     double * beads; // Bead coordinates
     size_t n_beads; // number of points
     int diploid; // Cast the labels to diploid format

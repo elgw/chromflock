@@ -8,7 +8,6 @@
 #include <ctype.h>
 
 #include "cf_util.h"
-#include "npio.h"
 
 int limit_mem(size_t max_bytes)
 {

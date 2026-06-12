@@ -1582,7 +1582,8 @@ mflock_update_autocontacts(mflock_t * mf)
     return;
 }
 
-static void mflock_init_autopairs(mflock_t * mf)
+static void
+mflock_init_autopairs(mflock_t * mf)
 {
     if(mf->autocontacts == 0) {
         mflock_logwrite(mf, 2, "No autocontacts\n");
@@ -1596,6 +1597,40 @@ static void mflock_init_autopairs(mflock_t * mf)
         mflock_update_autocontacts(mf);
     }
     return;
+}
+
+// If mf->autoconfig, this will write down an array containing
+// [[enforced, distance], [enforced, distance] ... ] where enforced
+// is either 1 if the the contact was in use at the end of the run, or
+// 0. Distance is the distance between the two corresponding beads
+static void
+mflock_write_autopairs(mflock_t * mf)
+{
+    if(mf->autocontacts == 0) {
+        return;
+    }
+    assert(mf->active_pair != NULL);
+
+    f32 * contact_details = malloc(mf->n_pairs*2*sizeof(u32));
+    for(i32 kk = 0; kk < mf->n_pairs; kk++)
+    {
+        contact_details[2*kk] = mf->active_pair[kk];
+        size_t a = mf->I[2*kk];
+        size_t b = mf->I[2*kk+1];
+        contact_details[2*kk+1] = sqrt(eudist3p2(mf->beads + 3*a , mf->beads + 3*b));
+    }
+
+    // TODO: npio_write
+    char * fname = malloc(1024);
+    sprintf(fname, "%s%s", mf->ofoldername, "contact_details.npy");
+    int shape[2] = {mf->n_pairs, 2};
+    i64 status = npio_write(fname, 2,
+                            shape,
+                            (const void *) contact_details,
+                            NPIO_F32, NPIO_F32);
+    assert(status != -1);
+    free(fname);
+    free(contact_details);
 }
 
 
@@ -2044,6 +2079,10 @@ int mflock(int argc, char ** argv)
 
     /* Write coordinates to disk */
     mflock_save_coordinates(mf);
+
+    // Write information about which contacts were enabled at the
+    // end (when --autopairs is used).
+    mflock_write_autopairs(mf);
 
     /* Write chimera cmm file (.gz) */
     mflock_write_cmm(mf);
