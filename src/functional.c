@@ -942,7 +942,6 @@ grad3(const double * restrict X,
             if(active_pair[pp] == 0){
                 if(d < 3.0*C->r0) {
                     active_pair[pp] = 1;
-                    printf("Activated contact pair %zu\n", pp);
                 }
             }
 

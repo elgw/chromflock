@@ -57,7 +57,7 @@ By default the simulation domain is a sphere with radius 1.
 
 --box
         Set the domain to be the a box, [-1, 1]^3.
---volq vq, -Q vq
+--vq vq, -Q vq
 	volume quotient (bead volume/domain volume), this is the preferred way
         to control the bead size. Default value: 0.2.
 --radius r0, -R r0
