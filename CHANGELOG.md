@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.4.7
+- Added the `kAbs` parameter to control the strength of anchoring to
+  the "absolute" positions.
+- Program will not abort if parameters are missing from the lua
+  configuration script any more, rather warn at the end.
+
 # 0.4.6
 - Unit box geometry ($[-1,1]^3$) can be enabled with `--box` command
   line argument to mflock.

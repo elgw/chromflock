@@ -34,8 +34,8 @@ Optional arguments
         Create backbone contacts by connecting adjacent beads of the same
         chromosome.
 --autocontacts
-        Do not enforce the --contact-pairs, enable them first when the beads
-        are found to be in proximity.
+        Do not enforce the --contact-pairs, contacts are enabled only when the
+        associated beads are found to be in proximity.
 --seed N, -s N
 	seed for random number generator (defaults to random)
 --radii <file>, -r <file>

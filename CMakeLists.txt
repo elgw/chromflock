@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.9)
 # - build lua from here
 
 project(chromflock
-  VERSION 0.4.6
+  VERSION 0.4.7
   LANGUAGES C)
 
 include(ExternalProject)
@@ -45,6 +45,7 @@ set(mflock_SOURCES
   src/contact_pairs_io.c
   src/cf_util.c
   src/npio/npio.c
+  src/ddict.c
 )
 
 set(aflock_SOURCES

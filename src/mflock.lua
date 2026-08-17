@@ -80,6 +80,9 @@ function getConfig(iter, newx, nbead)
   -- specific well.
   kChrWell = 0.1;
 
+  --- Strength of "absolute" placement
+  kAbs = 0.1;
+
   ---- Exit condition
   quit = 0
   if iter >= maxiter then

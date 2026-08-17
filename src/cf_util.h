@@ -39,6 +39,11 @@ typedef uint32_t u32;
 typedef uint8_t u8;
 typedef int64_t i64;
 
+typedef struct {
+    float x;
+    float y;
+    float z;
+} fpoint;
 
 /* For holding absolute bead position used by mflock (--absolute) */
 typedef struct {
