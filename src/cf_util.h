@@ -31,14 +31,13 @@ typedef enum {
     MFLOCK_ELLIPSOID
 } mflock_geometry_type;
 
-typedef int32_t i32;
-typedef float f32;
-
-
-typedef uint32_t u32;
 typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int32_t i32;
 typedef int64_t i64;
-
+typedef float f32;
+typedef double f64;
 
 /* For holding absolute bead position used by mflock (--absolute) */
 typedef struct {

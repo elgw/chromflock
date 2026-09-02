@@ -88,11 +88,11 @@ obj/chromflock_init.o \
 obj/balance.o \
 obj/cf_util.o \
 obj/ellipsoid.o \
-obj/npio/npio.o \
+obj/npio.o \
 obj/contact_pairs_io.o \
 obj/gzl.o \
 obj/con2mflock.o \
-
+obj/collide3_f32.o
 
 ## Targets
 
@@ -115,6 +115,7 @@ src/liveview.o \
 obj/contact_pairs_io.o \
 obj/cf_util.o \
 obj/npio.o \
+obj/collide3_f64.o \
 
 
 bin/mflock: $(mflock_files) makefile
@@ -126,7 +127,8 @@ src/oscp.c \
 obj/ellipsoid.o \
 obj/cf_util.o \
 obj/contact_pairs_io.o \
-obj/npio/npio.o
+obj/npio.o \
+obj/collide3_f32.o
 
 bin/aflock: $(aflock_files) makefile
 	$(CC) $(CFLAGS) $(aflock_files) -o bin/aflock $(LDFLAGS)

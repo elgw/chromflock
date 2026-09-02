@@ -6,7 +6,6 @@ static double f_interaction(double r)
     return pow(r, 2.0);
 }
 
-
 /* Squared L2 norm of a 3-vector */
 static double norm32(const double * restrict X)
 {
@@ -42,335 +41,52 @@ static double eudist3(const double * A, const double * B)
     return sqrt(eudist3sq(A, B));
 }
 
-static size_t
-hash_coord(const int nDiv, const double X)
+typedef struct {
+    const double * X;
+    double * G;
+    double radius;
+    double kVol;
+} repulsion_gradient_params;
+
+typedef struct {
+    const double * X;
+    double error;
+    double radius;
+    double kVol;
+} repulsion_error_params;
+
+void repulsion_gradient_cb(u32 u, u32 v, double d2, void * data)
 {
-    double v = (X+1)/2 * nDiv;
-
-#ifndef NDEBUG
-    if(isfinite(v) != 1)
-    {
-        fprintf(stderr, "ERROR in %s, line %d\n", __FILE__, __LINE__);
-        fprintf(stderr, "X=%f, v = %f\n", X, v);
-        exit(EXIT_FAILURE);
+    repulsion_gradient_params * params = (repulsion_gradient_params *) data;
+    if( d2 < 1e-8 ) { // avoid division by zero
+        return;
     }
-#endif
+    double d = sqrt(d2);
 
-    if(v<=0)
-        return 0;
-    if(v>=nDiv)
-        return nDiv-1;
-    return floor(v);
+    double * G = params->G;
+    const double * X = params->X;
+    double kVol = params->kVol;
+
+    double did = (d - params->radius)/d;
+    double f = 2*kVol*did;
+
+    for(i64 ii = 0; ii < 3; ii++){
+        G[3*u + ii] += f*(X[3*u + ii] - X[3*v + ii]);
+        G[3*v + ii] -= f*(X[3*u + ii] - X[3*v + ii]);
+    }
 }
 
-
-static size_t
-hash(const size_t nDiv, const double * restrict X)
+void repulsion_error_cb(__attribute__((unused)) u32 u,
+                        __attribute__((unused)) u32 v,
+                        double d2, void * data)
 {
-
-    return hash_coord(nDiv, X[0]) +
-        nDiv*hash_coord(nDiv, X[1]) +
-        nDiv*nDiv*hash_coord(nDiv, X[2]);
+    repulsion_error_params * params = (repulsion_error_params *) data;
+    if( d2 < 1e-8 ) { // avoid division by zero
+        return;
+    }
+    double d = sqrt(d2);
+    params->error += pow(d - params->radius, 2);
 }
-
-
-// D: coordinates of the dots [d0_x, d0_y, d0_z, d1_x, d1_y, ... dN-1_z]
-// N: Number of dots
-// d: capture distance between bead centers
-//
-// NOTE:
-// - Will crash if D contains nan or inf values.
-//
-// - If points are outside of the domain, they will be assigned to
-// - edge buckets
-double
-errRepulsion(const double * restrict D,
-             const size_t N,
-             const double d) {
-
-#ifndef NDEBUG
-    // Verify that D was actually allocated
-    for(size_t kk = 0; kk<3*N; kk++)
-    {
-        assert(isfinite(D[kk]));
-    }
-    fflush(stdout);
-#endif
-
-
-    // Mostly copied from volHASH/src/volhash3.c
-    double d2 = pow(d,2);
-
-    // 1. Counting -- Figure out how many elements per bucket
-    // there will be (2/nDiv)^3 buckets in total since the domain
-    // is [-1, 1]^3
-    int nDiv = cbrt(N/8);
-    nDiv < 1 ? nDiv = 1 : 0;
-
-    size_t nH = nDiv*nDiv*nDiv;
-    uint32_t * S = calloc(nH, sizeof(uint32_t));
-    assert(S != NULL);
-
-    for(size_t kk = 0; kk<N; kk++) {
-        S[hash(nDiv, D+3*kk)]++;
-    }
-
-    /* Create boundaries for the data */
-    uint32_t * B = calloc((nH+1), sizeof(uint32_t));
-    assert(B != NULL);
-    uint32_t * C = calloc((nH+1), sizeof(uint32_t));
-    assert(C != NULL);
-
-    B[0] = 0;
-    C[0] = 0; // Start positions when writing
-    for(size_t kk = 1; kk<=nH; kk++)
-    {
-        B[kk] = B[kk-1]+S[kk-1];
-        C[kk] = B[kk];
-    }
-
-    if(0){
-        for(size_t kk = 0; kk<nH; kk++)
-        {
-            printf("[%u -- %u], S[%zu] = %u\n", B[kk], B[kk+1], kk, S[kk]);
-        }
-    }
-
-    /* Dots sorted according to their bucket and put into E */
-    double * E = malloc(3*N*sizeof(double));
-    assert(E!=NULL);
-
-    /* Move data into new structure */
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        size_t h = hash(nDiv, D+3*kk);
-
-        size_t writepos = 3*C[h];
-        C[h]++;
-        for(int idx = 0; idx<3; idx++)
-        {
-            assert(writepos<N*3);
-            E[writepos++] = D[3*kk+idx];
-        }
-    }
-
-    /*
-     * now we can hash(X) a point X,
-     * using B to see where the bucket is
-     * in E
-     * */
-
-    // Get some job done!
-    double err = 0;
-    for(size_t kk = 0; kk<N; kk++)
-        /* Find buckets that might contains neighbours */
-    {
-        double deps = d;
-        size_t ha_min = hash_coord(nDiv, E[3*kk]-deps);
-        size_t ha_max = hash_coord(nDiv, E[3*kk]+deps);
-
-        size_t hb_min = hash_coord(nDiv, E[3*kk+1]-deps);
-        size_t hb_max = hash_coord(nDiv, E[3*kk+1]+deps);
-
-        size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
-        size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
-
-        for(size_t cc = hc_min; cc <= hc_max; cc++) {
-            for(size_t bb = hb_min; bb <= hb_max; bb++) {
-                for(size_t aa = ha_min; aa <= ha_max; aa++) {
-
-
-                    // hash or index of the bucket to compare against
-                    size_t hash =
-                        aa +
-                        bb*nDiv +
-                        cc*pow(nDiv,2);
-
-                    //          printf("%d, %d, %d, hash: %zu / %zu\n", aa, bb, cc, hash, nH); fflush(stdout);
-
-                    // Compare against all elements in a specific bucket.
-                    for(size_t pp = B[hash]; pp<B[hash+1]; pp++)
-                    {
-                        if(pp>kk) {
-                            double dist2 = eudist3sq(E+3*pp, E+3*kk); //  squared distance
-                            if(dist2<d2)
-                            {
-                                err += pow(sqrt(dist2) - d, 2);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    free(B);
-    free(C);
-    free(E);
-    free(S);
-
-    return err;
-}
-
-
-/** @brief Repulsion gradient (volumetric overlap)
- *
- * @param D The dots [3 X N]
- * @param G The gradient
- * @param N the number of dots
- * @param d ???
- * @param kVol The force magnitude
- */
-
-static double
-gradRepulsion(const double * restrict D,
-              double * restrict G,
-              const size_t N,
-              const double d,
-              const double kVol)
-{
-
-    assert(isfinite(d));
-
-#ifndef NDEBUG
-    // Verify that D was actually allocated
-    for(size_t kk = 0; kk<3*N; kk++)
-    {
-        assert(isfinite(D[kk]));
-    }
-    fflush(stdout);
-#endif
-
-    // Mostly copied from volHASH/src/volhash3.c
-    double d2 = pow(d,2);
-
-    // 1. Figure out how many elements per bucket
-    int nDiv = cbrt(N/8);
-    nDiv < 1 ? nDiv = 1 : 0;
-
-    size_t nH = nDiv*nDiv*nDiv;
-    uint32_t * S = calloc(nH, sizeof(uint32_t));
-    assert(S!=NULL);
-
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        S[hash(nDiv, D+3*kk)]++;
-    }
-
-    /* Create boundaries for the data */
-    uint32_t * B = malloc((nH+1)*sizeof(uint32_t));
-    assert(B!=NULL);
-    uint32_t * C = malloc((nH+1)*sizeof(uint32_t));
-    assert(C!=NULL);
-
-    B[0] = 0;
-    C[0] = 0; // Start positions when writing
-    for(size_t kk = 1; kk<=nH; kk++)
-    {
-        B[kk] = B[kk-1]+S[kk-1];
-        C[kk] = B[kk];
-    }
-
-    if(0){
-        for(size_t kk = 0; kk<nH; kk++)
-        {
-            printf("[%u -- %u], S[%zu] = %u\n", B[kk], B[kk+1], kk, S[kk]);
-        }
-    }
-
-    // Dots sorted according to their bucket
-    double * E = malloc(3*N*sizeof(double));
-    assert(E != NULL);
-    size_t * P = malloc(N*sizeof(double)); // Keep also bead numbers
-    assert(P!=NULL);
-
-    /* Move data into new structure */
-    for(size_t kk = 0; kk<N; kk++)
-    {
-        size_t h = hash(nDiv, D+3*kk);
-
-        size_t writepos = 3*C[h];
-        C[h]++;
-        P[writepos/3] = kk;
-        for(int idx = 0; idx<3; idx++)
-        {
-            assert(writepos<N*3);
-            E[writepos++] = D[3*kk+idx];
-        }
-    }
-
-    /*
-     * now we can hash(X) a point X,
-     * using B to see where the bucket is
-     * in E
-     * */
-
-    // Get some job done!
-    double err = 0;
-    for(size_t kk = 0; kk<N; kk++)
-        /* Looping over E in order to avoid self-matches
-         * and duplicates */
-    {
-        double deps = d;
-        size_t ha_min = hash_coord(nDiv, E[3*kk]-deps);
-        size_t ha_max = hash_coord(nDiv, E[3*kk]+deps);
-        size_t hb_min = hash_coord(nDiv, E[3*kk+1]-deps);
-        size_t hb_max = hash_coord(nDiv, E[3*kk+1]+deps);
-        size_t hc_min = hash_coord(nDiv, E[3*kk+2]-deps);
-        size_t hc_max = hash_coord(nDiv, E[3*kk+2]+deps);
-
-        for(size_t cc = hc_min; cc <= hc_max; cc++) {
-            for(size_t bb = hb_min; bb <= hb_max; bb++) {
-                for(size_t aa = ha_min; aa <= ha_max; aa++) {
-
-                    size_t hash =
-                        aa +
-                        bb*nDiv +
-                        cc*pow(nDiv,2);
-                    for(size_t pp = B[hash]; pp<B[hash+1]; pp++)
-                    {
-                        if(pp>kk) {
-                            double dist2 = eudist3sq(E+3*pp, E+3*kk);
-                            if(dist2<d2)
-                            {
-
-                                // Retrieve original positions
-                                size_t KK = P[kk];
-                                size_t LL = P[pp];
-
-                                double di = sqrt(dist2);
-
-                                double did = (di - d)/di;
-
-                                if( !isfinite(did))
-                                {
-                                    did = 0;
-                                }
-
-                                for(int idx = 0; idx<3; idx++)
-                                {
-                                    G[3*KK+idx] += kVol*2*(E[3*kk+idx] - E[3*pp+idx])*did;
-                                    G[3*LL+idx] -= kVol*2*(E[3*kk+idx] - E[3*pp+idx])*did;
-                                }
-
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-    free(B);
-    free(C);
-    free(E);
-    free(S);
-    free(P);
-
-    return err;
-}
-
 
 double err3(const double * restrict X,
             const size_t nX,
@@ -387,7 +103,7 @@ double err3(const double * restrict X,
     double errRad = 0;
     if(C->E == NULL) // spherical domain
     {
-        if( (R != NULL) & (C->kRad > 0))
+        if( (R != NULL) && (C->kRad > 0))
         {
             for(size_t kk = 0; kk<nX; kk++)
             {
@@ -401,7 +117,7 @@ double err3(const double * restrict X,
     }
     if(C->E != NULL) // elliptical domain
     {
-        if( (R != NULL) & (C->kRad > 0))
+        if( (R != NULL) && (C->kRad > 0))
         {
             for(size_t kk = 0; kk<nX; kk++)
             {
@@ -465,9 +181,17 @@ double err3(const double * restrict X,
     }
 
     // Repulsion
-    double errVol = 0;
-
-    errVol = errRepulsion(X, nX, 2*C->r0);
+    collide3_info cinfo = {};
+    repulsion_error_params cparams = {};
+    cparams.error = 0;
+    cparams.radius = 2.0*C->r0;
+    cparams.kVol = C->kVol;
+    cparams.X = X;
+    collide3_f64(X, nX,
+                 2*C->r0, &cinfo,
+                 repulsion_error_cb,
+                 &cparams);
+    double errVol = cparams.error;
 
     return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
 }
@@ -478,7 +202,7 @@ double err2(double * X, size_t nX, double * R, uint32_t * P, mflock_func_t * C )
 
     // Wanted radii
     double errRad = 0;
-    if( (R != NULL) & (C->kRad > 0))
+    if( (R != NULL) && (C->kRad > 0))
     {
         for(size_t kk = 0; kk<nX; kk++)
         {
@@ -545,7 +269,7 @@ double err(double * X, size_t nX, double * R, uint8_t * A, mflock_func_t * C )
 
     // Wanted radii
     double errRad = 0;
-    if( (R != NULL) & (C->kRad > 0))
+    if( (R != NULL) && (C->kRad > 0))
     {
         for(size_t kk = 0; kk<nX; kk++)
         {
@@ -761,6 +485,7 @@ void grad2(double * X, size_t nX, double * R, uint32_t * I, double * G, mflock_f
     return;
 }
 
+
 void
 grad3(const double * restrict X,
       const size_t nX,
@@ -778,7 +503,7 @@ grad3(const double * restrict X,
     memset(G, 0, nX*3*sizeof(double));
 
     /* Radial positioning */
-    if( (C->kRad > 0) & (R != NULL)) {
+    if( (C->kRad > 0) && (R != NULL)) {
         if(C->geometry == MFLOCK_ELLIPSOID)
         {
             printf("Warning: Using radial constrains with ellipsoidal geometry"
@@ -985,7 +710,17 @@ grad3(const double * restrict X,
     }
 
     // Repulsion
-    gradRepulsion(X, G, nX, 2*C->r0, C->kVol);
+    collide3_info cinfo = {};
+    repulsion_gradient_params cparams;
+    cparams.G = G;
+    cparams.radius = 2.0*C->r0;
+    cparams.kVol = C->kVol;
+    cparams.X = X;
+
+    collide3_f64(X, nX,
+                 2*C->r0, &cinfo,
+                 repulsion_gradient_cb,
+                 &cparams);
 
     return;
 }
@@ -1063,7 +798,17 @@ void grad4(double * restrict X,
     }
 
     // Repulsion
-    gradRepulsion(X, G, nX, 2*C->r0, C->kVol);
+    collide3_info cinfo = {};
+    repulsion_gradient_params cparams;
+    cparams.G = G;
+    cparams.radius = 2.0*C->r0;
+    cparams.kVol = C->kVol;
+    cparams.X = X;
+
+    collide3_f64(X, nX,
+                 2*C->r0, &cinfo,
+                 repulsion_gradient_cb,
+                 &cparams);
 
     return;
 }

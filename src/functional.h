@@ -13,6 +13,7 @@
 
 #include "ellipsoid.h"
 #include "cf_util.h"
+#include "collide3.h"
 
 typedef uint32_t u32;
 typedef double f64;

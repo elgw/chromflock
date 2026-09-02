@@ -45,7 +45,9 @@ set(mflock_SOURCES
   src/contact_pairs_io.c
   src/cf_util.c
   src/npio/npio.c
-)
+  src/collide3_f32.c
+  src/collide3_f64.c
+  )
 
 set(aflock_SOURCES
   src/aflock.c
@@ -55,6 +57,8 @@ set(aflock_SOURCES
   src/ellipsoid.c
   src/oscp.c
   src/npio/npio.c
+  src/collide3_f32.c
+  src/collide3_f64.c
 )
 
 set(chromflock_SOURCES
@@ -71,7 +75,10 @@ set(chromflock_SOURCES
     src/npio/npio.c
     src/con2mflock.c
     src/gzl.c
+    src/collide3_f32.c
+    src/collide3_f64.c
   )
+
 
 add_executable( mflock ${mflock_SOURCES})
 add_executable( aflock ${aflock_SOURCES})
@@ -162,6 +169,12 @@ else()
   message(WARNING "IPO is not supported: ${output}")
 endif()
 
+set_property(TARGET mflock PROPERTY COMPILE_FLAGS -fno-math-errno)
+set_property(TARGET mflock PROPERTY COMPILE_FLAGS -fno-signed-zeros)
+set_property(TARGET mflock PROPERTY COMPILE_FLAGS -fno-trapping-math )
+set_property(TARGET aflock PROPERTY COMPILE_FLAGS -fno-math-errno)
+set_property(TARGET aflock PROPERTY COMPILE_FLAGS -fno-signed-zeros)
+set_property(TARGET aflock PROPERTY COMPILE_FLAGS -fno-trapping-math )
 
 
 # Note the value of CMAKE_INSTALL_PREFIX

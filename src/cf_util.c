@@ -6,6 +6,7 @@
 
 
 #include <ctype.h>
+#include <assert.h>
 
 #include "cf_util.h"
 
@@ -151,7 +152,7 @@ load_bead_coordinates_from_csv(const char * fname,
     free(line);
     return 0;
 
- parsing_error:
+parsing_error:
     fclose(fid);
     fprintf(stderr, "Failed to read line %zu from %s\n", ll+1, fname);
     free(line);
@@ -208,7 +209,7 @@ load_bead_coordinates_from_npy(const char * fname,
     npio_free(npy);
     return 0;
 
- fail_data:
+fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -266,7 +267,7 @@ load_bead_apos_from_npy(const char * fname,
     }
     fprintf(stderr, "Invalid data format, expected F32\n");
 
- fail_data:
+fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -321,7 +322,7 @@ load_bead_contacts_from_npy(const char * fname, int * _ncont)
         return C;
     }
 
- fail_data:
+fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -374,7 +375,7 @@ load_bead_labels_from_npy(const char * fname, int * _nbead)
         return L;
     }
 
- fail_data:
+fail_data:
     fprintf(stderr, "%s contains invalid data\n", fname);
     npio_print(stderr, npy);
     npio_free(npy);
@@ -406,11 +407,13 @@ write_bead_coordinates_to_csv(const char * fname,
     for(i64 kk = 0; kk<nbead; kk++)
     {
         double radius;
-        if(ell == NULL)
+
+        if(geometry == MFLOCK_ELLIPSOID)
         {
-            radius = norm3d(X+3*kk);
-        } else {
+            assert(ell != NULL);
             radius = elli_getScale(ell, X+3*kk);
+        } else {
+            radius = norm3d(X+3*kk);
         }
 
         int nwritten = fprintf(fid, "%f, %f, %f, %f\n",
@@ -427,7 +430,7 @@ write_bead_coordinates_to_csv(const char * fname,
     fclose(fid);
     return 0;
 
- fail_write:
+fail_write:
     fprintf(stderr, "An error occurred while writing to %s\n", fname);
     fclose(fid);
     return -1;
@@ -476,20 +479,20 @@ int write_bead_coordinates_to_npy(const char * fname,
             }
             break;
         case MFLOCK_BOX:
+        {
+            int inside = 1;
+            for(int bb = 0; bb < 3; bb++)
             {
-                int inside = 1;
-                for(int bb = 0; bb < 3; bb++)
-                {
-                    if((C[bb] > 1.0) | (C[bb] < -1.0)) {
-                        inside = 0;
-                    }
-                }
-
-                if(inside == 0)
-                {
-                    n_outside++;
+                if((C[bb] > 1.0) | (C[bb] < -1.0)) {
+                    inside = 0;
                 }
             }
+
+            if(inside == 0)
+            {
+                n_outside++;
+            }
+        }
         }
     }
 

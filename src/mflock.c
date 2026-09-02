@@ -471,7 +471,7 @@ static void mflock_summary(mflock_t * p)
     mflock_logwrite(p, 1, "    Final total error: %e\n", p->err_final);
     size_t n_auto_used = 0;
     if(p->autocontacts){
-        for(i64 kk = 0; kk < p->n_pairs; kk++) {
+        for(u64 kk = 0; kk < p->n_pairs; kk++) {
             if(p->active_pair[kk] == 1) {
                 n_auto_used++;
             }
@@ -590,19 +590,27 @@ check_bead_contacts(const u32 * pairs, i64 npairs,
     {
         if(pairs[2*kk] > pairs[2*(kk+1)])
         {
-            printf("Contact pairs not sorted\n");
+            printf("Contact pairs not sorted. They should have the form [..., (a, b), (c ,d), ...] | a < c \n");
+            printf("But pair %ld is (%u, %u) and pair %ld is (%u, %u)\n",
+                   kk,   pairs[2*kk],     pairs[2*kk+1],
+                   kk+1, pairs[2*(kk+1)], pairs[2*(kk+1)+1]);
             exit(EXIT_FAILURE);
         }
         if(pairs[2*kk] == pairs[2*(kk+1)])
         {
             if(pairs[2*kk + 1] == pairs[2*(kk+1)+1])
             {
-                printf("Contact pairs contains a duplicate\n");
+                printf("There is a duplicate contact pair\n");
+                printf("pair %ld = (%u, %u), pair %ld = (%u, %u)\n",
+                       kk,   pairs[2*kk],     pairs[2*kk+1],
+                       kk+1, pairs[2*(kk+1)], pairs[2*(kk+1)+1]);
                 exit(EXIT_FAILURE);
             }
             if(pairs[2*kk + 1] > pairs[2*(kk+1) + 1])
             {
-                printf("Contact pairs not sorted\n");
+                printf("Contact pairs not sorted, found pair %ld = (%u, %u) and %ld = (%u, %u)\n",
+                       kk,   pairs[2*kk],     pairs[2*kk+1],
+                       kk+1, pairs[2*(kk+1)], pairs[2*(kk+1)+1]);
                 exit(EXIT_FAILURE);
             }
         }
@@ -803,9 +811,9 @@ static int mflock_load_bead_labels(mflock_t * p)
             exit(EXIT_FAILURE);
         }
 
-        p->L = malloc(p->n_beads*sizeof(double));
+        p->L = malloc(p->n_beads*sizeof(u8));
         assert(p->L != NULL);
-        size_t nread = fread(p->L, sizeof(uint8_t), p->n_beads, f);
+        size_t nread = fread(p->L, sizeof(u8), p->n_beads, f);
         if(nread != p->n_beads)
         {
             fprintf(stderr, "Unable to read from %s\n", p->lfname);
@@ -1565,17 +1573,26 @@ static void mflock_load_bead_wells(mflock_t * mf)
 static void
 mflock_update_autocontacts(mflock_t * mf)
 {
-    double dist2_th = pow(mf->r0*3.0, 2.0);
-    int n_activated = 0;
-    for(size_t pp = 0; pp < mf->n_pairs; pp++)
-    {
-        u32 * pair = mf->I + 2*pp;
-        double dist2 = eudist3p2(mf->beads + 3*pair[0], mf->beads + 3*pair[1]);
+    double dist2_activation = pow(mf->r0*3.0, 2.0);
+    double dist2_drop = pow(mf->r0*6.0, 2.0);
 
-        if(dist2 < dist2_th)
-        {
-            mf->active_pair[pp] = 1;
-            n_activated++;
+    int n_activated = 0;
+    for(size_t pp = 0; pp < mf->n_pairs; pp++){
+
+        u32 * pair = mf->I + 2*pp;
+        double dist2 = eudist3p2(mf->beads + 3*pair[0],
+                                 mf->beads + 3*pair[1]);
+
+        if(mf->active_pair[pp] == 0) {
+            if(dist2 < dist2_activation) {
+                mf->active_pair[pp] = 1;
+                n_activated++;
+            }
+        } else {
+            if(dist2 > dist2_drop){
+                mf->active_pair[pp] = 0;
+                n_activated--;
+            }
         }
     }
     mflock_logwrite(mf, 2, "Activated %d / %zu contact pairs\n", n_activated, mf->n_pairs);
@@ -1611,8 +1628,8 @@ mflock_write_autopairs(mflock_t * mf)
     }
     assert(mf->active_pair != NULL);
 
-    f32 * contact_details = malloc(mf->n_pairs*2*sizeof(u32));
-    for(i32 kk = 0; kk < mf->n_pairs; kk++)
+    f32 * contact_details = malloc(mf->n_pairs*2*sizeof(f32));
+    for(u64 kk = 0; kk < mf->n_pairs; kk++)
     {
         contact_details[2*kk] = mf->active_pair[kk];
         size_t a = mf->I[2*kk];
@@ -1628,6 +1645,10 @@ mflock_write_autopairs(mflock_t * mf)
                             shape,
                             (const void *) contact_details,
                             NPIO_F32, NPIO_F32);
+    if(status == -1)
+    {
+        printf("Failed to write to %s\n", fname);
+    }
     assert(status != -1);
     free(fname);
     free(contact_details);
