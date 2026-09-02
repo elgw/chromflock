@@ -41,7 +41,7 @@ typedef struct {
     double kRad; /**< For radial constraints, using R */
     double kBeadWell; /**< Force that attract specific beads to specific locations */
     double kChrWell; /**< Force that attract beads in specific chromosomes to specific locations */
-
+    double kAbs; // Strength of "absolut" placement
     mflock_geometry_type geometry;
 
     elli * E; /**< Ellipsoidal geometry if non-NULL */

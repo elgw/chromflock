@@ -49,22 +49,29 @@ static void luaerror(lua_State *L, const char *fmt, ...)
     vfprintf(stderr, fmt, argp);
     printf("\n");
     va_end(argp);
-    lua_close(L);
-    exit(EXIT_FAILURE);
+    //lua_close(L);
 }
 
 /* get global variable by name from lua */
-static double lua_get_float (lua_State *L,
+static double lua_get_float (ddict * error_dict,
+                             lua_State *L,
                              const char *var)
 {
     int isnum;
     double result;
     lua_getglobal(L, var);
     result = (double)lua_tonumberx(L, -1, &isnum);
-    if (!isnum)
-        luaerror(L, "'%s' should be a number\n", var);
     lua_pop(L, 1);
-    /* remove result from the stack */
+    if (!isnum)
+    {
+        char err[512];
+        sprintf(err, "Could not retrieve %s from the lua configuration script. A default value was used.", var);
+        if( ddict_get(error_dict, err) == NULL)
+        {
+            ddict_add(error_dict, err, NULL);
+        }
+        return 0.1;
+    }
     return result;
 }
 
@@ -219,6 +226,7 @@ mflock_dynamics(mflock_t * restrict p)
     fconf.top_plane = 2.0;
     fconf.bottom_plane = -2.0;
     fconf.geometry = p->geometry;
+    fconf.kAbs = 1;
     if(p->E != NULL)
     {
         /* add ellipse parameters otherwise sphere domain */
@@ -287,19 +295,20 @@ mflock_dynamics(mflock_t * restrict p)
         }
 
         /* retrieve result */
-        fconf.kDom = lua_get_float(L, "kDom");
-        fconf.kVol = lua_get_float(L, "kVol");
-        fconf.kInt = lua_get_float(L, "kInt");
-        fconf.kBackbone = lua_get_float(L, "kBackbone");
-        fconf.kRad = lua_get_float(L, "kRad");
-        fconf.kBeadWell = lua_get_float(L, "kBeadWell");
-        fconf.kChrWell = lua_get_float(L, "kChrWell");
-        fconf.top_plane = lua_get_float(L, "top_plane");
-        fconf.bottom_plane = lua_get_float(L, "bottom_plane");
-        p->compress = lua_get_float(L, "kCom");
-        double Fb = lua_get_float(L, "fBrown");
+        fconf.kDom = lua_get_float(p->error_dict, L, "kDom");
+        fconf.kVol = lua_get_float(p->error_dict, L, "kVol");
+        fconf.kInt = lua_get_float(p->error_dict, L, "kInt");
+        fconf.kAbs = lua_get_float(p->error_dict, L, "kAbs");
+        fconf.kBackbone = lua_get_float(p->error_dict, L, "kBackbone");
+        fconf.kRad = lua_get_float(p->error_dict, L, "kRad");
+        fconf.kBeadWell = lua_get_float(p->error_dict, L, "kBeadWell");
+        fconf.kChrWell = lua_get_float(p->error_dict, L, "kChrWell");
+        fconf.top_plane = lua_get_float(p->error_dict, L, "top_plane");
+        fconf.bottom_plane = lua_get_float(p->error_dict, L, "bottom_plane");
+        p->compress = lua_get_float(p->error_dict, L, "kCom");
+        double Fb = lua_get_float(p->error_dict, L, "fBrown");
         luaquit = lua_get_int(L, "quit");
-        fconf.dInteraction = fconf.r0 * lua_get_float(L, "dInteraction");
+        fconf.dInteraction = fconf.r0 * lua_get_float(p->error_dict, L, "dInteraction");
 
         if(p->verbose > 10)
         {
@@ -346,14 +355,33 @@ mflock_dynamics(mflock_t * restrict p)
             }
         }
 
-        /*
-         * Bead wells i.e. attraction of beads to specific coordinates
-         *
-         */
-        if( p->n_bead_wells > 0 )
-        {
+        //
+        // Bead wells i.e. attraction of beads to specific coordinates
+        //
+        if( p->n_bead_wells > 0 ) {
             bead_wells_gradient(&fconf, p->n_beads, p->bead_wells, p->n_bead_wells, X, g);
         }
+
+        //
+        // Enforce absolute bead placement if --absolute was provided
+        //
+        if(p->bead_apos != NULL) {
+            for(i64 kk = 0; kk < p->n_bead_apos; kk++) {
+                double kAbs = fconf.kAbs;
+                i64 bead_id = p->bead_apos[kk].bead_id;
+                // E = r^2/2 -> G = (x-x0, y-y0, z-z0)
+                g[3*bead_id + 0] += kAbs*(X[3*bead_id + 0] - p->bead_apos[kk].x);
+                g[3*bead_id + 1] += kAbs*(X[3*bead_id + 1] - p->bead_apos[kk].y);
+                g[3*bead_id + 2] += kAbs*(X[3*bead_id + 2] - p->bead_apos[kk].z);
+#if 0
+                // Really absolute placement, prior to version 0.4.7
+                X[3*bead_id + 0] = p->bead_apos[kk].x;
+                X[3*bead_id + 1] = p->bead_apos[kk].y;
+                X[3*bead_id + 2] = p->bead_apos[kk].z;
+#endif
+            }
+        }
+
 
         /* 2.3 Dampening */
         /* Estimate velocities,
@@ -377,19 +405,7 @@ mflock_dynamics(mflock_t * restrict p)
         }
         /* End of molecular dynamics */
 
-        //
-        // Enforce absolute bead placement if --absolute was provided
-        //
-        if(p->bead_apos != NULL)
-        {
-            for(i64 kk = 0; kk < p->n_bead_apos; kk++)
-            {
-                i64 bead_id = p->bead_apos[kk].bead_id;
-                X[3*bead_id + 0] = p->bead_apos[kk].x;
-                X[3*bead_id + 1] = p->bead_apos[kk].y;
-                X[3*bead_id + 2] = p->bead_apos[kk].z;
-            }
-        }
+
 
         /*
          * Possibly output some info at the end of the step
@@ -564,12 +580,9 @@ static void mflock_summary(mflock_t * p)
                         n_filled, p->n_bead_wells);
     }
 
-    if(run == 0)
-    {
+    if(run == 0) {
         mflock_logwrite(p, 0, "abnormal exit (Ctrl+c was pressed?)\n");
     }
-
-
 
     char * timestr = cf_timestr();
     mflock_logwrite(p, 2, "Finished at: %s\n", timestr);
@@ -582,8 +595,7 @@ static void
 check_bead_contacts(const u32 * pairs, i64 npairs,
                     const int verbose, const i64 nbead)
 {
-    if(verbose > 1)
-    {
+    if(verbose > 1) {
         printf("Validating %ld contact constraints\n", npairs);
     }
     for(i64 kk = 0; kk+1 < npairs; kk++)
@@ -615,16 +627,13 @@ check_bead_contacts(const u32 * pairs, i64 npairs,
             }
         }
     }
-    for(i64 kk = 0; kk < 2*npairs; kk++)
-    {
-        if(pairs[kk] >= nbead)
-        {
+    for(i64 kk = 0; kk < 2*npairs; kk++){
+        if(pairs[kk] >= nbead) {
             printf("Error: A contact refers to bead %u but there are only %ld\n", pairs[kk], nbead);
             exit(EXIT_FAILURE);
         }
     }
-    if(verbose > 1)
-    {
+    if(verbose > 1) {
         printf("Contact pairs seems ok\n");
     }
 }
@@ -632,21 +641,18 @@ check_bead_contacts(const u32 * pairs, i64 npairs,
 static void
 mflock_read_contact_pairs(mflock_t * p)
 {
-    if(p->contact_pairs_file == NULL)
-    {
+    if(p->contact_pairs_file == NULL) {
         mflock_logwrite(p, 1, "Pairwise interactions -- no file specified\n");
         return;
     }
     mflock_logwrite(p, 1, "Reading pairwise interactions from %s\n",
                     p->contact_pairs_file);
     uint64_t nCP = 0;
-    if(npy_extension(p->contact_pairs_file))
-    {
+    if(npy_extension(p->contact_pairs_file)) {
         int npair = 0;
         p->I = load_bead_contacts_from_npy(p->contact_pairs_file,
                                            &npair);
-        if(p->I == NULL)
-        {
+        if(p->I == NULL) {
             fprintf(stderr, "Failed to read contact pairs from %s\n",
                     p->contact_pairs_file);
             exit(EXIT_FAILURE);
@@ -654,7 +660,6 @@ mflock_read_contact_pairs(mflock_t * p)
         p->n_pairs = npair;
         nCP = npair;
     } else {
-
         p->I = contact_pairs_read(p->contact_pairs_file, &nCP);
         if(p->I == NULL)
         {
@@ -674,26 +679,22 @@ mflock_read_contact_pairs(mflock_t * p)
 
 static void mflock_init_coordinates(mflock_t * p)
 {
-    if(p->verbose > 2)
-    {
+    if(p->verbose > 2) {
         printf("init coordinates\n");
         printf("   expecting %zu points\n", p->n_beads);
     }
     p->newx = 0;
-    if(p->xfname != NULL)
-    {
+    if(p->xfname != NULL) {
         p->beads = malloc(3*p->n_beads*sizeof(double));
         assert(p->beads != NULL);
-        if(mflock_load_coordinates(p) != 0)
-        {
+        if(mflock_load_coordinates(p) != 0) {
             mflock_logwrite(p, 2, "Could not read coordinates from %s\n");
             exit(EXIT_FAILURE);
         }
         mflock_logwrite(p, 2, "Using coordinates from %s\n", p->xfname);
     }
 
-    if(p->beads == NULL)
-    {
+    if(p->beads == NULL) {
         p->newx = 1;
         mflock_logwrite(p, 1, "Using random initialization for X\n");
         srand(p->rseed);
@@ -704,33 +705,24 @@ static void mflock_init_coordinates(mflock_t * p)
             E = elli_new(1, 1, 1);
         }
 
-        for(size_t kk = 0; kk< p->n_beads; kk++)
-        {
+        for(size_t kk = 0; kk< p->n_beads; kk++) {
             int accepted = 0;
-            while(accepted == 0)
-            {
-                for(int idx =0; idx<3; idx++)
-                {
+            while(accepted == 0) {
+                for(int idx =0; idx<3; idx++) {
                     p->beads[3*kk+idx] = 2.0*(rand()/(double) RAND_MAX-.5);
                 }
-                if(elli_getScale(E, p->beads+3*kk) < 0.95)
-                { accepted = 1;}
+                if(elli_getScale(E, p->beads+3*kk) < 0.95) {
+                    accepted = 1;
+                }
             }
-        }
-
-        if(p->E == NULL)
-        {
-            free(E);
         }
         mflock_logwrite(p, 1, "X[0] = %f\n", p->beads[0]);
     }
-    if(p->verbose > 2)
-    {
+    if(p->verbose > 2) {
         printf("   coordinates loaded\n");
     }
 
-    if(p->cmm_cmap != NULL)
-    {
+    if(p->cmm_cmap != NULL) {
         mflock_logwrite(p, 2, "Loading color map from %s\n", p->cmm_cmap);
         p->cmap = load_cmap(p->cmm_cmap);
     }
@@ -738,7 +730,8 @@ static void mflock_init_coordinates(mflock_t * p)
     return;
 }
 
-static void mflock_validate_labels(const mflock_t * p)
+static void
+mflock_validate_labels(const mflock_t * p)
 {
     // Check how many polymers there are
     int npoly = 1;
@@ -750,10 +743,8 @@ static void mflock_validate_labels(const mflock_t * p)
         }
     }
 
-
     mflock_logwrite(p, 1,
                     "%d polymers found in the labels\n", npoly);
-
 
     if( npoly > 55 )
     {
@@ -877,14 +868,14 @@ static int mflock_load_radial_constraints(mflock_t * p)
         {
             p->R[pp + p->n_beads/2] = p->R[pp];
         }
-        //memcpy(p->R+p->n_beads/2*sizeof(double), p->R, p->n_beads/2*sizeof(double));
     }
 
 
     if(!( (nbytes/sizeof(double) == p->n_beads) || (nbytes/sizeof(double) == p->n_beads/2) ))
     {
-        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n", p->rfname, 4*p->n_beads, 2*p->n_beads, nbytes);
-        exit(-1);
+        printf("Error: Can't make sense of %s, expected %zu or %zu bytes but got %zu\n",
+               p->rfname, 4*p->n_beads, 2*p->n_beads, nbytes);
+        exit(EXIT_FAILURE);
     }
 
     size_t nInf = 0;
@@ -903,12 +894,12 @@ static int mflock_load_radial_constraints(mflock_t * p)
 
 
 
-static void mflock_show(mflock_t * p, FILE * f)
+static void
+mflock_show(mflock_t * p, FILE * f)
 {
     double volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / (4.0/3.0*M_PI);
 
-    if(p->E != NULL)
-    {
+    if(p->E != NULL) {
         volocc = p->n_beads*4.0/3.0*M_PI*pow(p->r0,3) / elli_vol(p->E);
     }
 
@@ -935,55 +926,39 @@ static void mflock_show(mflock_t * p, FILE * f)
                 p->E->a, p->E->b, p->E->c);
         break;
     }
-    if(p->contact_pairs_file == NULL)
-    {
+    if(p->contact_pairs_file == NULL) {
         fprintf(f, "    Contact Pairs file not specified\n");
     } else {
         fprintf(f, "   Contacts Pairs: %s\n", p->contact_pairs_file);
     }
 
-    if(p->xfname == NULL)
-    {
+    if(p->xfname == NULL) {
         fprintf(f, "    Coordinates not loaded, will use random initialization\n");
-    }
-    else
-    {
+    } else {
         fprintf(f, "    Coordinates from: %s\n", p->xfname);
     }
 
-    if(p->lfname == NULL)
-    {
+    if(p->lfname == NULL) {
         fprintf(f, "    Labels not provided\n");
-    }
-    else
-    {
+    } else {
         fprintf(f, "    Labels from: %s\n", p->lfname);
     }
 
-    if(p->rfname == NULL)
-    {
+    if(p->rfname == NULL) {
         fprintf(f, "    Radial preferences not set\n");
-    }
-    else
-    {
+    } else {
         fprintf(f, "    Radial preferences: %s\n", p->rfname);
     }
 
-    if(p->fname_bead_wells == NULL)
-    {
+    if(p->fname_bead_wells == NULL) {
         fprintf(f, "    Bead wells: -not specified-\n");
-    }
-    else
-    {
+    } else {
         fprintf(f, "    Bead wells: %s\n", p->fname_bead_wells);
     }
 
-    if(p->ofoldername == NULL)
-    {
+    if(p->ofoldername == NULL) {
         fprintf(f, "    output folder not specified\n");
-    }
-    else
-    {
+    } else {
         fprintf(f, "    output folder: %s\n", p->ofoldername);
     }
 
@@ -1002,18 +977,17 @@ static void mflock_show(mflock_t * p, FILE * f)
 
 
 /* do-nothing callback */
-static int usleep_lua_NULL(lua_State * L)
+static int
+usleep_lua_NULL(lua_State * L)
 {
     /* get number of arguments */
-    if(lua_gettop(L) != 1)
-    {
+    if(lua_gettop(L) != 1) {
         lua_pushstring(L, "Incorrect number of arguments to 'usleep'");
         lua_error(L);
         return 0;
     }
 
-    if (!lua_isnumber(L, 1))
-    {
+    if (!lua_isnumber(L, 1)) {
         lua_pushstring(L, "Incorrect argument to 'usleep'");
         lua_error(L);
         return 0;
@@ -1024,40 +998,43 @@ static int usleep_lua_NULL(lua_State * L)
 }
 
 /* Write out the behavior of the lua script as a table */
-static void dump_lua_dynamics(const char * luafile)
+static void
+dump_lua_dynamics(const char * luafile)
 {
+    ddict * error_dict = ddict_new(1);
     printf("newx, iter, kDom, kVol, kInt, dInt_rel, kRad, compress, Fb\n");
-    for(int newx = 1; newx >= 0; newx--)
-    {
+    for(int newx = 1; newx >= 0; newx--) {
         lua_State * L = luaL_newstate();
         luaL_openlibs(L);
         /* Do nothing when usleep is called */
         lua_register(L, "usleep", usleep_lua_NULL);
 
-        if (luaL_dofile(L, luafile))
+        if (luaL_dofile(L, luafile)) {
             luaerror(L, "cannot run config. file: %s", lua_tostring(L, -1));
+        }
 
         size_t iter = 0;
         int luaquit = 0;
         char luafun[] = "getConfig";
-        do{
+        do {
             iter++;
             lua_getglobal(L, luafun); /* function to be called */
             lua_pushnumber(L, iter); /* push arguments */
             lua_pushnumber(L, newx);
             /* do the call (2 arguments, 0 result) */
-            if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+            if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
                 luaerror(L, "error running function '%s': %s",
                          luafun,
                          lua_tostring(L, -1));
+            }
 
-            double kDom = lua_get_float(L, "kDom");
-            double kVol = lua_get_float(L, "kVol");
-            double dInt = lua_get_float(L, "dInteraction");
-            double kInt = lua_get_float(L, "kInt");
-            double kRad = lua_get_float(L, "kRad");
-            double compress = lua_get_float(L, "kCom");
-            double Fb = lua_get_float(L, "fBrown");
+            double kDom = lua_get_float(error_dict, L, "kDom");
+            double kVol = lua_get_float(error_dict, L, "kVol");
+            double dInt = lua_get_float(error_dict, L, "dInteraction");
+            double kInt = lua_get_float(error_dict, L, "kInt");
+            double kRad = lua_get_float(error_dict, L, "kRad");
+            double compress = lua_get_float(error_dict, L, "kCom");
+            double Fb = lua_get_float(error_dict, L, "fBrown");
             luaquit = lua_get_int(L, "quit");
 
             printf("%d, %zu, %f, %f, %f, %f, %f, %f, %f\n",
@@ -1066,9 +1043,14 @@ static void dump_lua_dynamics(const char * luafile)
 
         lua_close(L);
     }
+    if(ddict_size(error_dict) > 0) {
+        printf("There were errors\n");
+    }
+    ddict_free(error_dict);
     return;
 }
-static void test_read_write_csv(void)
+static void
+test_read_write_csv(void)
 {
     int nbead = 71;
     double * X = calloc(3*nbead, sizeof(double));
@@ -1109,33 +1091,31 @@ static void test_read_write_csv(void)
     }
     remove(tmpfile);
 
-    if(err)
-    {
+    if(err) {
         fprintf(stderr, "Failed\n"
                 "write_bead_coordinates_to_csv(tmpfile, X, 1, NULL);\n"
                 "load_bead_coordinates_from_csv(tmpfile, Y, 1);\n");
         exit(EXIT_FAILURE);
     }
+
     free(X);
     free(Y);
     free(tmpfile);
     return;
 }
 
-static void mflock_ut(void)
+static void
+mflock_ut(void)
 {
     printf("Testing ... \n");
     int nfail = 0;
-    if(npy_extension("a.npy") == 0)
-    {
+    if(npy_extension("a.npy") == 0) {
         nfail++;
     }
-    if(npy_extension("abc.NPY") == 0)
-    {
+    if(npy_extension("abc.NPY") == 0) {
         nfail++;
     }
-    if(npy_extension("abc.PY") == 1)
-    {
+    if(npy_extension("abc.PY") == 1) {
         nfail++;
     }
 
@@ -1338,19 +1318,16 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
         }
     }
 
-    if(p->bead_apos_file != NULL)
-    {
+    if(p->bead_apos_file != NULL) {
         FILE * fid = fopen(p->bead_apos_file, "rb");
-        if(fid == NULL)
-        {
+        if(fid == NULL) {
             printf("Unable to open %s\n", p->bead_apos_file);
             return MFLOCK_ARGS_ERR;
         }
         fclose(fid);
     }
 
-    if(p->luaDynamicsFile == NULL)
-    {
+    if(p->luaDynamicsFile == NULL) {
         fprintf(stderr, "Incorrect command line: --dconf not specified\n");
         fprintf(stderr, "see %s --help for usage\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -1358,10 +1335,8 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
 
     /* Make sure that the outfolder ends with a path_separator.
        Note: it should already be allocated to have room for it if missing */
-    if(p->ofoldername)
-    {
-        if(p->ofoldername[strlen(p->ofoldername) - 1] != '/' )
-        {
+    if(p->ofoldername) {
+        if(p->ofoldername[strlen(p->ofoldername) - 1] != '/' ) {
             p->ofoldername = realloc(p->ofoldername, strlen(p->ofoldername)+1);
             p->ofoldername[strlen(p->ofoldername)+1] = '\0';
             p->ofoldername[strlen(p->ofoldername)] = '/';
@@ -1369,20 +1344,20 @@ mflock_parse_cli(mflock_t * p, int argc, char ** argv)
     }
 
     int efail = 0;
-    if(ea > 0 || eb > 0 || ec > 0)
-    {
-        if(ea>= eb && eb >= ec)
-        {
-            if(ea == 1 && ec > 0)
-            {
+    if(ea > 0 || eb > 0 || ec > 0) {
+        if(ea>= eb && eb >= ec) {
+            if(ea == 1 && ec > 0) {
                 //        printf("Using ellipsoidal geometry!\n");
                 p->E = elli_new(ea, eb, ec);
                 // elli_show(p->E);
-            } else {efail = 1;}
-        } else {efail = 1;}
+            } else {
+                efail = 1;
+            }
+        } else {
+            efail = 1;
+        }
     }
-    if(efail)
-    {
+    if(efail) {
         printf("ERROR: Ellipsoidal geometry requires 1 = ea >= eb >= ec > 0"
                " \n\n");
         return MFLOCK_ARGS_ERR;
@@ -1396,11 +1371,11 @@ static mflock_t * mflock_new(void)
     mflock_t * p = calloc(1, sizeof(mflock_t));
     assert(p != NULL);
 
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-
-    // TODO: overflows
-    p->rseed = time(NULL)*getpid()*ts.tv_nsec;
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        p->rseed = getpid()*ts.tv_nsec;
+    }
 
     p->maxiter = 1000000; // iterations
     p->maxtime = 60*60*10; // seconds
@@ -1433,7 +1408,7 @@ static mflock_t * mflock_new(void)
                 okfolder = 1;
         }
     }
-
+    p->error_dict = ddict_new(1);
     fflush(stdout);
     return p;
 }
@@ -1676,7 +1651,7 @@ static void mflock_init_backbone(mflock_t * mf)
     mf->n_backbone = n_backbone;
     mflock_logwrite(mf, 2, "Added %d backbone contacts\n", mf->n_backbone);
     return;
- }
+}
 
 static void mflock_init(mflock_t * mf, int argc, char ** argv)
 {
@@ -1823,6 +1798,7 @@ void mflock_free(mflock_t * p)
     free(p->cmm_cmap);
     free(p->cmap);
     free(p->active_pair);
+    ddict_free(p->error_dict);
     free(p);
     return;
 }
@@ -2060,6 +2036,29 @@ static void mflock_run(mflock_t * p)
     return;
 }
 
+void mflock_print_suppressed_errors(mflock_t * mf){
+    if(ddict_size(mf->error_dict) == 0){
+        return;
+    }
+
+    printf("\n");
+    printf("%ld non-fatal error(s) recorded. Please try to figure out why "
+           "as they might affect both the behavior and the performance of the program.\n",
+           ddict_size(mf->error_dict));
+    printf("\n");
+
+    for(i64 kk = 0; kk < ddict_size(mf->error_dict); kk++)
+    {
+        printf(" - [%ld/%ld] %s\n", kk+1,
+               ddict_size(mf->error_dict),
+               mf->error_dict->entries[kk+1].key);
+        printf("\n");
+    }
+
+
+    return;
+}
+
 int mflock(int argc, char ** argv)
 {
 
@@ -2107,6 +2106,9 @@ int mflock(int argc, char ** argv)
 
     /* Write chimera cmm file (.gz) */
     mflock_write_cmm(mf);
+
+    /* See if there were any suppressed errors and print them */
+    mflock_print_suppressed_errors(mf);
 
     /* Write a few last things and close the log file */
     mflock_close_log(mf);

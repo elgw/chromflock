@@ -34,8 +34,8 @@
 #include "functional.h"
 #include "wio.h"
 #include "contact_pairs_io.h"
-
 #include "mflock_help.h"
+#include "ddict.h"
 
 typedef struct {
     uint32_t * I; // List with pairwise contacts
@@ -123,6 +123,8 @@ typedef struct {
 
     /* Name of lua script to handle the beads dynamics */
     char * luaDynamicsFile;
+
+    ddict * error_dict;
 } mflock_t;
 
 
