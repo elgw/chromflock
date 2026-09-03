@@ -492,8 +492,8 @@ static void mflock_summary(mflock_t * p)
                 n_auto_used++;
             }
         }
+        mflock_logwrite(p, 1, "    Used %ld / %zu (auto) contact pairs\n", n_auto_used, p->n_pairs);
     }
-    mflock_logwrite(p, 1, "    Used %ld / %zu contact pairs\n", n_auto_used, p->n_pairs);
 
     // X: mean, max, min
     double mex = 0, mey = 0, mez = 0;
@@ -1949,14 +1949,19 @@ static void mflock_write_cmm(const mflock_t * p)
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
-
-        cmmwritez(cmmfile, X, p->n_beads, p->r0, p->backbone, p->n_backbone, p->L, p->cmap);
+        cmmwritez(cmmfile, X, p->n_beads, // points
+                  p->r0,
+                  p->backbone, p->n_backbone, // links
+                  p->L, p->cmap);
         free(cmmfile);
     } else {
         char * cmmfile = malloc(1024*sizeof(char));
         assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads, p->r0, p->backbone, p->n_backbone, p->L, p->cmap);
+        cmmwrite(cmmfile, X, p->n_beads,
+                 p->r0,
+                 p->backbone, p->n_backbone,
+                 p->L, p->cmap);
         free(cmmfile);
     }
 

@@ -88,16 +88,16 @@ void repulsion_error_cb(__attribute__((unused)) u32 u,
     params->error += pow(d - params->radius, 2);
 }
 
-double err3(const double * restrict X,
-            const size_t nX,
-            const double * restrict R,
-            const uint32_t * restrict P,
-            const mflock_func_t * restrict C )
+double
+err3(const double * restrict X,
+     const size_t nX,
+     const double * restrict R,
+     const uint32_t * restrict P,
+     const mflock_func_t * restrict C )
 {
     /* Compared to err2 this is an alternative version with a list of pairs in contact instead of A */
 
-    double XT[3]; // Temporary storage
-    XT[0] = 0; XT[1] = 0; XT[2] = 0;
+
 
     /* -- Wanted radii -- */
     double errRad = 0;
@@ -130,10 +130,13 @@ double err3(const double * restrict X,
         }
     }
 
-    /* -- Keep inside domain -- */
-    double errSph = 0;
+    //
+    // Keep beads inside the simulation domain
+    //
 
-    if(C->E == NULL)
+    double errDomain = 0;
+
+    if(C->geometry == MFLOCK_SPHERE)
     { // Inside sphere
         double ds = (1-C->r0);
         double ds2 = pow(ds, 2);
@@ -143,12 +146,14 @@ double err3(const double * restrict X,
             if( r2 > ds2)
             {
                 double r = sqrt(r2);
-                errSph += pow(r - ds, 2);
+                errDomain += pow(r - ds, 2);
             }
         }
     }
-    if(C->E != NULL) // Inside ellipsoid
+    if(C->geometry == MFLOCK_ELLIPSOID)
     {
+        double XT[3]; // Temporary storage
+        XT[0] = 0; XT[1] = 0; XT[2] = 0;
         for(size_t kk = 0 ; kk<nX; kk++)
         {
             const double d = elli_getScale2(C->Es, X+3*kk);
@@ -157,23 +162,38 @@ double err3(const double * restrict X,
                 double r = elli_gdistL(C->E, X+3*kk, XT);
                 if(r + C->r0 > 0)
                 {
-                    errSph += pow(r+C->r0, 2);
+                    errDomain += pow(r+C->r0, 2);
                 }
             }
         }
     }
 
+    if(C->geometry == MFLOCK_BOX)
+    {
+        for(size_t kk = 0; kk<nX; kk++) {
+            for(int idx = 0; idx < 3; idx++) {
+                if(X[3*kk + idx] < -1.0) { // Bottom
+                    errDomain += pow(1.0 - X[3*kk + idx], 2);
+                }
+                if(X[3*kk + idx] > 1.0) { // Top
+                    errDomain += pow(X[3*kk + idx] - 1.0, 2);
+                }
+            }
+        }
+    }
 
     /* Wanted contacts/interactions */
     double errInt = 0;
+    double dInteraction2 = pow(C->dInteraction, 2);
     for(size_t pp = 0; pp < C->nIPairs; pp++)
     {
         size_t kk = P[pp*2];
         size_t ll = P[pp*2+1];
         {
-            double d = eudist3(X+3*kk, X+3*ll);
-            if(d > C->dInteraction)
+            double d2 = eudist3sq(X+3*kk, X+3*ll);
+            if(d2 > dInteraction2)
             {
+                double d = sqrt(d2);
                 //errInt += pow(d - C->dInteraction, 2);
                 errInt += f_interaction(d - C->dInteraction);
             }
@@ -193,7 +213,7 @@ double err3(const double * restrict X,
                  &cparams);
     double errVol = cparams.error;
 
-    return C->kInt*errInt + C->kVol*errVol + C->kDom*errSph + C->kRad*errRad;
+    return C->kInt*errInt + C->kVol*errVol + C->kDom*errDomain + C->kRad*errRad;
 }
 
 double err2(double * X, size_t nX, double * R, uint32_t * P, mflock_func_t * C )
@@ -497,10 +517,12 @@ grad3(const double * restrict X,
       double * restrict G,
       const mflock_func_t * restrict C)
 {
-
-    double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
-
+    // flush the previous gradient
     memset(G, 0, nX*3*sizeof(double));
+
+    // TODO: Factor this into distinct and clearly arrange pieces.
+    //       Then it is also easier to validate individual gradient components
+    //       to the corresponding error component.
 
     //
     // If the beads have radial preferences, e.g. from GPSeq
@@ -527,25 +549,20 @@ grad3(const double * restrict X,
     }
 
 
-    if(C->geometry == MFLOCK_ELLIPSOID)
-    {
-        if(C->kRad > 0)
-        {
+    if(C->geometry == MFLOCK_ELLIPSOID) {
+        if(C->kRad > 0) {
             double EF[3];
             EF[0] = 1.0/pow(C->E->a, 2);
             EF[1] = 1.0/pow(C->E->b, 2);
             EF[2] = 1.0/pow(C->E->c, 2);
 
-            for(size_t kk = 0; kk<nX; kk++)
-            {
-                if(isfinite(R[kk]) == 1)
-                {
+            for(size_t kk = 0; kk<nX; kk++) {
+                if(isfinite(R[kk]) == 1) {
                     double r = sqrt(elli_getScale2(C->E, X+kk*3));
                     double re = 0;
                     // if(r > 0)
                     re = 2*(r-R[kk])/r;
-                    for(int idx = 0; idx<3; idx++)
-                    {
+                    for(int idx = 0; idx<3; idx++) {
                         G[3*kk+idx] += C->kRad*X[kk*3+idx]*re*EF[idx];
                     }
                 }
@@ -557,16 +574,12 @@ grad3(const double * restrict X,
     // Keep beads inside the simulation domain
     //
 
-    if(C->geometry == MFLOCK_SPHERE)
-    {
-        for(size_t kk = 0; kk<nX; kk++)
-        {
+    if(C->geometry == MFLOCK_SPHERE) {
+        for(size_t kk = 0; kk<nX; kk++) {
             double r = norm3(X+kk*3);
-            if(r > 1-C->r0)
-            {
+            if(r > 1-C->r0) {
                 double re = 2 / r * (r-(1-C->r0));
-                for(int idx = 0; idx<3; idx++)
-                {
+                for(int idx = 0; idx<3; idx++) {
                     G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
                 }
             }
@@ -575,9 +588,7 @@ grad3(const double * restrict X,
 
     // Top and bottom restrictions
     if(C->top_plane < 1.0) {
-
         for(size_t kk = 0; kk<nX; kk++) {
-
             if( X[3*kk + 2] > C->top_plane ) {
                 G[3*kk + 2] -= C->kDom*(C->top_plane - X[kk*3 + 2]);
             }
@@ -605,24 +616,21 @@ grad3(const double * restrict X,
         }
     }
 
-    if((C->geometry == MFLOCK_ELLIPSOID) && (C->E != NULL)) // Ellipsoidal domain
-    {
-        for(size_t kk = 0; kk<nX; kk++)
-        {
+    if((C->geometry == MFLOCK_ELLIPSOID) && (C->E != NULL)) {// Ellipsoidal domain
+        double XT[3]; XT[0] = 0; XT[1] = 0; XT[2] = 0;
+        for(size_t kk = 0; kk<nX; kk++) {
+
             const double d = elli_getScale2(C->Es, X+3*kk);
-            if( d >= 1)
-            {
+            if( d >= 1) {
                 double n[3] = {0};
                 double r = elli_gdistL(C->E, X+3*kk, XT);
 
                 //elli_normal(C->E, XT, n);
                 vec3_normalize(n);
 
-                if(r + C->r0 > 0)
-                {
+                if(r + C->r0 > 0) {
                     double re = 2 / r * (r+C->r0);
-                    for(int idx = 0; idx<3; idx++)
-                    {
+                    for(int idx = 0; idx<3; idx++) {
                         G[3*kk+idx] += C->kDom*(X[kk*3+idx]-XT[idx])*re;
 
                     }
@@ -631,53 +639,34 @@ grad3(const double * restrict X,
         }
     }
 
-    // Wanted interactions
-    if(active_pair == NULL)
-    {
+    //
+    // Handle wanted contacts
+    //
+
+    // active_pair is an array which indicates which contacts
+    // that are activated/in used. This should only be there if
+    // --autopairs is passed.
+    if(active_pair == NULL) {
         for(size_t pp = 0; pp < C->nIPairs; pp++)
         {
-            size_t kk = I[pp*2];
-            size_t ll = I[pp*2+1];
-
-            double d = eudist3(X+3*kk, X+3*ll);
+            u32 kk = I[pp*2];
+            u32 ll = I[pp*2+1];
             assert(kk != ll);
-#ifndef NDEBUG
-            if( !(d>0) )
-            {
-                printf("Strange distance between interacting points!\n");
-                printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
-                printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
-                exit(1);
-            }
-#endif
-            if(d > C->dInteraction && d > 1e-6)
-            {
-                for(int idx = 0; idx<3; idx++)
-                {
+            double d = eudist3(X+3*kk, X+3*ll);
+
+            if(d > C->dInteraction && d > 1e-6) {
+                for(int idx = 0; idx<3; idx++) {
                     G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                     G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                 }
             }
         }
     } else {
-        for(size_t pp = 0; pp < C->nIPairs; pp++)
-        {
-
-
-            size_t kk = I[pp*2];
-            size_t ll = I[pp*2+1];
-
-            double d = eudist3(X+3*kk, X+3*ll);
+        for(size_t pp = 0; pp < C->nIPairs; pp++) {
+            u32 kk = I[pp*2];
+            u32 ll = I[pp*2+1];
             assert(kk != ll);
-#ifndef NDEBUG
-            if( !(d>0) )
-            {
-                printf("Strange distance between interacting points!\n");
-                printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
-                printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
-                exit(1);
-            }
-#endif
+            double d = eudist3(X+3*kk, X+3*ll);
 
             if(active_pair[pp] == 0){
                 if(d < 3.0*C->r0) {
@@ -686,10 +675,8 @@ grad3(const double * restrict X,
             }
 
             if(active_pair[pp] == 1) {
-                if(d > C->dInteraction && d > 1e-6)
-                {
-                    for(int idx = 0; idx<3; idx++)
-                    {
+                if(d > C->dInteraction && d > 1e-6) {
+                    for(int idx = 0; idx<3; idx++) {
                         G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                         G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                     }
@@ -697,34 +684,31 @@ grad3(const double * restrict X,
             }
         }
     }
-    // backbone
-    for(size_t pp = 0; pp < n_backbone; pp++)
-    {
-        size_t kk = backbone[pp*2];
-        size_t ll = backbone[pp*2+1];
 
-        double d = eudist3(X+3*kk, X+3*ll);
+    //
+    // backbone contacts
+    // this part only drags them back if they are far apart
+    // overlapping beads are handled in the repulsion step.
+    //
+    double dInteraction2 = pow(C->dInteraction, 2);
+    for(size_t pp = 0; pp < n_backbone; pp++) {
+        u32 kk = backbone[pp*2];
+        u32 ll = backbone[pp*2+1];
         assert(kk != ll);
-#ifndef NDEBUG
-        if( !(d>0) )
-        {
-            printf("Strange distance between interacting points!\n");
-            printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
-            printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
-            exit(1);
-        }
-#endif
-        if(d > C->dInteraction && d > 1e-6)
-        {
-            for(int idx = 0; idx<3; idx++)
-            {
+        double d2 = eudist3sq(X+3*kk, X+3*ll);
+        if(d2 > dInteraction2 && d2 > 1e-9) {
+            double d = sqrt(d2);
+            for(int idx = 0; idx<3; idx++) {
                 G[3*kk+idx] += C->kBackbone*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                 G[3*ll+idx] -= C->kBackbone*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
             }
         }
     }
 
+    //
     // Repulsion
+    // or bead collisions
+    //
     collide3_info cinfo = {};
     repulsion_gradient_params cparams;
     cparams.G = G;
@@ -739,95 +723,6 @@ grad3(const double * restrict X,
 
     return;
 }
-
-
-void grad4(double * restrict X,
-           const size_t nX,
-           double * restrict R,
-           uint32_t * restrict I,
-           double * restrict G,
-           const mflock_func_t * restrict C)
-{
-    // Reset G
-    for(size_t kk = 0; kk<nX*3; kk++)
-        G[kk] = 0;
-
-    // Radial positioning
-    if(C->kRad > 0)
-    {
-        for(size_t kk = 0; kk<nX; kk++)
-        {
-            if(isfinite(R[kk]) == 1)
-            {
-
-
-                double r = norm3(X+kk*3);
-                double re = 0;
-                // if(r > 0)
-                re = 2*1/r*(r-R[kk]);
-                for(int idx = 0; idx<3; idx++)
-                {
-                    G[3*kk+idx] += C->kRad*X[kk*3+idx]*re;
-                }
-            }
-        }
-    }
-
-    // Keep inside sphere
-    const double rmax = 1-C->r0;
-    for(size_t kk = 0; kk<nX; kk++)
-    {
-        double r = norm3(X+kk*3);
-        if(r > rmax)
-        {
-            double re = 2 / r * (r-(1-C->r0));
-            for(int idx = 0; idx<3; idx++)
-            {
-                G[3*kk+idx] += C->kDom*X[kk*3+idx]*re;
-            }
-        }
-    }
-
-    // Wanted interactions
-    const double dInteraction = C->dInteraction;
-    const double dInteraction2 = pow(dInteraction, 2);
-
-    for(size_t pp = 0; pp < C->nIPairs; pp++)
-    {
-        size_t kk = I[pp*2];
-        size_t ll = I[pp*2+1];
-
-        double d2 = eudist3sq(X+3*kk, X+3*ll);
-        assert(kk != ll);
-        assert(d2>0);
-        if(d2 > dInteraction2)
-        {
-            double d= sqrt(d2);
-
-            for(int idx = 0; idx<3; idx++)
-            {
-                G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - dInteraction);
-                G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - dInteraction);
-            }
-        }
-    }
-
-    // Repulsion
-    collide3_info cinfo = {};
-    repulsion_gradient_params cparams;
-    cparams.G = G;
-    cparams.radius = 2.0*C->r0;
-    cparams.kVol = C->kVol;
-    cparams.X = X;
-
-    collide3_f64(X, nX,
-                 2*C->r0, &cinfo,
-                 repulsion_gradient_cb,
-                 &cparams);
-
-    return;
-}
-
 
 void
 bead_wells_gradient(const mflock_func_t * restrict fconf,

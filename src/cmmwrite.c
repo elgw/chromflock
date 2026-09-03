@@ -205,7 +205,8 @@ int cmmwritez(const char * fname,
 
 
 int cmmwrite(const char * fname,
-             const double * D, size_t nD, double radius,
+             const double * D, size_t nD,
+             double radius,
              const uint32_t * P, size_t NP,
              const uint8_t * L,
              const uint8_t * cmap)
