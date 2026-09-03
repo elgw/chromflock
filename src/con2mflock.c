@@ -116,7 +116,7 @@ typedef struct {
 
 static void show_help(char * progname, cmdopt * options)
 {
-    printf("%s\n", __con2mflock_progdesc_txt);
+    printf("%s\n", con2mflock_progdesc_txt);
     printf("Usage: %s [options]\n", progname);
     printf("\n");
     printf("These are the options:\n");
@@ -218,7 +218,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
             s->verbose = atoi(optarg);
             break;
         case 'V':
-            printf("%s", __con2mflock_changelog_txt);
+            printf("%s", con2mflock_changelog_txt);
             exit(EXIT_SUCCESS);
         }
     }

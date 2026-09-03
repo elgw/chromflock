@@ -27,7 +27,7 @@ static int show_version(void)
 
 static int usage(void)
 {
-    printf("%s", __chromflock_usage_txt);
+    printf("%s", chromflock_usage_txt);
     return EXIT_SUCCESS;
 }
 
