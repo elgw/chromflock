@@ -42,7 +42,7 @@ static double norm3d(const double * restrict X)
 static volatile int run = 1;
 
 /* show lua error string */
-static void luaerror(lua_State *L, const char *fmt, ...)
+static void luaerror(__attribute__((unused)) lua_State *L, const char *fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
@@ -2047,7 +2047,7 @@ void mflock_print_suppressed_errors(mflock_t * mf){
            ddict_size(mf->error_dict));
     printf("\n");
 
-    for(i64 kk = 0; kk < ddict_size(mf->error_dict); kk++)
+    for(u64 kk = 0; kk < ddict_size(mf->error_dict); kk++)
     {
         printf(" - [%ld/%ld] %s\n", kk+1,
                ddict_size(mf->error_dict),

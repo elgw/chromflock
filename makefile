@@ -98,7 +98,7 @@ obj/collide3_f32.o
 
 headers=src/*.h
 
-bin/chromflock: $(chromflock_files) $(headers) TXTHEADERS
+bin/chromflock: $(chromflock_files) $(headers)
 	$(CC) $(CFLAGS) $(chromflock_files) $(LDFLAGS) -o bin/chromflock
 
 bin/cmmfilter:
@@ -115,6 +115,7 @@ src/liveview.o \
 obj/contact_pairs_io.o \
 obj/cf_util.o \
 obj/npio.o \
+obj/ddict.o \
 obj/collide3_f64.o \
 
 
@@ -144,7 +145,7 @@ $(OBJDIR)/%.o : $(SRCDIR)/npio/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 
-TXTHEADERS: FORCE
-	find src/txt -name "*.txt" -execdir xxd -i {} {}.h \;
+#TXTHEADERS: FORCE
+#	find src/txt -name "*.txt" -execdir xxd -i {} {}.h \;
 
 FORCE:

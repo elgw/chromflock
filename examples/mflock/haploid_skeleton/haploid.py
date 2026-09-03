@@ -10,10 +10,10 @@ sys.path.insert(1, '../../')
 
 import numpy as np
 import subprocess
-import chromflock_common
+import chromflock_common as cf
 
-mflock = chromflock_common.find_mflock()
-chr_sizes = common.chr_sizes
+mflock = cf.find_mflock()
+chr_sizes = cf.chr_sizes
 
 resolution = 1e6;
 folder = f'./'

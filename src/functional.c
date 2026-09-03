@@ -502,7 +502,9 @@ grad3(const double * restrict X,
 
     memset(G, 0, nX*3*sizeof(double));
 
-    /* Radial positioning */
+    //
+    // If the beads have radial preferences, e.g. from GPSeq
+    //
     if( (C->kRad > 0) && (R != NULL)) {
         if(C->geometry == MFLOCK_ELLIPSOID)
         {
@@ -551,7 +553,10 @@ grad3(const double * restrict X,
         }
     }
 
-    /* --- Keep inside domain --- */
+    //
+    // Keep beads inside the simulation domain
+    //
+
     if(C->geometry == MFLOCK_SPHERE)
     {
         for(size_t kk = 0; kk<nX; kk++)
@@ -580,17 +585,27 @@ grad3(const double * restrict X,
     }
 
     if(C->bottom_plane > -1.0) {
-
         for(size_t kk = 0; kk<nX; kk++) {
-
             if( X[3*kk + 2] < C->bottom_plane ) {
                 G[3*kk + 2] -= C->kDom*(C->bottom_plane - X[kk*3 + 2]);
             }
         }
     }
 
+    if(C->geometry == MFLOCK_BOX) {
+        for(size_t kk = 0; kk<nX; kk++) {
+            for(int idx = 0; idx < 3; idx++) {
+                if(X[3*kk + idx] < -1.0) { // Bottom
+                    G[3*kk + idx] -= C->kDom*(1.0 - X[3*kk + idx]);
+                }
+                if(X[3*kk + idx] > 1.0) { // Top
+                    G[3*kk + idx] += C->kDom*(X[3*kk + idx] - 1.0);
+                }
+            }
+        }
+    }
 
-    if(C->E != NULL) // Ellipsoidal domain
+    if((C->geometry == MFLOCK_ELLIPSOID) && (C->E != NULL)) // Ellipsoidal domain
     {
         for(size_t kk = 0; kk<nX; kk++)
         {
@@ -619,31 +634,31 @@ grad3(const double * restrict X,
     // Wanted interactions
     if(active_pair == NULL)
     {
-    for(size_t pp = 0; pp < C->nIPairs; pp++)
-    {
-        size_t kk = I[pp*2];
-        size_t ll = I[pp*2+1];
+        for(size_t pp = 0; pp < C->nIPairs; pp++)
+        {
+            size_t kk = I[pp*2];
+            size_t ll = I[pp*2+1];
 
-        double d = eudist3(X+3*kk, X+3*ll);
-        assert(kk != ll);
+            double d = eudist3(X+3*kk, X+3*ll);
+            assert(kk != ll);
 #ifndef NDEBUG
-        if( !(d>0) )
-        {
-            printf("Strange distance between interacting points!\n");
-            printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
-            printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
-            exit(1);
-        }
-#endif
-        if(d > C->dInteraction && d > 1e-6)
-        {
-            for(int idx = 0; idx<3; idx++)
+            if( !(d>0) )
             {
-                G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
-                G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                printf("Strange distance between interacting points!\n");
+                printf("@%p : %f %f %f\n", (void*) (X+3*kk), X[3*kk], X[3*kk+1], X[3*kk+2]);
+                printf("@%p : %f %f %f\n", (void*) (X+3*ll), X[3*ll], X[3*ll+1], X[3*ll+2]);
+                exit(1);
+            }
+#endif
+            if(d > C->dInteraction && d > 1e-6)
+            {
+                for(int idx = 0; idx<3; idx++)
+                {
+                    G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                    G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                }
             }
         }
-    }
     } else {
         for(size_t pp = 0; pp < C->nIPairs; pp++)
         {
@@ -671,14 +686,14 @@ grad3(const double * restrict X,
             }
 
             if(active_pair[pp] == 1) {
-            if(d > C->dInteraction && d > 1e-6)
-            {
-                for(int idx = 0; idx<3; idx++)
+                if(d > C->dInteraction && d > 1e-6)
                 {
-                    G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
-                    G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                    for(int idx = 0; idx<3; idx++)
+                    {
+                        G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                        G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                    }
                 }
-            }
             }
         }
     }

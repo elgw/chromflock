@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.4.8
+- Added box geometry via `--box`
+- The collision detection routine was rewritten and factored out as a
+  [separate repository](https://github.com/elgw/collide3/). It got a
+  little faster during the rewrite and much more simple to use.
+
 # 0.4.7
 - Added the `kAbs` parameter to control the strength of anchoring to
   the "absolute" positions.
