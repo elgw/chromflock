@@ -18,6 +18,7 @@
 #include "contact_pairs_io.h"
 #include "con2mflock.h"
 #include "txt/chromflock_usage.txt.h"
+#include "sumproj_structure.h"
 
 static int show_version(void)
 {
@@ -88,6 +89,11 @@ int main(int argc, char ** argv)
     if(!strcmp(command, "con2mflock"))
     {
         return con2mflock(argc-1, argv+1);
+    }
+
+    if(!strcmp(command, "sumproj"))
+    {
+        return sumproj_structure(argc-1, argv+1);
     }
 
     fprintf(stderr, "%s is an unknown command to me\n", command);

@@ -16,6 +16,8 @@ string2any
         write human readable to raw
 con2mflock
         convert .pairs.gz or .con to mflock input data;
+sumproj
+        create an image with a sum projection of a 3D structure
 version
         show version information
 

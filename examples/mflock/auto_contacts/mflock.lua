@@ -1,0 +1,91 @@
+-- Lua 5.3.5
+
+function getConfig(iter, newx, nbead)
+   -- Input arguments
+   --
+   -- iter: the current iteration number
+   -- newx: 1: if points were placed randomly or,
+   --       0: if points were loaded from a file
+   -- nbead: the number of beads used
+   --
+   -- The following variables are read at the end:
+   -- dInteraction
+   -- kCom
+   -- kRad
+   -- fBrown
+   -- kBackbone
+   -- kInt
+   -- kBeadWell
+   -- kChrWell
+   -- quit     : 0-> continue, 1-> quit the dynamics.
+
+  maxiter = 1500 + 2000000/nbead
+
+  ---- proportion of steps taken
+  q = iter/maxiter
+
+  ---- Interaction distance
+  dInteraction = (1.1 + 0.9*q)*2 -- from 1.8 to 4 diameters radi
+
+  ---- Compression force, kCom
+  -- Compacts chromosomes towards their centre of mass
+  -- q <= 0.2         OFF, so that the beads can relax a little
+  -- 0.2 <= q <= 0.8  ON
+  -- q >= 0.8         OFF again, to avoid overlapping beads etc
+  kCom = 0
+
+
+  --- Top and bottom planes that restrict the simulation domain
+  -- Can be used to shape the nuclei a little, i.e. to have a flat top
+  -- and/or bottom.  top_plane has no effect when set >= 1,
+  -- bottom_plane has no effect when set <= -1.
+
+  top_plane = 1
+  bottom_plane = -1
+
+  ---- Domain force, kDom
+  -- Force that keeps bead in domain
+  kDom = 1.0
+
+  ---- Volumetric interaction, kVol
+  -- Restrain beads from overlapping
+  kVol = 1
+
+  -- Radial force, kRad,
+  -- Only use if GPSeq is included
+  -- In the GPSeq paper we used 0.005 for 10k Haploid structures at 1 MB
+  kRad = 0
+
+  ---- Brownian force, fBrown
+  -- Default: Decreases linearly from 0.7 to 0 along the iterations
+  fBrown = 0.7*(1-iter/maxiter)
+
+  ---- Interaction force, kInt
+  -- attracts beads that should be in contact (according to W)
+  kInt = 0.5*(1.0 + math.sin( (q - .5)*math.pi )) -- from 0 to 1
+
+  --- Backbone force, kBackbone
+  kBackbone = kInt * 4
+
+  ---- Bead specific wells
+  -- attracts specific beads to specific 3D coordinates (wells).
+  kBeadWell = 0.1;
+
+  --- Chromosome specific wells
+  -- attracts any bead from a specific chromosome to a chromosome
+  -- specific well.
+  kChrWell = 0.1;
+
+  --- Strength of "absolute" placement
+  kAbs = 0.1;
+
+  ---- Exit condition
+  quit = 0
+  if iter >= maxiter then
+    quit = 1
+  end
+
+  -- To slow down the simulations:
+  usleep(100000/60)
+
+end

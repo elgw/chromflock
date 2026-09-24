@@ -645,7 +645,7 @@ grad3(const double * restrict X,
 
     // active_pair is an array which indicates which contacts
     // that are activated/in used. This should only be there if
-    // --autopairs is passed.
+    // --auto pairs is passed.
     if(active_pair == NULL) {
         for(size_t pp = 0; pp < C->nIPairs; pp++)
         {
@@ -661,7 +661,7 @@ grad3(const double * restrict X,
                 }
             }
         }
-    } else {
+    } else { // --auto-pairs enabled
         for(size_t pp = 0; pp < C->nIPairs; pp++) {
             u32 kk = I[pp*2];
             u32 ll = I[pp*2+1];
@@ -669,6 +669,14 @@ grad3(const double * restrict X,
             double d = eudist3(X+3*kk, X+3*ll);
 
             if(active_pair[pp] == 0){
+                if(0){
+                    // Possibly a good idea but it interfers with with imputations
+                    // Maybe turn on at the last stage
+                for(int idx = 0; idx<3; idx++) {
+                    G[3*kk+idx] += C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
+                    G[3*ll+idx] -= C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
+                }
+                }
                 if(d < 3.0*C->r0) {
                     active_pair[pp] = 1;
                 }
@@ -677,8 +685,8 @@ grad3(const double * restrict X,
             if(active_pair[pp] == 1) {
                 if(d > C->dInteraction && d > 1e-6) {
                     for(int idx = 0; idx<3; idx++) {
-                        G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
-                        G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                        G[3*kk+idx] += C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                        G[3*ll+idx] -= C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
                     }
                 }
             }
