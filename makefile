@@ -68,6 +68,8 @@ LDFLAGS+=`pkg-config cairo --libs`
 SDL?=1
 ifeq ($(SDL),1)
 
+CFLAGS+= -Isrc/npio/
+
 CFLAGS += `pkg-config sdl2 --cflags`
 CFLAGS += -DSDL
 LDFLAGS += `pkg-config sdl2 --libs`
@@ -92,6 +94,7 @@ obj/npio.o \
 obj/contact_pairs_io.o \
 obj/gzl.o \
 obj/con2mflock.o \
+obj/sumproj_structure.o \
 obj/collide3_f32.o
 
 ## Targets
