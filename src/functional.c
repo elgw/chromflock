@@ -549,7 +549,7 @@ grad3(const double * restrict X,
     }
 
 
-    if(C->geometry == MFLOCK_ELLIPSOID) {
+    if((C->geometry == MFLOCK_ELLIPSOID) && (R != NULL)) {
         if(C->kRad > 0) {
             double EF[3];
             EF[0] = 1.0/pow(C->E->a, 2);

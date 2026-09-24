@@ -36,8 +36,7 @@ static int usage(void)
 int main(int argc, char ** argv)
 {
 
-    if(argc == 1)
-    {
+    if(argc == 1){
         usage();
         return EXIT_SUCCESS;
     }
@@ -46,58 +45,47 @@ int main(int argc, char ** argv)
 
     if(!strcmp(command, "help")
        || !strcmp(command, "--help")
-       || !strcmp(command, "-h"))
-    {
+       || !strcmp(command, "-h")){
         return usage();
     }
 
-    if(!strcmp(command, "init"))
-    {
+    if(!strcmp(command, "init")){
         return chromflock_init();
     }
 
-    if(!strcmp(command, "version"))
-    {
+    if(!strcmp(command, "version")){
         return show_version();
     }
 
-    if(!strcmp(command, "hic2cpm"))
-    {
+    if(!strcmp(command, "hic2cpm")){
         return cc2cpm(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "string2any"))
-    {
+    if(!strcmp(command, "string2any")){
         return string2any(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "any2string"))
-    {
+    if(!strcmp(command, "any2string")){
         return any2string(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "sprite2cpm"))
-    {
+    if(!strcmp(command, "sprite2cpm")){
         return sprite2cmap(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "unittests"))
-    {
+    if(!strcmp(command, "unittests")){
         return contact_pairs_io_ut(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "con2mflock"))
-    {
+    if(!strcmp(command, "con2mflock")){
         return con2mflock(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "sumproj"))
-    {
+    if(!strcmp(command, "sumproj")){
         return sumproj_structure(argc-1, argv+1);
     }
 
     fprintf(stderr, "%s is an unknown command to me\n", command);
 
-    usage();
     return EXIT_FAILURE;
 }

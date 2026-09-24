@@ -1,11 +1,15 @@
 #include "sumproj_structure.h"
 
+#include <getopt.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
+
 #include "cf_util.h"
 #include "npio.h"
+
+#include "txt/sumproj_help.txt.h"
 
 static void
 blit_gaussian(float * X,
@@ -42,7 +46,8 @@ sumproj_coords(float * X, // table of point coordinates
                size_t N, // number of rows
                size_t row_stride, // elements per row
                size_t imw, // side length of output image
-               double sigma) // size of spots
+               double sigma, // size of spots
+               int verbose)
 {
 
 
@@ -60,7 +65,9 @@ sumproj_coords(float * X, // table of point coordinates
         max[0] = fmax(max[0], P[0]);
         max[1] = fmax(max[1], P[1]);
     }
-    printf("BBX: [%f, %f] x [%f, %f]\n", min[0], max[0], min[1], max[1]);
+    if(verbose > 2){
+        printf("BBX: [%f, %f] x [%f, %f]\n", min[0], max[0], min[1], max[1]);
+    }
     float center[2];
     center[0] = (min[0] + max[0])/2.0;
     center[1] = (min[1] + max[1])/2.0;
@@ -87,8 +94,11 @@ sumproj_coords(float * X, // table of point coordinates
 }
 
 static int
-load_structure_npy(const char * infile, float ** X, size_t * n, size_t * stride)
+load_structure_npy(const char * infile, float ** X, size_t * n, size_t * stride, int verbose)
 {
+    if(verbose > 2){
+        printf("Trying to load data from %s\n", infile);
+    }
     npio_t *  coords = npio_load(infile);
     if(coords == NULL){
         fprintf(stderr, "Could not load %s as an npy file\n", infile);
@@ -117,7 +127,7 @@ load_structure_npy(const char * infile, float ** X, size_t * n, size_t * stride)
 }
 
 static int
-load_structure_3dg(const char * infile, float ** _X, size_t * n, size_t * stride)
+load_structure_3dg(const char * infile, float ** _X, size_t * n, size_t * stride, int verbose)
 {
     // Example line:
     // chr10_0 40000   -99.5743        21.6467 -10.5219
@@ -133,9 +143,16 @@ load_structure_3dg(const char * infile, float ** _X, size_t * n, size_t * stride
         n_lines++;
     }
     rewind(fid);
-    printf("%zu lines\n", n_lines);
+    if(verbose > 1){
+        printf("found %zu lines\n", n_lines);
+    }
 
-    float * X = malloc(n_lines*3*sizeof(float));
+    if(n_lines < 1){
+        free(linep);
+        return -1;
+    }
+
+    float * X = calloc(n_lines*3, sizeof(float));
     if(X == NULL){
         free(linep);
         return -1;
@@ -145,10 +162,11 @@ load_structure_3dg(const char * infile, float ** _X, size_t * n, size_t * stride
     while(getline(&linep, &linesize, fid) >= 0){
         char *token = strtok(linep, "\t ");
         size_t nt = 0;
+        assert(npoint < n_lines);
         while( token ){
             nt++;
             if((nt >= 3) && (nt <= 5)){
-                X[3*npoint + nt -3] = atof(token);
+                X[3*npoint + nt - 3] = atof(token);
             }
             // No proper error checking here, but if we found
             // the expected number of white space separated columns
@@ -169,77 +187,112 @@ load_structure_3dg(const char * infile, float ** _X, size_t * n, size_t * stride
 }
 
 static int
-load_structure(const char * infile, float ** X, size_t * n, size_t * stride)
+load_structure(const char * infile, float ** X, size_t * n, size_t * stride, int verbose)
 {
     if(npy_extension(infile)){
-            return load_structure_npy(infile, X, n, stride);
-        } else {
-        return load_structure_3dg(infile, X, n, stride);
+        return load_structure_npy(infile, X, n, stride, verbose);
+    } else {
+        return load_structure_3dg(infile, X, n, stride, verbose);
     }
 }
 
-// For one file, either the coordinates from mcflock, i.e.
-// coords.npy or from a 3dg file
-// Create a 2D image with the sum projection over z
-// TODO ? : add custom orientation as input
-// TODO ? : select chromosome
+typedef struct {
+    u32 imsize;
+    float sigma;
+    char **files;
+    int nfiles;
+    int verbose;
+} config;
+
+config * config_new(int argc, char ** argv){
+    config * conf = calloc(1, sizeof(config));
+    conf->sigma = 1.5;
+    conf->imsize = 400;
+    conf->verbose = 1;
+
+    struct option options[] = {
+        {"sigma", required_argument,  NULL, 's'},
+        {"size",        required_argument,  NULL, 'w'},
+        {"help", no_argument, NULL, 'h'},
+        {"verbose", required_argument, NULL, 'v'},
+        {NULL, 0, NULL, 0}};
+
+    int ch;
+    while((ch = getopt_long(argc, argv, "s:w:hv", options, NULL)) != -1)
+    {
+        switch(ch) {
+        case 's':
+            conf->sigma = atof(optarg);
+            break;
+        case 'w':
+            conf->imsize = atol(optarg);
+            break;
+        case 'h':
+            printf("%s", sumproj_help_txt);
+            free(conf);
+            return NULL;
+        case 'v':
+            conf->verbose = atoi(optarg);
+        }
+    }
+    conf->files = argv + optind;
+    conf->nfiles = argc - optind;
+    return conf;
+}
+
 int sumproj_structure(int argc, char ** argv)
 {
-    size_t imw = 400;
-    float sigma = 1.0;
+    config * conf = config_new(argc, argv);
+    if(conf == NULL){
+        return -1;
+    }
 
-    if(argc < 2){
+    if(conf->nfiles == 0){
         fprintf(stderr, "sumproj_structure: no input file given\n");
-        return 1;
-    }
-
-    const char * infile = argv[1];
-
-
-    if(argc > 2) {
-        sigma = atof(argv[2]);
-    }
-    if(argc > 3){
-        imw = atol(argv[3]);
-    }
-
-    float * X = NULL;
-    size_t n = 0;
-    size_t stride = 0;
-
-    if(load_structure(infile, &X, &n, &stride)){
-        printf("Unable to load %s\n", infile);
-        return -1;
-    }
-
-    char * outfile = calloc(32 + strlen(infile), 1);
-    if(outfile == NULL){
-        fprintf(stderr, "ERROR: sumproj_structure, L%d\n", __LINE__);
-        return -1;
-    }
-    sprintf(outfile, "%s_maxz.npy", infile);
-
-    printf("sigma = %f\n", sigma);
-    printf("%s -> %s\n", infile, outfile);
-
-
-    printf("Projecting %zu points\n", n);
-
-
-    float * raster = sumproj_coords(X, n, stride,
-                                    imw, sigma);
-    if(raster == NULL){
         goto fail1;
     }
 
-    int out_shape[2] = {imw, imw};
-    npio_write(outfile, 2, out_shape, (void*) raster, NPIO_F32, NPIO_F32);
-    free(raster);
-    free(outfile);
+    for(int kk = 0; kk < conf->nfiles; kk++){
+        const char * infile = conf->files[kk];
+
+        float * X = NULL;
+        size_t n = 0;
+        size_t stride = 0;
+
+        if(load_structure(infile, &X, &n, &stride, conf->verbose)){
+            printf("Unable to load %s\n", infile);
+            goto fail1;
+        }
+
+        char * outfile = calloc(32 + strlen(infile), 1);
+        if(outfile == NULL){
+            fprintf(stderr, "ERROR: sumproj_structure, L%d\n", __LINE__);
+            free(X);
+            goto fail1;
+        }
+        sprintf(outfile, "%s_sumz.npy", infile);
+        if(conf->verbose > 1){
+            printf("%s -> %s\n", infile, outfile);
+        }
+        float * raster = sumproj_coords(X, n, stride,
+                                        conf->imsize, conf->sigma,
+                                        conf->verbose);
+        free(X);
+        if(raster == NULL){
+            free(outfile);
+            goto fail1;
+        }
+
+        int out_shape[2] = {conf->imsize, conf->imsize};
+        npio_write(outfile, 2, out_shape, (void*) raster, NPIO_F32, NPIO_F32);
+        free(raster);
+        free(outfile);
+    }
+
+    free(conf);
     return 0;
 
  fail1:
-    free(outfile);
+    free(conf);
     return -1;
-
 }

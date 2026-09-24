@@ -1509,7 +1509,7 @@ static void mflock_load_bead_wells(mflock_t * mf)
 
     size_t n_elements = fsize / sizeof(double);
 
-    mf->bead_wells = calloc(n_elements, sizeof(double));
+    mf->bead_wells = calloc(n_elements, sizeof(wpos));
     FILE * fid = fopen(mf->fname_bead_wells, "r");
     if(fid == NULL)
     {
