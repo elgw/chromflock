@@ -672,10 +672,10 @@ grad3(const double * restrict X,
                 if(0){
                     // Possibly a good idea but it interfers with with imputations
                     // Maybe turn on at the last stage
-                for(int idx = 0; idx<3; idx++) {
-                    G[3*kk+idx] += C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
-                    G[3*ll+idx] -= C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
-                }
+                    for(int idx = 0; idx<3; idx++) {
+                        G[3*kk+idx] += C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
+                        G[3*ll+idx] -= C->kInt*0.002*(X[3*kk+idx] - X[3*ll+idx])/d;
+                    }
                 }
                 if(d < 3.0*C->r0) {
                     active_pair[pp] = 1;

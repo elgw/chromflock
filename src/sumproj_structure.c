@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include "cf_util.h"
-#include "npio.h"
 
 #include "txt/sumproj_help.txt.h"
 
