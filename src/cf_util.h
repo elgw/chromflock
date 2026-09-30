@@ -45,6 +45,7 @@ typedef struct {
     float z;
 } fpoint;
 
+#define CF_DEPRECATED  __attribute__ ((deprecated))
 
 /* For holding absolute bead position used by mflock (--absolute) */
 typedef struct {
@@ -101,26 +102,24 @@ int limit_mem(size_t max_bytes);
 double clockdiff(struct timespec* start,
                  struct timespec * finish);
 
-/** @brief get file size in bytes
- * @return -1 on failure;
- */
+// get file size in bytes
+// return -1 on failure;
 int64_t cf_file_size(const char * filename);
 
-/* Returns 1 if the string ends with .npy */
+// Returns 1 if the string ends with .npy
 int npy_extension(const char * name);
-
-/* Write an array of bead coordinates to a csv file
- * For each bead, x, y, z and r will be written.
- * The reason for writing the radius is a convenience
- * when the geometry is non-spherical (ellipsoidal)
- * E should be set to NULL when a spherical geometry is used
- *
- * returns 0 on success
- */
 
 // Return "YES"" (v==1) or "NO""
 const char* cf_YES_NO(int v);
 
+
+// Write an array of bead coordinates to a csv file
+// For each bead, x, y, z and r will be written.
+// The reason for writing the radius is a convenience
+// when the geometry is non-spherical (ellipsoidal)
+// E should be set to NULL when a spherical geometry is used
+//
+// returns 0 on success
 int
 write_bead_coordinates_to_csv(const char * fname,
                               const double * X,
@@ -135,15 +134,14 @@ write_bead_coordinates_to_npy(const char * fname,
                               const mflock_geometry_type geometry,
                                   const elli * ellipsoid);
 
-/* Read nbead rows from a csv
- * Does not expect a header rows
- * Three values are read from row, any extra values are ignored
- * Values are interpreted as x, y, z coordinates of a bead
- *
- * Writes values to either X32 or X64, i.e. exactly one of them should
- * be non-NULL.
- */
 
+// Read nbead rows from a csv
+// Does not expect a header rows
+// Three values are read from row, any extra values are ignored
+// Values are interpreted as x, y, z coordinates of a bead
+//
+// Writes values to either X32 or X64, i.e. exactly one of them should
+// be non-NULL.
 int
 load_bead_coordinates_from_csv(const char * fname,
                                float * X32, double * X64,
@@ -186,6 +184,8 @@ write_bead_labels_to_u8(const char * fname, const u8 * labels, i64 nbin);
 int
 write_bead_labels_to_npy(const char * fname, const u8 * labels, i64 nbin);
 
+
+// Depreciated function since chromflock should use npy files
 // Write u32 data (1D or 2D) to disk
 //
 // If the file name ends with .npy it will be saved as a numpy file
