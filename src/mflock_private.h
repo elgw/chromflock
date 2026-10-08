@@ -37,6 +37,7 @@
 #include "mflock_help.h"
 #include "ddict.h"
 
+
 typedef struct {
     uint32_t * I; // List with pairwise contacts
     // Number of pairs in I, note that the backbone contacts
@@ -55,6 +56,8 @@ typedef struct {
     int diploid; // Cast the labels to diploid format
     uint8_t * L; // chr labels per bead
     double * R; // wanted radii together with kRad
+    // Initialized where?
+    uint8_t * CPB; // contacts per bead -- used only when --autopairs is enabled
     int create_backbone;
 
     // keep contacts disabled until the beads are found in proximity

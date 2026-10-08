@@ -18,6 +18,11 @@
 typedef uint32_t u32;
 typedef double f64;
 
+// When --autopairs is enabled,
+// this is how many contacts that can be enabled per bead
+// at the same time. 12 = the 3D sphere kissing number
+#define MAX_CONTACTS_PER_BEAD (6)
+
 
 // TODO: Re-use buffers!
 typedef struct {
@@ -95,6 +100,7 @@ void grad3(
     const double * restrict R,
     const uint32_t * restrict I, // List of interactions pairs
     uint8_t * restrict active_pair,
+    uint8_t * restrict contacts_per_bead,
     const uint32_t * restrict backbone,
     const size_t n_backbone,
     double * restrict G,

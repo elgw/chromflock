@@ -512,6 +512,7 @@ grad3(const double * restrict X,
       const double * restrict R,
       const uint32_t * restrict I,
       uint8_t * restrict active_pair,
+      uint8_t * restrict contacts_per_bead,
       const uint32_t * restrict backbone,
       const size_t n_backbone,
       double * restrict G,
@@ -678,7 +679,10 @@ grad3(const double * restrict X,
                     }
                 }
                 if(d < 3.0*C->r0) {
-                    active_pair[pp] = 1;
+                    if((contacts_per_bead[kk] < MAX_CONTACTS_PER_BEAD) & (contacts_per_bead[ll] < MAX_CONTACTS_PER_BEAD))
+                        active_pair[pp] = 1;
+                    contacts_per_bead[kk]++;
+                    contacts_per_bead[ll]++;
                 }
             }
 

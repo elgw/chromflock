@@ -324,6 +324,7 @@ mflock_dynamics(mflock_t * restrict p)
               p->R,
               p->I,
               p->active_pair,
+              p->CPB,
               p->backbone,
               p->n_backbone,
               g,
@@ -1555,19 +1556,31 @@ mflock_update_autocontacts(mflock_t * mf)
     for(size_t pp = 0; pp < mf->n_pairs; pp++){
 
         u32 * pair = mf->I + 2*pp;
+
         double dist2 = eudist3p2(mf->beads + 3*pair[0],
                                  mf->beads + 3*pair[1]);
 
         if(mf->active_pair[pp] == 0) {
+            // If any of the beads is saturated with contacts,
+            // skip
+            if( (mf->CPB[pair[0]] >= MAX_CONTACTS_PER_BEAD)
+                | (mf->CPB[pair[1]] >= MAX_CONTACTS_PER_BEAD) ){
+                continue;
+            }
             if(dist2 < dist2_activation) {
                 mf->active_pair[pp] = 1;
+                mf->CPB[pair[0]]++;
+                mf->CPB[pair[1]]++;
                 n_activated++;
             }
         } else {
-            if(dist2 > dist2_drop){
-                mf->active_pair[pp] = 0;
-                n_activated--;
-            }
+                if(dist2 > dist2_drop){
+                    mf->active_pair[pp] = 0;
+                    n_activated--;
+                    mf->CPB[pair[0]]--;
+                    mf->CPB[pair[1]]--;
+                }
+
         }
     }
     mflock_logwrite(mf, 2, "Activated %d / %zu contact pairs\n", n_activated, mf->n_pairs);
@@ -1584,8 +1597,22 @@ mflock_init_autopairs(mflock_t * mf)
 
     mflock_logwrite(mf, 2, "Initializing autocontacts\n");
     mf->active_pair = calloc(mf->n_pairs, sizeof(u8));
+    mf->CPB = calloc(mf->n_beads, sizeof(u8));
+    // Add the backbone contacts
+    if(mf->create_backbone == 1){
+        for(u64 kk = 0; kk+1 < mf->n_beads; kk++){
+            if(mf->L[kk] == mf->L[kk+1]){
+                mf->CPB[kk]++;
+                mf->CPB[kk+1]++;
+            }
+        }
+    }
 
     if(mf->newx == 0) {
+        // If working on already iterated 3D structure,
+        // make sure to enable contacts before they have a chance
+        // to drift away.
+        // grad3 is responsible for any additional updates.
         mflock_update_autocontacts(mf);
     }
     return;
@@ -1781,6 +1808,7 @@ void mflock_free(mflock_t * p)
     free(p->I);
     free(p->backbone);
     free(p->L);
+    free(p->CPB);
     free(p->contact_pairs_file);
     free(p->lfname);
     free(p->rfname);
