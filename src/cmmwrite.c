@@ -55,6 +55,7 @@ static int
 cmmwrite_general(const char * fname,
                  const double * D, size_t nD, double radius,
                  const uint32_t * P, size_t NP,
+                 const uint32_t * CT, size_t n_CT, const uint8_t * CTI,
                  const uint8_t * L,
                  bool useGZ,
                  const u8 * cmap)
@@ -170,6 +171,30 @@ cmmwrite_general(const char * fname,
     }
 
 
+    if(CT != NULL){
+        for(size_t kk = 0; kk < n_CT; kk++){
+            if(CTI != NULL){
+                if(CTI[kk] == 0){
+                    continue;
+                }
+            }
+
+            double r = .5;
+            double g = .5;
+            double b = .5;
+
+            sprintf(line, "<link id1=\"%u\" id2=\"%u\" r=\"%f\" g=\"%f\" b=\"%f\" radius=\"%f\"/>\n",
+                    CT[2*kk], CT[2*kk+1],
+                    r, g, b,
+                    radius/3);
+            if(useGZ){
+                gzwrite(zf, line, strlen(line));
+            } else {
+                fprintf(f, "%s", line);
+            }
+        }
+    }
+
     sprintf(line, "</marker_set>\n");
     if(useGZ)
     {
@@ -193,23 +218,26 @@ cmmwrite_general(const char * fname,
     return EXIT_SUCCESS;
 }
 
-
-int cmmwritez(const char * fname,
-              const double * D, size_t nD, double radius,
-              const uint32_t * P, size_t NP,
-              const uint8_t * L,
-              const uint8_t * cmap)
-{
-    return cmmwrite_general(fname, D, nD, radius, P, NP, L, 1, cmap);
-}
-
-
 int cmmwrite(const char * fname,
              const double * D, size_t nD,
              double radius,
              const uint32_t * P, size_t NP,
+             const uint32_t * CT, uint32_t n_CT, const uint8_t * CTI,
              const uint8_t * L,
              const uint8_t * cmap)
 {
-    return cmmwrite_general(fname, D, nD, radius, P, NP, L, 0, cmap);
+    if(strlen(fname) < 4){
+        return EXIT_FAILURE;
+    }
+
+    int gz = 0;
+    if(strlen(fname) >= 3){
+        if(strcmp(fname + strlen(fname) - 3, ".gz") == 0){
+            gz = 1;
+        }
+    }
+
+    return cmmwrite_general(fname, D, nD, radius, P, NP,
+                            CT, n_CT, CTI,
+                            L, gz, cmap);
 }

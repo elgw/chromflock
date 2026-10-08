@@ -1,22 +1,16 @@
-/**
- * @file mflock.c
- * @author Erik Wernersson
- * @date 2020-2023
- */
-
 #include "mflock.h"
 #include "mflock_private.h"
 
-static bpos *  mflock_load_bead_apos(const char * fname, int * nbpos)
+static bpos * mflock_load_bead_apos(const char * fname, int * nbpos)
 {
-    if(npy_extension(fname))
-    {
+    if(npy_extension(fname)){
         int nconstraint = 0;
         bpos * apos =  load_bead_apos_from_npy(fname,
                                                &nconstraint);
-        if(apos == NULL)
-        {
-            fprintf(stderr, "Failed to load absolute bead positions from %s\n", fname);
+        if(apos == NULL){
+            fprintf(stderr,
+                    "Failed to load absolute bead positions from %s\n",
+                    fname);
             exit(EXIT_FAILURE);
         }
         *nbpos = nconstraint;
@@ -38,7 +32,7 @@ static double norm3d(const double * restrict X)
 }
 
 
-/* Used for communication with the optional visualization routines */
+// For the optional SDL renderer. Will be set to 0 on Ctrl+C/SIGINT
 static volatile int run = 1;
 
 /* show lua error string */
@@ -92,8 +86,6 @@ static void stoprun(int ignore)
 {
     run = 0 + 0*ignore;
 }
-
-
 
 static double dmax(double a, double b)
 {
@@ -1381,7 +1373,7 @@ static mflock_t * mflock_new(void)
     p->maxiter = 1000000; // iterations
     p->maxtime = 60*60*10; // seconds
 
-    p->r0 = -1;
+    p->r0 = -1; // indicates not set yet, a 0 should do as well!
     p->volq = 0.2;
 
     p->verbose = 1;
@@ -1419,18 +1411,15 @@ static void mflock_set_and_create_output_folder(mflock_t * mf)
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
 
-    if(stat(mf->ofoldername, &st) == -1)
-    {
+    if(stat(mf->ofoldername, &st) == -1){
         if(mf->verbose >= 1){
             printf("Creating output folder: %s\n", mf->ofoldername);
         }
         int folderok = mkdir(mf->ofoldername, 0770);
-        if(folderok != 0)
-        {
+        if(folderok != 0){
             printf("Could not create output folder\n");
             exit(-1);
         }
-
     } else {
         if(mf->verbose >= 2){
             printf("Output folder did already exist.\n");
@@ -1438,8 +1427,7 @@ static void mflock_set_and_create_output_folder(mflock_t * mf)
     }
 
     char * fullofolder = realpath(mf->ofoldername, NULL);
-    if(fullofolder == NULL)
-    {
+    if(fullofolder == NULL){
         printf("Error: The output folder '%s' can't be understood by realpath\n", mf->ofoldername);
         exit(-1);
     }
@@ -1574,12 +1562,12 @@ mflock_update_autocontacts(mflock_t * mf)
                 n_activated++;
             }
         } else {
-                if(dist2 > dist2_drop){
-                    mf->active_pair[pp] = 0;
-                    n_activated--;
-                    mf->CPB[pair[0]]--;
-                    mf->CPB[pair[1]]--;
-                }
+            if(dist2 > dist2_drop){
+                mf->active_pair[pp] = 0;
+                n_activated--;
+                mf->CPB[pair[0]]--;
+                mf->CPB[pair[1]]--;
+            }
 
         }
     }
@@ -1631,8 +1619,7 @@ mflock_write_autopairs(mflock_t * mf)
     assert(mf->active_pair != NULL);
 
     f32 * contact_details = malloc(mf->n_pairs*2*sizeof(f32));
-    for(u64 kk = 0; kk < mf->n_pairs; kk++)
-    {
+    for(u64 kk = 0; kk < mf->n_pairs; kk++){
         contact_details[2*kk] = mf->active_pair[kk];
         size_t a = mf->I[2*kk];
         size_t b = mf->I[2*kk+1];
@@ -1647,8 +1634,7 @@ mflock_write_autopairs(mflock_t * mf)
                             shape,
                             (const void *) contact_details,
                             NPIO_F32, NPIO_F32);
-    if(status == -1)
-    {
+    if(status == -1){
         printf("Failed to write to %s\n", fname);
     }
     assert(status != -1);
@@ -1666,10 +1652,8 @@ static void mflock_init_backbone(mflock_t * mf)
     mf->backbone = malloc(2*mf->n_beads*sizeof(u32));
 
     int n_backbone = 0;
-    for(size_t kk = 0; kk + 1 < mf->n_beads; kk++)
-    {
-        if(mf->L[kk] == mf->L[kk+1])
-        {
+    for(size_t kk = 0; kk + 1 < mf->n_beads; kk++){
+        if(mf->L[kk] == mf->L[kk+1]){
             mf->backbone[2*n_backbone + 0] = kk;
             mf->backbone[2*n_backbone + 1] = kk + 1;
             n_backbone++;
@@ -1687,8 +1671,7 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     /* Set names of output files */
     mf->xoutfname = malloc(1024*sizeof(char));
     assert(mf->xoutfname != NULL);
-    if(mf->use_csv)
-    {
+    if(mf->use_csv){
         sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.csv");
     } else {
         sprintf(mf->xoutfname, "%s%s", mf->ofoldername, "coords.npy");
@@ -1702,8 +1685,7 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     mf->logf = fopen(mf->logfname, "a");
     assert(mf->logf != NULL);
 
-    if(mf->logf== NULL)
-    {
+    if(mf->logf== NULL){
         fprintf(stderr, "mflock: Failed to open log file for writing (%s)\n",
                 mf->logfname);
         exit(EXIT_FAILURE);
@@ -1714,18 +1696,16 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     free(time_str);
 
     fprintf(mf->logf, "CMD: ");
-    for(int kk = 0; kk<argc; kk++)
-    {
+    for(int kk = 0; kk<argc; kk++){
         fprintf(mf->logf, "'%s' ", argv[kk]);
     }
     fprintf(mf->logf, "\n");
     fflush(mf->logf);
 
-    /* We load the labels first to determine how many beads there
-     * are (or 2X if --diploid is set) */
+    // labels loaded first to determine how many beads there
+    //  are (or 2X if --diploid is set)
     mflock_load_bead_labels(mf);
     mflock_logwrite(mf, 1, "n_beads = %zu\n", mf->n_beads);
-
 
     /* Once we know how many beads we can set their radius based on the
      * volume quotient (or do nothing if it was given at the command line) */
@@ -1750,24 +1730,19 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
 
     mflock_load_bead_wells(mf);
 
-    if(mf->bead_apos_file != NULL)
-    {
-        // bpos*
+    if(mf->bead_apos_file != NULL){
         mf->bead_apos = mflock_load_bead_apos(mf->bead_apos_file,
                                               &mf->n_bead_apos);
 
-        if(mf->bead_apos == NULL)
-        {
+        if(mf->bead_apos == NULL){
             fprintf(stderr,
                     "Unable to load absolut bead positions from %s\n",
                     mf->bead_apos_file);
             exit(EXIT_FAILURE);
         }
         // Check that the apos refers to existing beads
-        for(i64 kk = 0; kk < mf->n_bead_apos; kk++)
-        {
-            if(mf->bead_apos[kk].bead_id >= mf->n_beads)
-            {
+        for(i64 kk = 0; kk < mf->n_bead_apos; kk++){
+            if(mf->bead_apos[kk].bead_id >= mf->n_beads){
                 fprintf(stderr,
                         "Error: absolute position %ld refers to bead %d, "
                         "but there are only %ld beads\n",
@@ -1780,17 +1755,14 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     }
 
 
-    if(mf->verbose > 3)
-    {
+    if(mf->verbose > 3){
         // show the loaded beads
-        for(size_t kk = 0; kk< mf->n_beads; kk++)
-        {
+        for(size_t kk = 0; kk< mf->n_beads; kk++){
             printf("%5zu: %f, %f, %f\n",
                    kk, mf->beads[3*kk], mf->beads[3*kk+1], mf->beads[3*kk+2]);
         }
         // show loaded contacts
-        for(size_t kk = 0; kk < mf->n_pairs; kk++)
-        {
+        for(size_t kk = 0; kk < mf->n_pairs; kk++){
             printf("P%5zu: %u %u\n", kk,
                    mf->I[2*kk], mf->I[2*kk+1]);
             assert(mf->I[2*kk] < mf->n_beads);
@@ -1899,8 +1871,7 @@ mflock_logwrite(const mflock_t * p,
 // Load an expected number of beads into a pre-allocated memory location
 static int mflock_load_coordinates(mflock_t * p)
 {
-    if(npy_extension(p->xfname))
-    {
+    if(npy_extension(p->xfname)){
         return load_bead_coordinates_from_npy(p->xfname,
                                               NULL, p->beads,
                                               p->n_beads);
@@ -1913,11 +1884,10 @@ static int mflock_load_coordinates(mflock_t * p)
 
 static int mflock_save_coordinates(mflock_t * p)
 {
-    if(run == 1)
-    {
-        if(p->verbose > 1)
-        {
-            mflock_logwrite(p, 1, "Writing final structure to %s\n", p->xoutfname);
+    if(run == 1){
+        if(p->verbose > 1){
+            mflock_logwrite(p, 1, "Writing final structure to %s\n",
+                            p->xoutfname);
         }
     }
     else {
@@ -1928,14 +1898,12 @@ static int mflock_save_coordinates(mflock_t * p)
         mflock_logwrite(p, 1, "Writing non-finished structure to: %s\n", p->xoutfname);
     }
 
-    if(p->verbose > 1)
-    {
+    if(p->verbose > 1){
         mflock_logwrite(p, 1, "Columns: x, y, z, r\n");
     }
 
 
-    if(p->use_csv)
-    {
+    if(p->use_csv){
         return write_bead_coordinates_to_csv(p->xoutfname,
                                              p->beads,
                                              p->n_beads,
@@ -1952,7 +1920,7 @@ static int mflock_save_coordinates(mflock_t * p)
 }
 
 
-/* Wrapper if starting the main loop from a thread */
+// Wrapper if starting the main loop from a thread
 static void * solve_t(void * args)
 {
     mflock_t * p = (mflock_t *) args;
@@ -1963,43 +1931,32 @@ static void * solve_t(void * args)
     return NULL;
 }
 
-/* Write chimera file (for simple visualization) */
+// Write .cmm or .cmm.gz file for chimerax visualization
 static void mflock_write_cmm(const mflock_t * p)
 {
-    if(p->write_cmm == 0)
-    {
+    if(p->write_cmm == 0){
         return;
     }
-    const double * restrict X = p->beads;
-
-    if(p->cmmz == 1)
-    {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
+    char * cmmfile = malloc(strlen(p->ofoldername) + 32);
+    assert(cmmfile != NULL);
+    if(p->cmmz == 1){
         sprintf(cmmfile, "%s/cmmdump.cmm.gz", p->ofoldername);
-        cmmwritez(cmmfile, X, p->n_beads, // points
-                  p->r0,
-                  p->backbone, p->n_backbone, // links
-                  p->L, p->cmap);
-        free(cmmfile);
     } else {
-        char * cmmfile = malloc(1024*sizeof(char));
-        assert(cmmfile != NULL);
         sprintf(cmmfile, "%s/cmmdump.cmm", p->ofoldername);
-        cmmwrite(cmmfile, X, p->n_beads,
-                 p->r0,
-                 p->backbone, p->n_backbone,
-                 p->L, p->cmap);
-        free(cmmfile);
     }
-
+    cmmwrite(cmmfile,
+             p->beads, p->n_beads, // points
+             p->r0, // bead radius
+             p->backbone, p->n_backbone, // links
+             p->I,  p->n_pairs, p->active_pair, // possible links
+             p->L, // bead labels
+             p->cmap); // colormap
+    free(cmmfile);
     return;
 }
 
 static void mflock_close_log(mflock_t * p)
 {
-
-
     char * time_str = cf_timestr();
     fprintf(p->logf, "\nmflock finished: %s\n", time_str);
     free(time_str);
@@ -2011,7 +1968,6 @@ static void mflock_close_log(mflock_t * p)
 
 static void mflock_run(mflock_t * p)
 {
-
     time_t starttime, nowtime;
     time(&starttime);
 
@@ -2024,12 +1980,9 @@ static void mflock_run(mflock_t * p)
     /* Start molecular dynamics */
     mflock_logwrite(p, 1, " >> Solving ... \n");
 
-
 #ifdef SDL
     if(p->liveView == 1)
     {
-
-
         /* SDL likes to be in the main thread so we run mflock
            dynamics in a secondary.  */
 
@@ -2061,7 +2014,6 @@ static void mflock_run(mflock_t * p)
     }
     mflock_dynamics(p);
 #endif
-
 
     /* resolution: 1 s, consider clockdiff  */
     time(&nowtime);

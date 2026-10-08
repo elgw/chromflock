@@ -47,13 +47,15 @@ np.save('contacts.npy', C)
 
 
 # Second example, autocontacts to connect a lot of things
-
+# make sure not to add contacts between adjacent beads as they
+# already are in the backbone.
 L = 0*L
 np.save('labels2.npy', L)
 C = np.zeros( [int(n*(n-1)/2), 2], dtype=np.uint32)
 pos = 0
 for i in range(0, n):
-    for j in range(i+1, n):
+    for j in range(i+2, n):
         C[pos, :] = [i, j]
         pos+=1
-np.save('contacts2.npy', C)
+breakpoint()
+np.save('contacts2.npy', C[0:pos, :])

@@ -1,4 +1,4 @@
--- Lua 5.3.5
+-- Luau 5.3.5
 
 function getConfig(iter, newx, nbead)
    -- Input arguments
@@ -19,7 +19,7 @@ function getConfig(iter, newx, nbead)
    -- kChrWell
    -- quit     : 0-> continue, 1-> quit the dynamics.
 
-  maxiter = 1500 + 2000000/nbead
+  maxiter = 5000
 
   ---- proportion of steps taken
   q = iter/maxiter

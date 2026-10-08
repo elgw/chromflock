@@ -388,19 +388,16 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, mflock_fun
     }
 
     // Wanted interactions
-    for(size_t kk = 0; kk < nX; kk++)
-    {
-        for(size_t ll = kk+1; ll < nX; ll++)
-        {
-            if(A[kk + nX*ll] == 1)
-            {
+    for(size_t kk = 0; kk < nX; kk++){
+        for(size_t ll = kk+1; ll < nX; ll++){
+            if(A[kk + nX*ll] == 1){
                 double d = eudist3(X+3*kk, X+3*ll);
-                if(d > C->dInteraction)
-                {
-                    for(int idx = 0; idx<3; idx++)
-                    {
-                        G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
-                        G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                if(d > C->dInteraction){
+                    for(int idx = 0; idx<3; idx++) {
+                        G[3*kk+idx] += C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])
+                            /d*(d - C->dInteraction);
+                        G[3*ll+idx] -= C->kInt*2*(X[3*kk+idx] - X[3*ll+idx])
+                            /d*(d - C->dInteraction);
                     }
                 }
             }
@@ -408,17 +405,15 @@ void grad(double * X, size_t nX, double * R, uint8_t * A, double * G, mflock_fun
     }
 
     // Repulsion
-    for(size_t kk = 0; kk < nX; kk++)
-    {
-        for(size_t ll = kk+1; ll < nX; ll++)
-        {
+    for(size_t kk = 0; kk < nX; kk++){
+        for(size_t ll = kk+1; ll < nX; ll++){
             double d = eudist3(X+3*kk, X+3*ll);
-            if( d < 2*C->r0)
-            {
-                for(int idx = 0; idx<3; idx++)
-                {
-                    G[3*kk+idx] += C->kVol*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - 2*C->r0);
-                    G[3*ll+idx] -= C->kVol*2*(X[3*kk+idx] - X[3*ll+idx])/d*(d - 2*C->r0);
+            if( d < 2*C->r0){
+                for(int idx = 0; idx<3; idx++){
+                    G[3*kk+idx] += C->kVol*2*(X[3*kk+idx] - X[3*ll+idx])
+                        /d*(d - 2*C->r0);
+                    G[3*ll+idx] -= C->kVol*2*(X[3*kk+idx] - X[3*ll+idx])
+                        /d*(d - 2*C->r0);
                 }
             }
         }
@@ -670,7 +665,8 @@ grad3(const double * restrict X,
             double d = eudist3(X+3*kk, X+3*ll);
 
             if(active_pair[pp] == 0){
-                if(0){
+                const int long_range_attraction = 0;
+                if(long_range_attraction){
                     // Possibly a good idea but it interfers with with imputations
                     // Maybe turn on at the last stage
                     for(int idx = 0; idx<3; idx++) {
