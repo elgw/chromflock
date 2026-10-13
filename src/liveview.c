@@ -36,6 +36,7 @@ typedef struct {
 
     size_t nFrames; // number of rendered frames
 
+    int verbose;
     int done;
     double r0;
     double * Rot; // rotation matrix
@@ -455,10 +456,12 @@ static int zcmp(const void * A, const void * B)
     bead * P = (bead * ) A;
     bead * Q = (bead * ) B;
 
-    if(P->X[2] > Q->X[2])
+    if(P->X[2] > Q->X[2]){
         return 1;
-    if(P->X[2] < Q->X[2])
+    }
+    if(P->X[2] < Q->X[2]){
         return -1;
+    }
 
     return 0;
 }
@@ -468,8 +471,7 @@ static int zcmp(const void * A, const void * B)
 static void
 copy_sort(scene * s)
 {
-    for(size_t kk = 0; kk < s->N; kk++)
-    {
+    for(size_t kk = 0; kk < s->N; kk++){
         s->beads[kk].X[0] = s->X[3*kk];
         s->beads[kk].X[1] = s->X[3*kk+1];
         s->beads[kk].X[2] = s->X[3*kk+2];
@@ -485,8 +487,7 @@ static void
 render(scene * s, const bead_graphics * beads)
 {
     // Only needed if s->X is updated
-    if(s->pause == 0)
-    {
+    if(s->pause == 0){
         copy_sort(s);
     }
 
@@ -504,10 +505,12 @@ render(scene * s, const bead_graphics * beads)
     int woff = 0;
     int hoff = 0l;
     int d1 = s->window_w - s->window_h;
-    if(d1 > 0)
+    if(d1 > 0){
         woff = d1/2;
-    if(d1 < 0)
+    }
+    if(d1 < 0){
         hoff = -d1/2;
+    }
 
     /* Draw domain */
     SDL_SetRenderDrawColor(s->renderer, 0, 0, 0, 255);
@@ -522,13 +525,11 @@ render(scene * s, const bead_graphics * beads)
     // draw a circle for the domain
     // actually draws 3 circles to make it thicker
     // TODO: use SDL_RnederDrawLines
-    for(int delta = 0; delta<3; delta++)
-    {
+    for(int delta = 0; delta<3; delta++){
         double x0 = -10;
         double y0 = -10;
 
-        for(double theta = 0.01; theta<=6*M_PI; theta = theta+0.02)
-        {
+        for(double theta = 0.01; theta<=6*M_PI; theta = theta+0.02){
             double x = cos(theta); double y = sin(theta);
             double scale = // ||x^TAx||
                 x*(ER[0]*x + ER[3]*y) + y*(ER[1]*x + ER[4]*y);
@@ -536,17 +537,16 @@ render(scene * s, const bead_graphics * beads)
             x = x*(mid+delta)/sqrt(scale) + mid + woff;
             y = y*(mid+delta)/sqrt(scale) + mid + hoff;
 
-            if(x0>-10)
+            if(x0>-10){
                 SDL_RenderDrawLine(s->renderer, round(x0), round(y0), round(x), round(y));
+            }
             y0 = y;
             x0 = x;
         }
     }
 
-    if(s->show_lines == 1)
-    {
-        for(size_t kk = 0; kk+1 < s->N; kk++)
-        {
+    if(s->show_lines == 1){
+        for(size_t kk = 0; kk+1 < s->N; kk++){
             // quite silly without a z-buffer or similar
             // also silly with 1 px thick lines
             if(s->L[kk] != s->L[kk+1])
@@ -578,10 +578,8 @@ render(scene * s, const bead_graphics * beads)
     }
 
     /* Draw beads */
-    if(s->show_lines == 0)
-    {
-        for(size_t kk = 0; kk<s->N; kk++)
-        {
+    if(s->show_lines == 0){
+        for(size_t kk = 0; kk<s->N; kk++){
             int label = (int) s->beads[kk].label;
 
             SDL_Rect SrcR;
@@ -599,8 +597,7 @@ render(scene * s, const bead_graphics * beads)
             double dest_x = s->beads[kk].X[0];
             double dest_y = s->beads[kk].X[1];
 
-            if(s->perspective)
-            {
+            if(s->perspective){
                 // Beads are sorted with the smallest z value first (-1)
                 // and the largest z value last (1) which will be on the top
                 const double p = 7.0;
@@ -633,20 +630,19 @@ liveview(const double * X,
          const u8 * xcmap)
 {
     scene * s = calloc(1, sizeof(scene));
-    assert(s != NULL);
+    if(s == NULL){
+        return EXIT_FAILURE;
+    }
 
     cmap = calloc(256*3, sizeof(u8));
     assert(cmap != NULL);
 
-    if(xcmap == NULL)
-    {
-        for(int kk = 0; kk < 27*3; kk++)
-        {
+    if(xcmap == NULL) {
+        for(int kk = 0; kk < 27*3; kk++) {
             cmap[kk] = cmap0[kk];
         }
     } else {
-        for(int kk = 0; kk < 256*3; kk++)
-        {
+        for(int kk = 0; kk < 256*3; kk++){
             cmap[kk] = xcmap[kk];
         }
     }
@@ -671,6 +667,7 @@ liveview(const double * X,
     s->EA[0] = 1.0/pow(s->E->a, 2);
     s->EA[4] = 1.0/pow(s->E->b, 2);
     s->EA[8] = 1.0/pow(s->E->c, 2);
+    s->verbose = 1;
     sprintf(s->title, "live X view");
 
     // Initialize window
@@ -685,17 +682,16 @@ liveview(const double * X,
     }
 
     // main loop
-    while(s->done == 0 && *quit == 0)
-    {
+    while(s->done == 0 && *quit == 0){
         render(s, tbeads);
         getEvents(s);
-        // usleep(1000000.0/60.0);
     }
 
-    fprintf(stdout, "Rendered %zu times\n", s->nFrames);
+    if(s->verbose > 1){
+        fprintf(stdout, "Rendered %zu times\n", s->nFrames);
+    }
 
-    for(int bb = 0; bb<64; bb++)
-    {
+    for(int bb = 0; bb<64; bb++){
         bead_graphics_free(&tbeads[bb]);
     }
 

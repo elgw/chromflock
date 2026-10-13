@@ -472,12 +472,12 @@ static void mflock_summary(mflock_t * p)
     const double * restrict X = p->beads;
     assert(p->n_beads>0);
 
-    mflock_logwrite(p, 1, "\n");
-    mflock_logwrite(p, 1, " >> Optimization summary:\n");
-    mflock_logwrite(p, 1, "    Final iterations: %zu\n", p->iter_final);
-    mflock_logwrite(p, 1, "    Total time: %zu s\n", p->time_final);
-    mflock_logwrite(p, 1, "    Final gradient norm: %e\n", p->grad_final);
-    mflock_logwrite(p, 1, "    Final total error: %e\n", p->err_final);
+
+    mflock_logwrite(p, 1, "Post simulation summary:\n");
+    mflock_logwrite(p, 1, "- Final iterations: %zu\n", p->iter_final);
+    mflock_logwrite(p, 1, "- Total time: %zu s\n", p->time_final);
+    mflock_logwrite(p, 1, "- Final gradient norm: %e\n", p->grad_final);
+    mflock_logwrite(p, 1, "- Final total error: %e\n", p->err_final);
     size_t n_auto_used = 0;
     if(p->autocontacts){
         for(u64 kk = 0; kk < p->n_pairs; kk++) {
@@ -485,7 +485,7 @@ static void mflock_summary(mflock_t * p)
                 n_auto_used++;
             }
         }
-        mflock_logwrite(p, 1, "    Used %ld / %zu (auto) contact pairs\n", n_auto_used, p->n_pairs);
+        mflock_logwrite(p, 1, "- Used %ld / %zu (auto) contact pairs\n", n_auto_used, p->n_pairs);
     }
 
     // X: mean, max, min
@@ -638,7 +638,7 @@ mflock_read_contact_pairs(mflock_t * p)
         mflock_logwrite(p, 1, "Pairwise interactions -- no file specified\n");
         return;
     }
-    mflock_logwrite(p, 1, "Reading pairwise interactions from %s\n",
+    mflock_logwrite(p, 2, "Reading pairwise interactions from %s\n",
                     p->contact_pairs_file);
     uint64_t nCP = 0;
     if(npy_extension(p->contact_pairs_file)) {
@@ -689,7 +689,7 @@ static void mflock_init_coordinates(mflock_t * p)
 
     if(p->beads == NULL) {
         p->newx = 1;
-        mflock_logwrite(p, 1, "Using random initialization for X\n");
+        mflock_logwrite(p, 1, "Initializing beads at random positions\n");
         srand(p->rseed);
         p->beads = calloc(3*p->n_beads, sizeof(double));
         assert(p->beads != NULL);
@@ -709,7 +709,7 @@ static void mflock_init_coordinates(mflock_t * p)
                 }
             }
         }
-        mflock_logwrite(p, 1, "X[0] = %f\n", p->beads[0]);
+        mflock_logwrite(p, 2, "X[0] = %f\n", p->beads[0]);
     }
     if(p->verbose > 2) {
         printf("   coordinates loaded\n");
@@ -728,18 +728,25 @@ mflock_validate_labels(const mflock_t * p)
 {
     // Check how many polymers there are
     int npoly = 1;
+    int sorted = 1;
     for(size_t kk = 1; kk< p->n_beads; kk++)
     {
-        if(p->L[kk-1] != p->L[kk])
-        {
+        if(p->L[kk-1] != p->L[kk]){
             npoly++;
         }
+        if(p->L[kk-1] > p->L[kk]){
+            sorted = 0;
+        }
     }
-
+    if(sorted == 0){
+        fprintf(stderr, "Error. The labels are not sorted\n");
+        exit(EXIT_FAILURE);
+    }
     mflock_logwrite(p, 1,
-                    "%d polymers found in the labels\n", npoly);
+                    "%d polymers and %d beads found in the label array\n",
+                    npoly, p->n_beads);
 
-    if( npoly > 55 )
+    if( npoly > 70 )
     {
         if(p->verbose > 0)
         {
@@ -761,7 +768,7 @@ static int mflock_load_bead_labels(mflock_t * p)
         return EXIT_FAILURE;
     }
 
-    mflock_logwrite(p, 1, "Reading L-labels from %s\n", p->lfname);
+    mflock_logwrite(p, 2, "Reading L-labels from %s\n", p->lfname);
 
     if(npy_extension(p->lfname))
     {
@@ -833,7 +840,7 @@ static int mflock_load_radial_constraints(mflock_t * p)
 
     if(p->rfname == NULL)
     {
-        mflock_logwrite(p, 1, "No radial preferences to read\n");
+        mflock_logwrite(p, 2, "No radial preferences to read\n");
         return EXIT_FAILURE;
     }
 
@@ -1432,8 +1439,7 @@ static void mflock_set_and_create_output_folder(mflock_t * mf)
         exit(-1);
     }
 
-    // Create output folder
-    if(mf->verbose >= 1) {
+    if(mf->verbose > 1) {
         printf("Output folder: %s\n", fullofolder);
     }
     free(fullofolder);
@@ -1705,7 +1711,7 @@ static void mflock_init(mflock_t * mf, int argc, char ** argv)
     // labels loaded first to determine how many beads there
     //  are (or 2X if --diploid is set)
     mflock_load_bead_labels(mf);
-    mflock_logwrite(mf, 1, "n_beads = %zu\n", mf->n_beads);
+
 
     /* Once we know how many beads we can set their radius based on the
      * volume quotient (or do nothing if it was given at the command line) */
@@ -1978,7 +1984,7 @@ static void mflock_run(mflock_t * p)
     sigaction(SIGINT, &act, NULL);
 
     /* Start molecular dynamics */
-    mflock_logwrite(p, 1, " >> Solving ... \n");
+    mflock_logwrite(p, 1, "Running dynamics (%s) ... \n", p->luaDynamicsFile);
 
 #ifdef SDL
     if(p->liveView == 1)

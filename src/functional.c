@@ -683,10 +683,16 @@ grad3(const double * restrict X,
             }
 
             if(active_pair[pp] == 1) {
-                if(d > C->dInteraction && d > 1e-6) {
-                    for(int idx = 0; idx<3; idx++) {
-                        G[3*kk+idx] += C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
-                        G[3*ll+idx] -= C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                if(d > 5.0*C->r0){
+                    active_pair[pp] = 0; // disable contact if beads have drifted apart
+                    contacts_per_bead[kk]--;
+                    contacts_per_bead[ll]--;
+                } else {
+                    if(d > C->dInteraction && d > 1e-6) {
+                        for(int idx = 0; idx<3; idx++) {
+                            G[3*kk+idx] += C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                            G[3*ll+idx] -= C->kInt*2.0*(X[3*kk+idx] - X[3*ll+idx])/d*(d - C->dInteraction);
+                        }
                     }
                 }
             }
