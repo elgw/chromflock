@@ -4,43 +4,47 @@
 // rewrite of multiscale_cf_vcn.py
 
 #include <stdint.h>
+#include <stdio.h>
 #include "ddict.h"
 
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef int64_t i64;
 
-// A chromosome
+// Chromosome information
 typedef struct {
-    char * name;
-    u32 size;
-    u32 bin_range[2];
-    u32 pos_range[2];
-} chromosome;
+    char * name; // like chr1 or chrX
+    u32 size; // in basepairs
+} chromosome_t;
 
 // A polymer is an instance of a chromosome. Any location of
 // a polymer can be mapped to a bin_id.
 // The mapping of all chromosomes to bin_id is surjective onto
 //
 typedef struct {
-    chromosome * chr;
+    chromosome_t * chr;
     int copy; // 0, 1, ...
     u32 bin_range[2];
     u32 pos_range[2];
+    int poly_id; // used when creating labels for chromflock
 } polymer_t;
 
-// A genome is just a collection of chromosomes
+// Here, a genome is just a collection of chromosomes with unique
+// names. TODO: Call it chromosome_set? A genome typically defined as
+// the complete set of DNA...
 typedef struct {
     char * name;
     char * info;
-    //
-    chromosome * chrs;
-    int n_chr; // should support > 1260 ...
-    //
+
     polymer_t * poly;
     int n_poly;
     u32 n_bin;
-    ddict * cname2id; // chromosome name to index in chrs
+
+    // A dictionary mapping chromosome names to chromosomes
+    ddict * cdict; // chromosome name to index in chrs
+    chromosome_t ** chrs; //
+    int n_chr; // should support > 1260 ...
+
 } genome_t;
 
 // Given a genome and some binning resolution
@@ -63,6 +67,8 @@ typedef struct {
 // columns
 // chr_name and chr_size
 genome_t * genome_from_tsv(const char * fname);
+void genome_free(genome_t * G);
+void genome_print(const genome_t * G, FILE * fid);
 
 // Set up a genome binner to allow mapping
 // reads <-> bins

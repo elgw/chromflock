@@ -10,6 +10,10 @@ else
 CFLAGS += -O3 -flto -DNDEBUG
 endif
 
+ifeq ($(SANA), 1)
+CFLAGS+=-g3 -fsanitize=address
+endif
+
 CFLAGS+=-DCC_VERSION='"..."'
 CFLAGS+=-DGIT_VERSION='"..."'
 
@@ -25,6 +29,11 @@ LDFLAGScmm += -lz `pkg-config --libs cairo`
 LDFLAGS=-lm
 
 all: functional_ut cmmwrite liveview hsvrgb ellipsoid functional_optimal_nDiv wio_ut
+
+GENOME_FILES = genome.c ddict.c
+
+genome_ut: $(GENOME_FILES)
+	$(CC) $(CFLAGS) $(GENOME_FILES) $(LDFLAGS) -o genome_ut
 
 wio_ut: wio.c wio.h makefile
 	$(CC) $(CFLAGS) wio_ut.c wio.c -o wio_ut -lz

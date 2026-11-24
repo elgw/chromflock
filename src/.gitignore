@@ -12,3 +12,5 @@ wio_ut
 contact_pairs_io_ut
 *.o
 *.cmm
+genome_ut
+a.out

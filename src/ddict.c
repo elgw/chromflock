@@ -421,7 +421,7 @@ ddict_grow_indices(ddict * dict)
 
 int
 ddict_add(ddict * dict,
-          char * word, void * value)
+          const char * word, void * value)
 {
     const u64 hash = _ddict_wordhash(word);
 

@@ -27,7 +27,7 @@ extern "C" {
 
     #define DDICT_VERSION_MAJOR 1
     #define DDICT_VERSION_MINOR 0
-    #define DDICT_VERSION_PATCH 2
+    #define DDICT_VERSION_PATCH 3
 
 // If DDICT_DROP_HASH is defined, the hash values will not be
 // calculated when needed, i.e. not stored.
@@ -42,7 +42,7 @@ extern "C" {
 #ifndef DDDICT_DROP_HASH
         uint64_t hash;
 #endif
-        char * key;
+        const char * key;
         void * value;
     } ddict_entry;
 
@@ -119,7 +119,7 @@ extern "C" {
 // Returns 0 on success.
     int
     ddict_add(ddict * dict,
-              char * key, void * value);
+              const char * key, void * value);
 
 // Return the number of entries in the dictionary
     uint64_t
