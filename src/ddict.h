@@ -62,10 +62,10 @@ extern "C" {
 // ddict->entries[e], e_k=ddict->entries[ddict->indices[h+k]], etc until e_k is
 // is 0 or a match is found.
 
-    typedef enum {U8, U16, U32, U64} indices_bits;
+    typedef enum {U8=1, U16=2, U32=4, U64=8} indices_bits;
 
     typedef union { // anonymous unions are not part of C99 :(
-        uint8_t * U8;
+        uint8_t *  U8;
         uint16_t * U16;
         uint32_t * U32;
         uint64_t * U64;
@@ -120,6 +120,18 @@ extern "C" {
     int
     ddict_add(ddict * dict,
               const char * key, void * value);
+
+    // Remove an entry by key
+    // Unless ffun is NULL it will be called on the value of the entry.
+    //
+    // WARNING: This operation is O(n)
+    //
+    // WARNING: If the dict manages the keys, the key will not be freed until
+    //          the dict is.
+    int
+    ddict_remove(ddict * dict,
+                 const char * key,
+                 void (*ffun)(void *));
 
 // Return the number of entries in the dictionary
     uint64_t

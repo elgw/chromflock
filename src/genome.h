@@ -51,7 +51,7 @@ typedef struct {
 // we should be able to map a read
 // to a bin, (Chr7, 971201) -> 89000 etc.
 typedef struct {
-    genome_t * genome;
+    const genome_t * genome;
     u32 resolution; // or bin size
     u32 nbin;
 } genome_binner_t;
@@ -72,7 +72,7 @@ void genome_print(const genome_t * G, FILE * fid);
 
 // Set up a genome binner to allow mapping
 // reads <-> bins
-genome_binner_t * genome_binner_new(const genome_t * G);
+genome_binner_t * genome_binner_new(const genome_t * G, u32 resolution);
 
 // read to bin
 i64 genome_binner_r2b(const genome_binner_t *,

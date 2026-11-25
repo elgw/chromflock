@@ -32,6 +32,10 @@ typedef uint64_t u64;
 // factor to grow key storage with when full
 #define DDICT_KEY_STORAGE_GROWTH_RATE 2
 
+#ifndef _Nullable
+#define _Nullable
+#endif
+
 #ifdef DDICT_TIMINGS
 static double
 timespec_diff(struct timespec* end, struct timespec * start)
@@ -50,10 +54,10 @@ ddict_store_key(ddict * dict, const char *str)
     if(nb + dict->key_storage_pos >= dict->key_storage_size)
     {
         dict->key_storage_size *= DDICT_KEY_STORAGE_GROWTH_RATE;
-        #ifdef DDICT_TIMINGS
+#ifdef DDICT_TIMINGS
         struct timespec t0, t1;
         clock_gettime(CLOCK_REALTIME, &t0);
-        #endif
+#endif
         u8 * new = realloc(dict->key_storage, dict->key_storage_size);
         if(new != dict->key_storage) {
             ssize_t delta = new - dict->key_storage;
@@ -71,7 +75,7 @@ ddict_store_key(ddict * dict, const char *str)
     memcpy(dict->key_storage + dict->key_storage_pos, str, nb);
     char * retpos = (char*) (dict->key_storage + dict->key_storage_pos);
     dict->key_storage_pos += nb;
-    #if 0
+#if 0
     for(u64 kk = 0; kk < dict->key_storage_pos; kk++) {
         char c = dict->key_storage[kk];
         if(c == '\0') {
@@ -81,7 +85,7 @@ ddict_store_key(ddict * dict, const char *str)
         }
     }
     printf("\n");
-    #endif
+#endif
     return retpos;
 }
 
@@ -300,9 +304,11 @@ ddict_free(ddict * dict) {
 }
 
 
+// Return the entry and set eid to the index of where it was found
 static ddict_entry *
 ddict_get_with_hash(const ddict * dict,
-                    const char * key, const u64 hash)
+                    const char * key, const u64 hash,
+                    u64 * _eid)
 {
     u64 idx = hash % dict->n_indices;
 
@@ -329,6 +335,7 @@ ddict_get_with_hash(const ddict * dict,
 
         if(strcmp(key, dict->entries[eid].key) == 0)
         {
+            *_eid = eid;
             return &(dict->entries[eid]);
         }
         idx++;
@@ -343,7 +350,8 @@ ddict_get(const ddict * dict,
           const char * key)
 {
     const u64 hash = _ddict_wordhash(key);
-    return ddict_get_with_hash(dict, key, hash);
+    u64 unused_eid;
+    return ddict_get_with_hash(dict, key, hash, &unused_eid);
 }
 
 
@@ -421,12 +429,14 @@ ddict_grow_indices(ddict * dict)
 
 int
 ddict_add(ddict * dict,
-          const char * word, void * value)
+          const char * word,
+          void * value)
 {
     const u64 hash = _ddict_wordhash(word);
 
     // See if in dictionary
-    if(ddict_get_with_hash(dict, word, hash) != NULL) {
+    u64 eid = 0;
+    if(ddict_get_with_hash(dict, word, hash, &eid) != NULL) {
         return 1;
     }
 
@@ -462,6 +472,59 @@ ddict_add(ddict * dict,
     _ddict_set_index(dict, idx, dict->n_entries+1);
     //printf("idx = %lu\n", idx);
     dict->n_entries++;
+    return 0;
+}
+
+
+int ddict_remove(ddict * dict, const char * key, void (*ffun)(void *) )
+{
+    const u64 hash = _ddict_wordhash(key);
+    ddict_entry * ent = NULL;
+
+    // Return if not in dictionary, nothing to do
+    u64 eid = 0;
+    ent = ddict_get_with_hash(dict, key, hash, &eid);
+    if(ent == NULL){
+        return 1;
+    }
+
+    // Free if function provided
+    if(ffun){
+        ffun(ent->value);
+    }
+
+    // Move all entries after the found thing
+    // to keep the list contiguous
+    for(u64 kk = eid; kk < dict->n_entries; kk++){
+        memcpy(&dict->entries[kk],
+               &dict->entries[kk+1],
+               sizeof(ddict_entry) );
+    }
+
+    if(dict->n_entries > 0){
+        dict->n_entries--;
+    }
+
+    // Reset the index
+    u64 bpi = dict->index_type;
+    memset(dict->index.U8, 0, dict->n_indices*bpi);
+
+    u64 n_indices = dict->n_indices;
+
+    // Rebuild the index.
+    for(u64 kk = 1; kk <= dict->n_entries; kk++)
+    {
+        ddict_entry e = dict->entries[kk];
+#ifdef DDICT_DROP_HASH
+        u64 idx = _ddict_wordhash(e.key) % n_indices;
+#else
+        u64 idx = e.hash % n_indices;
+#endif
+        // Find a free index slot
+        idx = _ddict_get_free_index(dict, idx);
+        // Make it point to the already present entry
+        _ddict_set_index(dict, idx, kk);
+    }
     return 0;
 }
 

@@ -316,6 +316,80 @@ genome_from_csv(const char * fname, int verbose)
     return G;
 }
 
+int
+genome_remove_chr(genome_t * G,
+                  const char * chr)
+{
+    int pos = -1;
+    for(int kk = 0; kk < G->n_chr; kk++){
+        if(strcmp(G->chrs[kk]->name, chr) == 0){
+            pos = kk;
+        }
+    }
+    if(pos == -1){
+        printf("Can't remove '%s', not in genome\n", chr);
+    }
+    for(int kk = pos+1; kk < G->n_chr; kk++)
+    {
+        G->chrs[kk-1] = G->chrs[kk];
+    }
+    G->n_chr--;
+    ddict_free(G->cdict);
+    G->cdict = ddict_new(1);
+    for(int kk = 0; kk < G->n_chr; kk++){
+        ddict_add(G->cdict, G->chrs[kk]->name, G->chrs[kk]);
+    }
+
+    return 0;
+}
+
+genome_binner_t * genome_binner_new(const genome_t * G, u32 resolution)
+{
+    assert(G != NULL);
+    assert(resolution > 0);
+    genome_binner_t * GB = calloc(1, sizeof(genome_binner_t));
+    GB->genome = G;
+    GB->resolution = resolution;
+    for(int kk = 0; kk < G->n_chr; kk++){
+        GB->nbin += ( G->chrs[kk]->size + resolution - 1 ) / resolution;
+    }
+
+    // loop over chromosomes ...
+    return GB;
+}
+
+void genome_binner_free(genome_binner_t * GB){
+    free(GB);
+    return;
+}
+
+static void
+test_read(const char * fname, int verbose){
+    genome_t * G = genome_from_csv(fname, verbose);
+    genome_print(G, stdout);
+    genome_free(G);
+    return;
+}
+
+static void
+test_bin(const char * fname, int verbose){
+    // Next step: Create a binner to be able to parse HiC data. I.e.
+    // at a given resolution, map a genomic coordinate like (chr7, 89409)
+    // to a bin number.
+    // Next step: Write a table of all the bins
+
+    genome_t * G = genome_from_csv(fname, verbose);
+    genome_remove_chr(G, "chrY");
+
+    int res = 1000000;
+    genome_binner_t * GB = genome_binner_new(G, res); // TODO
+    printf("At %u bp resolution there are %u bins\n",
+           GB->resolution, GB->nbin);
+    genome_binner_free(GB); // TODO
+    genome_free(G);
+}
+
+
 int main(int argc, char ** argv){
 
     if(argc < 2){
@@ -324,25 +398,11 @@ int main(int argc, char ** argv){
     }
     int verbose = 1;
 
-    genome_t * G = genome_from_csv(argv[1], verbose);
-    genome_print(G, stdout);
-    genome_free(G);
+    // Test to read a genome specification
+    test_read(argv[1], verbose);
 
-    // Next step: Create a binner to be able to parse HiC data. I.e.
-    // at a given resolution, map a genomic coordinate like (chr7, 89409)
-    // to a bin number.
-
-    genome_t * G = genome_from_csv(argv[1], verbose);
-    G = genome_remove_chr(G, "chrY"); // TODO
-    int res = 1000000;
-    genome_binner_t * GB = genome_binner_new(G, res); // TODO
-    printf("At %d bp resolution there are %ld bins\n",
-           GB->nbin);
-    genome_binner_free(GB); // TODO
-    genome_free(G);
-
-
-    // Next step: Write a table of all the bins
+    // Test to create bins on the genome
+    test_bin(argv[1], verbose);
 
     // Next step: create the collection of polymers -- what is that
     // called? From the genome. For sc_chromflock
