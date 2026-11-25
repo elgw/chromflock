@@ -79,6 +79,7 @@ set(chromflock_SOURCES
     src/collide3_f32.c
     src/collide3_f64.c
     src/sumproj_structure.c
+    src/ddict.c
   )
 
 

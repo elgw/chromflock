@@ -1,17 +1,14 @@
-This program reads .con/pairs.gz files and prepares their content to
-be used with mflock.
+This program reads .pairs(.gz) files and prepares their content to
+be used with mflock. The file format is documented at
+https://github.com/4dn-dcic/pairix/blob/master/pairs_format_specification.md
 
-By default each input file will generate two output files
+By default each input file will generate these files:
 
  - c2m_labels.u8 which contain the chromosome labels (starting from 0=chr1)
  - c2m_contacts.u32 which contain the contacts between the bins (excluding the
    backbone contacts.
-
-The program does not know the size of the chromosomes and hence there will only
-be as many bins as seems to be required unless "--genome hg19" is used.
+ - c2m_genome.csv containing the chromosome names and sizes extracted from the
+   pairs file.
 
 Please note that the --matrix option will write out a DENSE contact
-matrix. Use with caution for high resolutions.
-
-To use directly with mflock, please use the --backbone argument to connect
-adjacent beads within the same chromosome.
+matrix. Use with caution for high resolutions as the file sizes can be huge..

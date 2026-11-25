@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <getopt.h>
 
+#include "ddict.h"
 #include "cf_util.h"
 #include "gzl.h"
 
@@ -38,10 +39,14 @@ typedef struct options {
     char * contact_file;
     char * contact_file_raw;
     u32 * contacts;
-    i64 nlines;
+    i64 n_reads;
     int gen_matrix;
     char * matrix_file;
     int verbose;
+    // A "genome.csv" file to be read by sc_chromflock etc. Provides
+    // simply the chromosome names and their size. The line order matters
+    // as the first chromsome will have label 1, the 2nd 2 etc.
+    char * genome_out_file;
 
     char * genome; // Either a genome file (json?) or the name of a genome
 } opts;
@@ -57,6 +62,7 @@ opts * opts_new(void)
     s->contact_file = strdup("c2m_contacts.npy");
     s->contact_file_raw = strdup("c2m_contacts_nonbinned.npy");
     s->matrix_file = strdup("c2m_matrix.npy");
+    s->genome_out_file = strdup("c2m_genome.csv");
     s->genome = strdup("T2T");
     s->verbose = 1;
     return s;
@@ -74,6 +80,7 @@ void opts_free(opts * s)
     free(s->contacts);
     free(s->matrix_file);
     free(s->genome);
+    free(s->genome_out_file);
     free(s);
 
     return;
@@ -135,10 +142,8 @@ void parse_command_line(int argc, char ** argv, opts * s)
     cmdopt options[] = {
         {"resolution", required_argument,  NULL, 'r',
          "The binning resolution, i.e. number of basepairs per bin"},
-        {"con",        required_argument,  NULL, 'c',
-         ".con file to parse"},
         {"pairs",      required_argument,  NULL, 'p',
-         ".pairs(.gz) file to parse"},
+         ".pairs(.gz) file to parse. See https://github.com/4dn-dcic/pairix/blob/master/pairs_format_specification.md for the file format specification"},
         {"help",       no_argument,        NULL, 'h',
          "Show this help message"},
         {"matrix",     no_argument,        NULL, 'm',
@@ -146,7 +151,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
         {"mfile",      required_argument,  NULL, 'M',
          "Set the file name for the matrix output file, also enables --matrix"},
         {"genome",     required_argument,  NULL, 'g',
-         "A csv file specifying the genome, i.e. has the columns 'chr_name', and 'chr_size'"},
+         "DEPRECIATED. A csv file specifying the genome, i.e. has the columns 'chr_name', and 'chr_size'"},
         {"backbone",   no_argument,        NULL, 'b',
          "Also write 'backbone' contacts, i.e. connect adjacent bins within each chromosome to the contact list (not to the --mfile)"},
         {"verbose",    required_argument,  NULL, 'v',
@@ -492,21 +497,6 @@ static int get_chr_size(opts * s)
             printf("Chr #%d : %ld\n", kk, s->chr_size_bp[kk]);
         }
     }
-    for(i64 kk = 0; kk < s->n_chr; kk++){
-        s->chr_size_bin[kk] = s->chr_size_bp[kk] / s->resolution;
-        s->n_bin += s->chr_size_bin[kk];
-    }
-
-    // put in array
-    s->labels = malloc(s->n_bin*sizeof(u8));
-    size_t idx = 0;
-    for(i64 cc = 0; cc < s->n_chr; cc++){
-        u8 chr = cc+1;
-        i64 n = s->chr_size_bin[cc];
-        for(i64 nn = 0 ; nn < n; nn++){
-            s->labels[idx++] = chr;
-        }
-    }
 
     return 0;
 
@@ -516,82 +506,129 @@ quit1:
     return -1;
 }
 
+
+typedef struct {
+    char * fname;
+    ddict * chr_size;
+    u64 n_reads;
+    u64 n_lines; // number of lines in the file
+} pairs_file_info;
+
+void pairs_file_info_free(pairs_file_info * pinfo){
+    if(pinfo == NULL){
+        return;
+    }
+    free(pinfo->fname);
+    ddict_free(pinfo->chr_size);
+    free(pinfo);
+    return;
+}
+
+// If the line has the format '#chromosome: chr2 242696752' then write
+// 'chr2' to *chr_name and set chr_size to 242696752 and return 1
+// If it does not seem like such a line, return 0
+//
+// On success (return 1) the caller is responsible for freeing the chromosome name
+int pfile_get_chromosome(const char * line, char ** _chr_name, u64 * _chr_size)
+{
+    if(strncmp(line, "#chromosome: ", 13) != 0){
+        return 0;
+    }
+    char * chr_name = strdup(line+13);
+    size_t idx = 0;
+    while(chr_name[idx] != '\0' && chr_name[idx] != ' '){
+        idx++;
+    }
+    chr_name[idx] = '\0';
+    char * chr_size = chr_name + idx + 1;
+    *_chr_name = chr_name;
+    *_chr_size = atol(chr_size);
+    // printf("chr_name = '%s', chr_pos = %ld\n", chr_name, atol(chr_pos));
+    return 1;
+}
+
+
+void init_bins_and_labels(opts * s, pairs_file_info * pinfo)
+{
+    #if 0
+    // Set the size for each chromosme
+    // and get the total number of bins
+    for(i64 kk = 0; kk < s->n_chr; kk++){
+        s->chr_size_bin[kk] = (s->chr_size_bp[kk] + s->resolution - 1) / s->resolution;
+        s->n_bin += s->chr_size_bin[kk];
+    }
+#else
+    i64 n_chr = ddict_size(pinfo->chr_size);;
+    for(i64 kk = 0; kk < n_chr; kk++){
+        i64 chr_size = (i64) pinfo->chr_size->entries[kk+1].value;
+        s->chr_size_bp[kk] = chr_size;
+        s->chr_size_bin[kk] = (chr_size + s->resolution - 1) / s->resolution;
+        s->n_bin += s->chr_size_bin[kk];
+    }
+#endif
+    // Create the dense label array for chromflock
+    s->labels = malloc(s->n_bin*sizeof(u8));
+    size_t idx = 0;
+    for(i64 cc = 0; cc < s->n_chr; cc++){
+        u8 chr = cc+1;
+        i64 n = s->chr_size_bin[cc];
+        for(i64 nn = 0 ; nn < n; nn++){
+            s->labels[idx++] = chr;
+        }
+    }
+}
+
+// Expecting a pairs1.0 file. Can be gzip'ed
 // return the number of lines in s->infile
 // and sets s->chr_reads
 // uses parse_chr_id (expectations on the chromosome names)
-static i64
-get_dataset_size(const opts * s)
+static pairs_file_info *
+pairs_file_info_new(const char * fname, int verbose)
 {
-    if(s->verbose > 0){
-        printf("Checking number of reads\n");
+    if(verbose > 0){
+        printf("pairs_info_from_file(%s)\n", fname);
     }
 
-    gzl_state * gzl = gzl_open(s->infile, 1024);
+    gzl_state * gzl = gzl_open(fname, 1024);
 
     if(gzl == NULL){
-        printf("Failed to read %s\n", s->infile);
-        exit(EXIT_FAILURE);
+        printf("pairs_info_from_file: Failed to read %s\n", fname);
+        return NULL;
     }
 
+    pairs_file_info * pinfo = calloc(1, sizeof(pairs_file_info));
+    pinfo->fname = strdup(fname);
+    pinfo->chr_size = ddict_new(1);
+
     char * L = NULL;
-    i64 nlines = 0;
+    i64 line_number = 0;
     int gzl_error = 0;
 
     while( (L = (char *) gzl_get_line(gzl, &gzl_error) ) ){
-        nlines++;
+        line_number++;
         i64 chr1, chr2, pos1, pos2;
 
-        if(s->pairs_format){
-            if(L[0] == '#'){
-                continue;
+        if(L[0] == '#'){
+            char * chr_name;
+            u64 chr_size;
+            // try to parse '#chromosome: chr1 248387328' and similar lines
+            if(pfile_get_chromosome(L, &chr_name, &chr_size)){
+                ddict_add(pinfo->chr_size, chr_name, (void*) chr_size);
             }
-            parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
+            continue;
         } else {
             if(parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2)){
-                printf("Unable to parse a line #%ld\n", nlines+1);
+                printf("pairs_file_info: Unable to parse a line #%ld\n", line_number);
                 continue;
+            } else {
+                pinfo->n_reads++;
             }
         }
-        if( (chr1 >= s->n_chr) || (chr2 >= s->n_chr)){
-            printf("Parsed something weird: chr1: %ld, chr2: %ld\n", chr1, chr2);
-            printf("Line %ld: '%s'\n", nlines, L);
-            exit(EXIT_FAILURE);
-        }
-        s->chr_reads[chr1]++;
-        s->chr_reads[chr2]++;
-
-        if(s->chr_size_bp[chr1] < pos1){
-            fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                    chr1, pos1, s->chr_size_bp[chr1]);
-            exit(EXIT_FAILURE);
-        }
-        if(s->chr_size_bp[chr2] < pos2){
-            fprintf(stderr, "ERROR: Got (chrid=%ld, pos=%ld) but that chr is only %ld large\n",
-                    chr2, pos2, s->chr_size_bp[chr2]);
-            exit(EXIT_FAILURE);
-        }
-
-        nlines++;
     }
-
-    if(s->n_chr == 0){
-        fprintf(stderr, "\nERROR: Could not get any data from the file\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if(s->verbose > 1) {
-        printf("Read %ld lines\n", nlines);
-        printf(" #,      Size,    Reads,    Bins\n");
-
-        for(i64 kk = 0; kk < s->n_chr; kk++){
-            printf("%2ld, %9ld, %8ld, %7ld\n", kk+1,
-                   s->chr_size_bp[kk], s->chr_reads[kk],
-                   (s->resolution + s->chr_size_bp[kk])/s->resolution);
-        }
-    }
+    pinfo->n_lines = line_number;
     gzl_destroy(gzl);
     free(L);
-    return nlines;
+    return pinfo;
 }
 
 // Write the label array as uint8
@@ -703,11 +740,11 @@ write_contacts(opts * s)
     }
 
     s->contacts = NULL;
-    size_t n_cont_alloc = n_cont_alloc = s->nlines*2;
+    size_t n_cont_alloc = n_cont_alloc = s->n_reads;
     if(s->write_backbone){
         n_cont_alloc += s->n_bin; // overshoots
     }
-    s->contacts = calloc(n_cont_alloc, sizeof(u32));
+    s->contacts = calloc(2*n_cont_alloc, sizeof(u32));
 
     size_t nchr = s->n_chr;
     if(nchr >= 50){
@@ -733,17 +770,11 @@ write_contacts(opts * s)
     while( (L = (char*) gzl_get_line(gzl, &gzl_error) ) ){
         line++;
         i64 chr1, chr2, pos1, pos2;
-        if(s->pairs_format){
-            if(L[0] == '#'){
-                continue;
-            }
-            parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
-        } else {
-            if(parse_con_line(L, &chr1, &pos1, &chr2, &pos2)){
-                printf("Unable to parse a line #%ld\n", line+1);
-                exit(EXIT_FAILURE);
-            }
+
+        if(L[0] == '#'){
+            continue;
         }
+        parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
 
         if((chr1 > s->n_chr) || (chr2 > s->n_chr)){
             printf("Input error on line %ld\n", line);
@@ -753,9 +784,15 @@ write_contacts(opts * s)
 
         i64 bead1 = bin_start[chr1] + pos1/s->resolution;
         i64 bead2 = bin_start[chr2] + pos2/s->resolution;
-        contact_id++;
+
+        if(contact_id >= n_cont_alloc){
+            printf("Error: Got more contacts that expected (%ld)\n", s->n_reads);
+            printf("While reading line %ld\n", line);
+            exit(EXIT_FAILURE);
+        }
         s->contacts[2*contact_id + 0] = bead1;
         s->contacts[2*contact_id + 1] = bead2;
+        contact_id++;
     }
     gzl_destroy(gzl);
 
@@ -774,20 +811,20 @@ write_contacts(opts * s)
     if(s->verbose > 0) {
         printf("Sorting contacts\n");
     }
-    qsort(s->contacts, s->nlines, 2*sizeof(u32), cmp_u32_pair);
+    qsort(s->contacts, s->n_reads, 2*sizeof(u32), cmp_u32_pair);
 
     if(s->verbose > 0){
         printf("Removing duplicates\n");
     }
     i64 wpos = 0;
-    for(i64 kk = 1; kk < s->nlines; kk++){
+    for(i64 kk = 1; kk < s->n_reads; kk++){
         if(cmp_u32_pair(s->contacts + 2*kk, s->contacts + 2*kk-2) != 0){
             memcpy(s->contacts+2*wpos, s->contacts+2*kk, 2*sizeof(u32));
             wpos++;
         }
     }
     if(s->verbose > 0) {
-        printf("Keeping %ld / %ld\n", wpos, s->nlines);
+        printf("Keeping %ld / %ld\n", wpos, s->n_reads);
         printf("Writing contacts to %s\n", s->contact_file);
     }
 
@@ -821,7 +858,7 @@ write_contacts_raw(opts * s)
         exit(EXIT_FAILURE);
     }
 
-    size_t n_cont_alloc = n_cont_alloc = s->nlines*2;
+    size_t n_cont_alloc = n_cont_alloc = s->n_reads*2;
     rcontact * contacts = calloc(n_cont_alloc, sizeof(rcontact));
 
     i64 line = 0;
@@ -969,6 +1006,57 @@ static void write_matrix(opts * s)
     return;
 }
 
+void pairs_file_info_show(pairs_file_info * pinfo, FILE * fid){
+
+    fprintf(fid, "pairs_file_info_show\n");
+    fprintf(fid, "   File: %s\n", pinfo->fname);
+    int nchr = ddict_size(pinfo->chr_size);
+    fprintf(fid, "   Number of lines %ld\n", pinfo->n_lines);
+    fprintf(fid, "   Number of reads %ld\n", pinfo->n_reads);
+    fprintf(fid, "   Number of chromosomes: %d\n", nchr);
+
+    for(int kk = 1; kk <= nchr; kk++){
+        ddict_entry * ent = pinfo->chr_size->entries + kk;
+        fprintf(fid, "   %d: %s, %ld\n", kk, (char*) ent->key, (i64) ent->value);
+    }
+}
+
+void pairs_file_info_write_genome_file(pairs_file_info * pinfo, const char * fname)
+{
+    FILE * fid = fopen(fname, "w");
+    if(fid == NULL){
+        printf("Error: Unable to open %s for writing\n", fname);
+        return;
+    }
+
+    fprintf(fid, "# File generated by chromflock\n");
+    fprintf(fid, "# Input data: %s\n", pinfo->fname);
+    fprintf(fid, "\n");
+    fprintf(fid, "chr_name, chr_size\n");
+    int nchr = ddict_size(pinfo->chr_size);
+    for(int kk = 1; kk <= nchr; kk++){
+        ddict_entry * ent = pinfo->chr_size->entries + kk;
+        fprintf(fid, "%s, %ld\n", (char*) ent->key, (i64) ent->value);
+    }
+
+    fclose(fid);
+}
+
+void validate_chr_mapping(opts * s, pairs_file_info * pinfo)
+{
+    i64 n_chr = ddict_size(pinfo->chr_size);;
+    for(i64 kk = 0; kk < n_chr; kk++){
+        const char * chr_name = pinfo->chr_size->entries[kk+1].key;
+        i64 chr_id = parse_chr_id(chr_name);
+        if(kk != chr_id){
+            printf("The pairs file ordering of the chromosomes does not agree with"
+                   "how chromosome names are converted to numeric values."
+                   "This is simple to fix with a dictionary but wasn't needed until now...\n");;
+            printf("%ld != %ld (%s)\n", kk, chr_id, chr_name);
+
+        }
+    }
+}
 
 int con2mflock(int argc, char ** argv)
 {
@@ -976,15 +1064,35 @@ int con2mflock(int argc, char ** argv)
 
     parse_command_line(argc, argv, s);
 
+#if 1 // make the program use the dict and this can be skipped....
+    // TODO: This should be optional and just override what is in the pairs file
     if(get_chr_size(s)){
         printf("Unable to determine the chromosome sizes from %s\n",
                s->genome);
         exit(EXIT_FAILURE);
     }
+#endif
 
     // Check how many lines of input
     // and how many reads per chromosome
-    s->nlines = get_dataset_size(s);
+    pairs_file_info * pinfo = pairs_file_info_new(s->infile, s->verbose);
+    s->n_reads = pinfo->n_reads;
+
+    if(s->verbose > 0){
+        pairs_file_info_show(pinfo, stdout);
+    }
+
+    pairs_file_info_write_genome_file(pinfo, s->genome_out_file);
+
+    validate_chr_mapping(s, pinfo);
+
+    // TODO: Agree on the chromosome sizes. I.e.
+    // set s->chr_size_bp and what chromosomes to use ...
+
+    // Uses s->resolution and s->chr_size_bp
+    // sets
+    // s->labels, s->chr_size_bin s->n_bin
+    init_bins_and_labels(s, pinfo);
 
     // with fixed chr sizes we have not even touched the input
     // data so while this works write_contacts might fail leaving us
@@ -995,7 +1103,6 @@ int con2mflock(int argc, char ** argv)
     // - sorts the contacts
     // - removes duplicates (the lower the resolution, the more duplicates)
     // - writes in a format that chromflock can read
-
     write_contacts(s);
 
     // Simply read the contacts, sort them, remove duplicates and
@@ -1012,5 +1119,6 @@ int con2mflock(int argc, char ** argv)
         printf("done\n");
     }
     opts_free(s);
+    pairs_file_info_free(pinfo);
     return EXIT_SUCCESS;
 }
