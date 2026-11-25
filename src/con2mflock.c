@@ -23,7 +23,6 @@ typedef struct options {
     i64 resolution;
     int write_backbone;
     char * infile; // .pairs.gz or .con
-    int pairs_format; // set to 1 if a pairs file
 
     // Following arrays are 0-indexed, i.e. chr1 is at index 0
     i64 * chr_size_bp;  // expressed in basepairs
@@ -55,15 +54,11 @@ opts * opts_new(void)
 {
     opts * s = calloc(1, sizeof(opts));
     s->resolution = 1000000;
-    s->chr_size_bp = calloc(50, sizeof(i64));
-    s->chr_size_bin = calloc(50, sizeof(i64));
-    s->chr_reads = calloc(50, sizeof(i64));
     s->label_file = strdup("c2m_labels.npy");
     s->contact_file = strdup("c2m_contacts.npy");
     s->contact_file_raw = strdup("c2m_contacts_nonbinned.npy");
     s->matrix_file = strdup("c2m_matrix.npy");
     s->genome_out_file = strdup("c2m_genome.csv");
-    s->genome = strdup("T2T");
     s->verbose = 1;
     return s;
 }
@@ -77,6 +72,7 @@ void opts_free(opts * s)
     free(s->infile);
     free(s->label_file);
     free(s->contact_file);
+    free(s->contact_file_raw);
     free(s->contacts);
     free(s->matrix_file);
     free(s->genome);
@@ -176,7 +172,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
 
     int ch;
     while((ch = getopt_long(argc, argv,
-                            "br:c:hmMp:g:v:V",
+                            "br:hmMp:g:v:V",
                             longopts, NULL)) != -1)
     {
         switch(ch) {
@@ -189,11 +185,6 @@ void parse_command_line(int argc, char ** argv, opts * s)
             break;
         case 'r':
             s->resolution = atol(optarg);
-            break;
-        case 'c':
-            free(s->infile);
-            s->infile = strdup(optarg);
-            s->pairs_format = 0;
             break;
         case 'h':
             show_help(argv[0], options);
@@ -210,7 +201,6 @@ void parse_command_line(int argc, char ** argv, opts * s)
         case 'p':
             free(s->infile);
             s->infile = strdup(optarg);
-            s->pairs_format = 1;
             break;
         case 'v':
             s->verbose = atoi(optarg);
@@ -550,22 +540,24 @@ int pfile_get_chromosome(const char * line, char ** _chr_name, u64 * _chr_size)
 
 void init_bins_and_labels(opts * s, pairs_file_info * pinfo)
 {
-    #if 0
+
     // Set the size for each chromosme
     // and get the total number of bins
-    for(i64 kk = 0; kk < s->n_chr; kk++){
-        s->chr_size_bin[kk] = (s->chr_size_bp[kk] + s->resolution - 1) / s->resolution;
-        s->n_bin += s->chr_size_bin[kk];
-    }
-#else
+
     i64 n_chr = ddict_size(pinfo->chr_size);;
+    s->chr_size_bp = calloc(n_chr, sizeof(i64));
+    s->chr_size_bin = calloc(n_chr, sizeof(i64));
+    s->chr_reads = calloc(n_chr, sizeof(i64));
+
     for(i64 kk = 0; kk < n_chr; kk++){
         i64 chr_size = (i64) pinfo->chr_size->entries[kk+1].value;
         s->chr_size_bp[kk] = chr_size;
         s->chr_size_bin[kk] = (chr_size + s->resolution - 1) / s->resolution;
         s->n_bin += s->chr_size_bin[kk];
     }
-#endif
+
+    printf("At res=%lu, %lu bins\n", s->resolution,  s->n_bin);
+
     // Create the dense label array for chromflock
     s->labels = malloc(s->n_bin*sizeof(u8));
     size_t idx = 0;
@@ -614,6 +606,8 @@ pairs_file_info_new(const char * fname, int verbose)
             // try to parse '#chromosome: chr1 248387328' and similar lines
             if(pfile_get_chromosome(L, &chr_name, &chr_size)){
                 ddict_add(pinfo->chr_size, chr_name, (void*) chr_size);
+                free(chr_name);
+                chr_name = NULL;
             }
             continue;
         } else {
@@ -725,7 +719,6 @@ static void
 write_contacts(opts * s)
 {
     assert(s->n_chr > 0);
-    assert(s->nlines > 0);
 
     if(s->verbose > 0){
         printf("Writing contacts to %s\n", s->contact_file);
@@ -785,7 +778,7 @@ write_contacts(opts * s)
         i64 bead1 = bin_start[chr1] + pos1/s->resolution;
         i64 bead2 = bin_start[chr2] + pos2/s->resolution;
 
-        if(contact_id >= n_cont_alloc){
+        if(contact_id >= (i64) n_cont_alloc){
             printf("Error: Got more contacts that expected (%ld)\n", s->n_reads);
             printf("While reading line %ld\n", line);
             exit(EXIT_FAILURE);
@@ -844,7 +837,6 @@ static void
 write_contacts_raw(opts * s)
 {
     assert(s->n_chr > 0);
-    assert(s->nlines > 0);
 
     if(s->verbose > 0){
         printf("Writing contacts to %s\n", s->contact_file);
@@ -869,17 +861,12 @@ write_contacts_raw(opts * s)
     while( (L = (char*) gzl_get_line(gzl, &gzl_error) ) ){
         line++;
         i64 chr1, chr2, pos1, pos2;
-        if(s->pairs_format){
-            if(L[0] == '#'){
-                continue;
-            }
-            parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
-        } else {
-            if(parse_con_line(L, &chr1, &pos1, &chr2, &pos2)){
-                printf("Unable to parse a line #%ld\n", line+1);
-                exit(EXIT_FAILURE);
-            }
+
+        if(L[0] == '#'){
+            continue;
         }
+        parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
+
         if((chr1 > s->n_chr) || (chr2 > s->n_chr)){
             printf("Input error on line %ld\n", line);
             printf("chr1=%ld, chr2=%ld\n", chr1, chr2);
@@ -934,9 +921,6 @@ static void write_matrix(opts * s)
     }
 
     size_t nchr = s->n_chr;
-    if(nchr >= 50){
-        exit(EXIT_FAILURE);
-    }
     i64 * bin_start = calloc(nchr, sizeof(i64));
 
     for(i64 kk = 1; kk < s->n_chr; kk++){
@@ -964,17 +948,12 @@ static void write_matrix(opts * s)
     while( (L = (char *) gzl_get_line(gzl, &gzl_error) ) ){
         line++;
         i64 chr1, chr2, pos1, pos2;
-        if(s->pairs_format){
-            if(L[0] == '#'){
-                continue;
-            }
-            parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
-        } else {
-            if(parse_con_line(L, &chr1, &pos1, &chr2, &pos2)){
-                printf("Unable to parse a line #%ld\n", line);
-                exit(EXIT_FAILURE);
-            }
+
+        if(L[0] == '#'){
+            continue;
         }
+        parse_pairs_line(L, &chr1, &pos1, &chr2, &pos2);
+
         i64 bead1 = bin_start[chr1] + pos1/s->resolution;
         i64 bead2 = bin_start[chr2] + pos2/s->resolution;
         M[bead1 + N*bead2] += 1;
@@ -1045,6 +1024,7 @@ void pairs_file_info_write_genome_file(pairs_file_info * pinfo, const char * fna
 void validate_chr_mapping(opts * s, pairs_file_info * pinfo)
 {
     i64 n_chr = ddict_size(pinfo->chr_size);;
+    assert(s->n_chr == n_chr);
     for(i64 kk = 0; kk < n_chr; kk++){
         const char * chr_name = pinfo->chr_size->entries[kk+1].key;
         i64 chr_id = parse_chr_id(chr_name);
@@ -1064,19 +1044,19 @@ int con2mflock(int argc, char ** argv)
 
     parse_command_line(argc, argv, s);
 
-#if 1 // make the program use the dict and this can be skipped....
-    // TODO: This should be optional and just override what is in the pairs file
-    if(get_chr_size(s)){
-        printf("Unable to determine the chromosome sizes from %s\n",
-               s->genome);
-        exit(EXIT_FAILURE);
+    if(s->genome != NULL){
+        if(get_chr_size(s)){
+            printf("Unable to determine the chromosome sizes from %s\n",
+                   s->genome);
+            exit(EXIT_FAILURE);
+        }
     }
-#endif
 
     // Check how many lines of input
     // and how many reads per chromosome
     pairs_file_info * pinfo = pairs_file_info_new(s->infile, s->verbose);
     s->n_reads = pinfo->n_reads;
+    s->n_chr = ddict_size(pinfo->chr_size);
 
     if(s->verbose > 0){
         pairs_file_info_show(pinfo, stdout);

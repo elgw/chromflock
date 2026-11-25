@@ -95,7 +95,9 @@ obj/contact_pairs_io.o \
 obj/gzl.o \
 obj/con2mflock.o \
 obj/sumproj_structure.o \
-obj/collide3_f32.o
+obj/collide3_f32.o \
+obj/ddict.o
+
 
 ## Targets
 
@@ -119,7 +121,7 @@ obj/contact_pairs_io.o \
 obj/cf_util.o \
 obj/npio.o \
 obj/ddict.o \
-obj/collide3_f64.o \
+obj/collide3_f64.o
 
 
 bin/mflock: $(mflock_files) makefile
