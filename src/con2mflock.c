@@ -143,7 +143,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
         {"resolution", required_argument,  NULL, 'r',
          "The binning resolution, i.e. number of basepairs per bin"},
         {"pairs",      required_argument,  NULL, 'p',
-         ".pairs(.gz) file to parse. See https://github.com/4dn-dcic/pairix/blob/master/pairs_format_specification.md for the file format specification"},
+         ".pairs(.gz) file to parse."},
         {"help",       no_argument,        NULL, 'h',
          "Show this help message"},
         {"matrix",     no_argument,        NULL, 'm',
