@@ -16,7 +16,7 @@
 #include "any2string.h"
 #include "sprite2cmap.h"
 #include "contact_pairs_io.h"
-#include "con2mflock.h"
+#include "pairs2mflock.h"
 #include "txt/chromflock_usage.txt.h"
 #include "sumproj_structure.h"
 
@@ -77,8 +77,8 @@ int main(int argc, char ** argv)
         return contact_pairs_io_ut(argc-1, argv+1);
     }
 
-    if(!strcmp(command, "con2mflock")){
-        return con2mflock(argc-1, argv+1);
+    if(!strcmp(command, "pairs2mflock")){
+        return pairs2mflock(argc-1, argv+1);
     }
 
     if(!strcmp(command, "sumproj")){

@@ -93,7 +93,7 @@ obj/ellipsoid.o \
 obj/npio.o \
 obj/contact_pairs_io.o \
 obj/gzl.o \
-obj/con2mflock.o \
+obj/pairs2mflock.o \
 obj/sumproj_structure.o \
 obj/collide3_f32.o \
 obj/ddict.o

@@ -11,13 +11,13 @@
 #include "cf_util.h"
 #include "gzl.h"
 
-#include "txt/con2mflock_progdesc.txt.h"
-#include "txt/con2mflock_changelog.txt.h"
-#include "txt/con2mflock_examples.txt.h"
+#include "txt/pairs2mflock_progdesc.txt.h"
+#include "txt/pairs2mflock_changelog.txt.h"
+#include "txt/pairs2mflock_examples.txt.h"
 
-#define CON2MFLOCK_VERSION_MAJOR 1
-#define CON2MFLOCK_VERSION_MINOR 0
-#define CON2MFLOCK_VERSION_PATCH 1
+#define PAIRS2MFLOCK_VERSION_MAJOR 1
+#define PAIRS2MFLOCK_VERSION_MINOR 0
+#define PAIRS2MFLOCK_VERSION_PATCH 1
 
 typedef struct options {
     i64 resolution;
@@ -116,7 +116,7 @@ typedef struct {
 static void
 show_help(char * progname, cmdopt * options)
 {
-    printf("%s\n", con2mflock_progdesc_txt);
+    printf("%s\n", pairs2mflock_progdesc_txt);
     printf("Usage: %s [options]\n", progname);
     printf("\n");
     printf("These are the options:\n");
@@ -206,7 +206,7 @@ void parse_command_line(int argc, char ** argv, opts * s)
             s->verbose = atoi(optarg);
             break;
         case 'V':
-            printf("%s", con2mflock_changelog_txt);
+            printf("%s", pairs2mflock_changelog_txt);
             exit(EXIT_SUCCESS);
         }
     }
@@ -974,6 +974,7 @@ static void write_matrix(opts * s)
     if(s->verbose > 0) {
         printf("Writing to %s\n", s->matrix_file);
     }
+
     if(write_u32(s->matrix_file, M, N, N)){
         printf("Failed to write to %s!\n", s->matrix_file);
         exit(EXIT_FAILURE);
@@ -1038,7 +1039,7 @@ void validate_chr_mapping(opts * s, pairs_file_info * pinfo)
     }
 }
 
-int con2mflock(int argc, char ** argv)
+int pairs2mflock(int argc, char ** argv)
 {
     opts * s = opts_new();
 

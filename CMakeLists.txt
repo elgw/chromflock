@@ -74,7 +74,7 @@ set(chromflock_SOURCES
     src/cf_util.c
     src/contact_pairs_io.c
     src/npio/npio.c
-    src/con2mflock.c
+    src/pairs2mflock.c
     src/gzl.c
     src/collide3_f32.c
     src/collide3_f64.c

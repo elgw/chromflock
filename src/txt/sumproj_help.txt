@@ -14,3 +14,19 @@ Options:
       output image will be n x n pixels
 --sigma s
      Size of the spots, standard deviation of Gaussian [px]
+--verbose l
+     Set the verbosity level
+--unit-box
+     Use the domain [-1, 1]^2, i.e. center at [0, 0].
+
+The npy file can of course be opened with Python/Numpy,
+
+>>> import numpy as np
+>>> import matplotlib.pyplot as plt
+>>> P = np.load('coords.npy_sumz.npy')
+>>> plt.imshow(P); plt.show()
+
+You can also convert it to tif with deconwolf
+
+$ dw npy2tif coords.npy_sumz.npy
+$ imagej coords.npy_sumz.npy.tif
